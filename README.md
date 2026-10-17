@@ -97,7 +97,7 @@ The feature inventory below captures the broader Moguri vision. The implementati
   - Swarm - Solves all open issues by creating a roadmap and rationalizing the end to end state of the repo, after planning carefully and reporting back to the user before implementation
   - Team (like [squad](https://bradygaster.github.io/squad)) + [paperclip](https://github.com/paperclipai/paperclip) style, council and other projects that use different personas + agents for better results
 - Integration with:
-  - mbianchidev/sendbox - for sandboxing agents (settings profile)
+  - [mbianchidev/sendbox](https://github.com/mbianchidev/sendbox) - native, first-release session execution backend: YOLO on the host by default, or locally VM-sandboxed via SendBox. Defaults are configurable globally and per profile, with a per-session choice. A user-only global Require SendBox setting blocks new YOLO turns; already-running YOLO turns may finish. Missing sandbox support never silently falls back to the host.
   - mbianchidev/porto - for handling local dev servers and docker stacks (via CLI pre-installed)
   - mbianchidev/sql not-so-lite - for local database management (via CLI pre-installed)
   - mbianchidev/stainless - agentic privacy driven browser, used for dev previews and for launching Playwright (via MCP and open with)

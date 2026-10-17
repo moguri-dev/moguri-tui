@@ -9,6 +9,7 @@
 
 - Work in the documented phase order and implement the smallest complete vertical slice across the local service, TUI, and desktop; do not pull items from "Later work"/"Deferred work" ahead of first-release acceptance checks.
 - The local control plane is authoritative. TUI, desktop, and optional VSX clients must share one typed API, domain model, and event stream rather than owning client-only state or provider payloads.
+- Sessions default to host YOLO execution, with native SendBox sandboxing available in the first release. The user-only global Require SendBox policy blocks every new YOLO turn, including queued, recovered, and child-agent work; turns already running when enabled may finish. Never silently fall back from SendBox to host execution.
 - Durable state is a typed, append-only, versioned event stream. Durable schema changes require migrations and restart-recovery coverage; never make users delete local state to upgrade.
 - Keep artifacts independent of session retention, profiles isolated, secrets in an explicit secret backend, and estimated, provider-reported, and billed costs in distinct fields.
 - Cancellation must propagate through owned work and preserve requested, acknowledged, completed, failed, and partial outcomes. Never record stopped or partially cancelled work as successful.
