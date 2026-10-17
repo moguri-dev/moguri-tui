@@ -8,6 +8,8 @@ Optionally integrates with [@simonw/llm](https://github.com/simonw/llm) for gett
 
 Also see: https://github.com/deepseek-ai/deepseek-harness
 
+Foundation assessment: [Pi versus OpenCode critique and feature map](docs/architecture/pi-vs-opencode-critique.md). Research only; no replacement baseline has been adopted.
+
 ## Extra features on top of OpenCode upstream
 
 - Dashboard (7,30,60,90,365 days, entire selectable year, custom period, all time)
