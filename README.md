@@ -14,6 +14,9 @@ Moguri is built from zero with borrowed libraries. The [implementation specifica
 
 The feature inventory below captures the broader Moguri vision. The implementation specification distinguishes first-release requirements from deferred work.
 
+- Always choose either a fixed model or **kupo**, Moguri's HydraFusion-inspired synthetic/auto model. kupo routes across a configured mix of local and hosted models and selects single-model, cascade, or draft/critique/revision workflows.
+- Optional System One decision providers, including [TypeSafe AI's Jev](https://docs.typesafe.ai/introduction), work with kupo and fixed models for delegated decisions, tool approvals, and steering.
+- Approval modes are independent of model choice and sandboxing: **Manual** (default), **Guided** (current model recommends; user confirms), **Autopilot** (current model acts within delegated policy and asks sparingly), and **Autopilot Max** (a decision model decides and steers within delegated policy). No mode can bypass hard permissions, budgets, or Require SendBox.
 - Dashboard (7,30,60,90,365 days, entire selectable year, custom period, all time)
   - Sessions cost
   - Token usage per session, divided by tool calls, MCP calls, system prompts, messages etc.
