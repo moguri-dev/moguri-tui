@@ -8,8 +8,19 @@ Optionally integrates with [@simonw/llm](https://github.com/simonw/llm) for gett
 
 Also see: https://github.com/deepseek-ai/deepseek-harness
 
-## Extra features on top of OpenCode upstream
+Moguri is built from zero with borrowed libraries. The [implementation specification](docs/implementation.md) defines the product and delivery order; [architecture decisions](docs/architecture/decisions.md) records the chosen stack. No application code exists yet.
 
+## Features
+
+The feature inventory below captures the broader Moguri vision. The implementation specification distinguishes first-release requirements from deferred work.
+
+- Always choose either a fixed model or **kupo**, Moguri's HydraFusion-inspired synthetic/auto model. kupo routes across a configured mix of local and hosted models and selects single-model, cascade, or draft/critique/revision workflows.
+- Optional System One decision providers, including [TypeSafe AI's Jev](https://docs.typesafe.ai/introduction), work with kupo and fixed models for delegated decisions, tool approvals, and steering.
+- The chat composer, TUI, and CLI expose **Env**, **Model**, **Autonomy level**, and **Budget**. Starting defaults are Local, no model until provider login or local-model configuration, Manual, and Unlimited. Global, profile, and repo/project settings can supply different defaults.
+- Desktop has an Attach button and image paste; shared attachment triggers are `^` for a local file, `:` for a local folder, `#` for a GitHub issue or PR, `!` for a Moguri session, and `@` for a project file. TUI/CLI expose equivalent typed attachments without the desktop button.
+- **Env** offers **Local**, **Sandbox** via SendBox, and **Remote** via SSH. Remote runs the agent and model calls on the configured machine. Global policy may allow only Sandbox or Remote; it blocks new Local turns while existing Local turns may finish. Neither SSH nor a label implies SendBox containment.
+- **Autonomy level** is independent of model choice and env: **Manual** (default), **Guided** (current model recommends; user confirms), **Autopilot** (current model acts within delegated policy and asks sparingly), and **Autopilot Max** (a decision model decides and steers within delegated policy). No level can bypass hard permissions, budgets, or allowed-env policy.
+- **Budget** defaults to unlimited. Users can cap cumulative session tokens, USD, or both when telemetry supports it. The UI warns that caps may interrupt work; kupo tries to checkpoint and commit accepted changes before exhaustion when Git policy and approvals permit it.
 - Dashboard (7,30,60,90,365 days, entire selectable year, custom period, all time)
   - Sessions cost
   - Token usage per session, divided by tool calls, MCP calls, system prompts, messages etc.
@@ -93,7 +104,7 @@ Also see: https://github.com/deepseek-ai/deepseek-harness
   - Swarm - Solves all open issues by creating a roadmap and rationalizing the end to end state of the repo, after planning carefully and reporting back to the user before implementation
   - Team (like [squad](https://bradygaster.github.io/squad)) + [paperclip](https://github.com/paperclipai/paperclip) style, council and other projects that use different personas + agents for better results
 - Integration with:
-  - mbianchidev/sendbox - for sandboxing agents (settings profile)
+  - [mbianchidev/sendbox](https://github.com/mbianchidev/sendbox) - native, first-release Sandbox env with scoped local VM execution; missing sandbox support never silently falls back to Local.
   - mbianchidev/porto - for handling local dev servers and docker stacks (via CLI pre-installed)
   - mbianchidev/sql not-so-lite - for local database management (via CLI pre-installed)
   - mbianchidev/stainless - agentic privacy driven browser, used for dev previews and for launching Playwright (via MCP and open with)
