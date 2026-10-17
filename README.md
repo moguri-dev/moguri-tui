@@ -8,7 +8,7 @@ Optionally integrates with [@simonw/llm](https://github.com/simonw/llm) for gett
 
 Also see: https://github.com/deepseek-ai/deepseek-harness
 
-Foundation assessments: [Pi versus OpenCode critique and feature map](docs/architecture/pi-vs-opencode-critique.md) and [from-zero complexity assessment](docs/architecture/from-scratch-complexity.md). Research only; no baseline has been adopted.
+Foundation: build from zero with borrowed libraries, per the [architecture decisions](docs/architecture/decisions.md). Background: [Pi versus OpenCode critique and feature map](docs/architecture/pi-vs-opencode-critique.md) and [from-zero complexity assessment](docs/architecture/from-scratch-complexity.md). No application code exists yet.
 
 ## Extra features on top of OpenCode upstream
 
