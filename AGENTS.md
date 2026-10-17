@@ -1,7 +1,7 @@
 # Repository State
 
 - This repository is currently a documentation-only pre-alpha: it has no application source, manifests, lockfiles, tests, CI, or verified build/lint/test commands. Do not describe roadmap features as implemented or invent commands.
-- `0-implementation-draft-unslopped.md` is the newest build brief. Use `0-implementation-draft.md` for expanded detail and `README.md` as the earlier feature inventory; reconcile conflicts in favor of executable code/config once those exist.
+- `docs/implementation.md` is the canonical implementation specification. `README.md` retains the product feature inventory; `docs/architecture/decisions.md` is authoritative for the selected stack. Reconcile documentation with executable code/config once those exist.
 - Moguri is built from zero with borrowed libraries; it does not fork OpenCode or Pi. `docs/architecture/decisions.md` records the chosen stack: a Node.js 26 service, an OpenTUI + React TUI, an Electron + React desktop app, a Moguri-owned agent loop on `pi-ai`, and Rust helpers for process control, PTYs, file search and Git reads. Change a decision only by updating that file.
 - Before adding Moguri features, follow Phase 0: run the validation spikes listed in `docs/architecture/decisions.md` and record each pass or fail result with measurements under `docs/`.
 

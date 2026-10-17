@@ -8,11 +8,11 @@ Optionally integrates with [@simonw/llm](https://github.com/simonw/llm) for gett
 
 Also see: https://github.com/deepseek-ai/deepseek-harness
 
-Foundation: build from zero with borrowed libraries, per the [architecture decisions](docs/architecture/decisions.md). Background: [Pi versus OpenCode critique and feature map](docs/architecture/pi-vs-opencode-critique.md) and [from-zero complexity assessment](docs/architecture/from-scratch-complexity.md). No application code exists yet.
+Moguri is built from zero with borrowed libraries. The [implementation specification](docs/implementation.md) defines the product and delivery order; [architecture decisions](docs/architecture/decisions.md) records the chosen stack. No application code exists yet.
 
 ## Features
 
-Moguri does not fork OpenCode, so it must also build the baseline agent features OpenCode provides: sessions, tools, MCP, providers, a TUI and a desktop app. The [from-zero assessment](docs/architecture/from-scratch-complexity.md) sizes that work. The list below is what Moguri adds on top.
+The feature inventory below captures the broader Moguri vision. The implementation specification distinguishes first-release requirements from deferred work.
 
 - Dashboard (7,30,60,90,365 days, entire selectable year, custom period, all time)
   - Sessions cost
