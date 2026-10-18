@@ -1,0 +1,35 @@
+/** @jsxImportSource @opentui/react */
+import { createCliRenderer } from "@opentui/core";
+import { createRoot } from "@opentui/react";
+import { createElement } from "react";
+import { resolve } from "node:path";
+import { parseArgs } from "node:util";
+import { ensureConnection, readConnection } from "../../../packages/client/src/node.ts";
+import { MoguriClient } from "../../../packages/client/src/index.ts";
+import { TuiApp } from "./App.tsx";
+
+const { values } = parseArgs({ options: { project: { type: "string" }, help: { type: "boolean" } } });
+if (values.help) {
+  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project]\n\nCtrl+L Copilot login, Ctrl+O open project, Ctrl+M models, Ctrl+K commands.\nThe desktop and TUI share the same private local service.");
+} else {
+  let client: MoguriClient | undefined;
+  try {
+    const connection = await ensureConnection();
+    client = new MoguriClient(connection, () => readConnection());
+    await client.connect();
+    let initialSessionId: string | undefined;
+    if (values.project) {
+      const deadline = Date.now() + 5000;
+      while (client.getState().status !== "connected" && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+      const project = await client.command({ type: "project.add", path: resolve(values.project) });
+      const existing = client.getState().snapshot?.sessions.find((session) => session.projectId === project.id && session.status !== "archived");
+      initialSessionId = existing?.id ?? (await client.command({ type: "session.create", projectId: project.id! })).id;
+    }
+    const renderer = await createCliRenderer({ exitOnCtrlC: false });
+    createRoot(renderer).render(createElement(TuiApp, { client, initialSessionId }));
+  } catch (error) {
+    client?.disconnect();
+    console.error(error instanceof Error ? error.message : "Moguri TUI could not start.");
+    process.exitCode = 1;
+  }
+}

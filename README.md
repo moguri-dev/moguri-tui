@@ -4,9 +4,42 @@ A harness for your AI that works on your terms, both in a CLI (TUI) format and a
 
 Moguri is built from zero with borrowed libraries. The [implementation specification](docs/implementation.md) defines the product and delivery order; [architecture decisions](docs/architecture/decisions.md) records the chosen stack.
 
+## Initial implementation
+
+The first executable checkpoint includes an **OpenTUI terminal client** and an
+**Electron desktop app** sharing one local service. It supports GitHub Copilot
+device sign-in, account-enabled model selection, streamed conversations, manual
+approval of project file and shell tools, persistent drafts and queues, distinct
+Queue/Steer/Interrupt delivery, stopping owned process trees, restart recovery,
+archival/restoration, and basic per-call accounting.
+
+This is a **macOS development alpha**, not the completed first milestone.
+Sandbox, Remote SSH, kupo, delegated autonomy, finite budgets, other attachment
+types, worktree management and the broader dashboard are explicitly unavailable.
+Unknown usage and Copilot billing are not presented as zero cost.
+
+```bash
+npm ci
+npm run build
+npm start -- --project /absolute/path/to/project
+```
+
+Run `npm run desktop` in another terminal to open the same sessions in desktop.
+In the TUI, **Ctrl+L** starts Copilot sign-in, **Ctrl+M** selects a model, and
+**Ctrl+K** shows commands. Desktop exposes the same setup in **GitHub Copilot**.
+Complete GitHub's device authorization yourself; Moguri does not read IDE login
+files or require another provider's API key.
+
+See [setup and usage](docs/setup.md), the [initial architecture](docs/architecture/overview.md),
+and [Phase 0 evidence and remaining release blockers](docs/architecture/phase-zero.md).
+`npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
+`release/`. It is not a notarized distribution.
+
 ## Features
 
-The feature inventory below captures the broader Moguri vision. The implementation specification distinguishes first-release requirements from deferred work.
+The feature inventory below captures the broader Moguri vision, not the list of
+implemented features. The implementation specification distinguishes first-release
+requirements from deferred work.
 
 - Always choose either a fixed model or **kupo**, Moguri's HydraFusion-inspired synthetic/auto model. kupo routes across a configured mix of local and hosted models and selects single-model, cascade, or draft/critique/revision workflows.
 - Optional System One decision providers, including [TypeSafe AI's Jev](https://docs.typesafe.ai/introduction), work with kupo and fixed models for delegated decisions, tool approvals, and steering.

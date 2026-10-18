@@ -1,8 +1,8 @@
 # Repository State
 
-- This repository is currently a documentation-only pre-alpha: it has no application source, manifests, lockfiles, tests, CI, or verified build/lint/test commands. Do not describe roadmap features as implemented or invent commands.
+- This repository contains an initial executable macOS alpha, not the completed first milestone. `docs/setup.md` identifies implemented behavior and unavailable capabilities. Never describe the wider roadmap as implemented.
 - `docs/implementation.md` is the canonical implementation specification. `README.md` retains the product feature inventory; `docs/architecture/decisions.md` is authoritative for the selected stack. Reconcile documentation with executable code/config once those exist.
-- Moguri is built from zero with borrowed libraries; it does not fork OpenCode or Pi. `docs/architecture/decisions.md` records the chosen stack: a Node.js 26 service, an OpenTUI + React TUI, an Electron + React desktop app, a Moguri-owned agent loop on `pi-ai`, and Rust helpers for process control, PTYs, file search and Git reads. Change a decision only by updating that file.
+- Moguri is built from zero with borrowed libraries; it does not fork OpenCode or Pi. The stack is Node.js 26, OpenTUI + React, Electron + React, and a Moguri-owned worker loop using maintained `@earendil-works/pi-ai`. D06 explicitly permits Node/PTY supervision for this checkpoint; Rust helpers remain unvalidated. Change decisions in `docs/architecture/decisions.md`.
 - Before adding Moguri features, follow Phase 0: run the validation spikes listed in `docs/architecture/decisions.md` and record each pass or fail result with measurements under `docs/`.
 
 # Implementation Constraints
@@ -24,4 +24,7 @@
 - Before a feature change, identify reused libraries and their licenses, new invariants/events, schema and migration impact, cross-client behavior, failure/cancellation behavior, and the tests that prove it.
 - Test concurrency, cancellation failure, migrations, and restart recovery where relevant, not only happy paths; use generated fixtures without personal or customer data.
 - Put durable architecture documentation under `docs/`. Update the relevant setup, configuration, architecture, or protocol document in the same change.
-- Once an executable toolchain lands, update this file with exact setup and focused/full verification commands; none are currently verifiable.
+- Setup: `npm ci`. Build: `npm run build`. Type checks: `npm run typecheck`. Full local checks: `npm test` then `npm run test:e2e` after building. Audit: `npm audit --audit-level=moderate`. Phase 0: `npm run spike`.
+- Focused checks use `node --import tsx --test tests/<name>.test.ts`; combine related selectors in one invocation. `npm test` includes the native TUI interaction test. Electron tests run hidden, use generated fixtures, and never open the real GitHub authorization page.
+- `npm start -- --project /absolute/path` starts the built TUI; `npm run desktop` starts Electron. `npm run package:mac` builds development macOS arm64 artifacts. Never open an app/browser or complete personal authorization on the user's behalf.
+- Node emits an experimental FFI warning for OpenTUI. Linux CI checks the portable foundation but skips macOS-only agent/UI execution; it is not proof of Linux release readiness.
