@@ -7,3 +7,5 @@ playwright-report/
 .moguri/
 .DS_Store
 *.tsbuildinfo
+.native/
+*.tgz

@@ -20,6 +20,15 @@ notices remain in installed and packaged dependencies.
 | TypeScript | Apache-2.0 | Static verification |
 | Playwright | Apache-2.0 | Hidden Electron end-to-end testing |
 | `@electron/packager` | BSD-2-Clause | Development macOS application packaging |
+| `@modelcontextprotocol/sdk` | MIT | Native gateway, stdio/Streamable HTTP connectors and outward single MCP |
+| `sqlite-vec` | MIT/Apache-2.0 | Local project-partitioned lexical-vector database |
+| Ajv | MIT | Current external MCP JSON-schema argument validation |
+| YAML | ISC | Standard `SKILL.md` front matter |
+| ignore | MIT | Root/nested `.gitignore` matching for repository indexing |
+| Cheerio | MIT | Bounded approved-page text extraction |
+| `@resvg/resvg-js` | MPL-2.0 | Build-only rasterization of Moguri's original SVG mascot |
+| NVIDIA NeMo-Speech.cpp 0.2.0 | Apache-2.0 plus included upstream notices | Pinned native local recognizer runtime; notices retained with the downloaded runtime |
+| NVIDIA Nemotron 3.5 ASR model | OpenMDW-1.1 | Optional user-downloaded GGUF weights, not bundled or implicitly downloaded |
 
 No OpenCode source, branding, provider session store or OAuth implementation was
 copied into Moguri. The pi-ai package owns its upstream authentication flow.

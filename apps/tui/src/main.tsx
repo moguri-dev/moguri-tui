@@ -4,19 +4,18 @@ import { createRoot } from "@opentui/react";
 import { createElement } from "react";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { ensureConnection, readConnection } from "../../../packages/client/src/node.ts";
-import { MoguriClient } from "../../../packages/client/src/index.ts";
+import { connectMoguri } from "../../../packages/sdk/src/node.ts";
+import { MOGURI_ASCII, type MoguriSdk } from "../../../packages/sdk/src/index.ts";
 import { TuiApp } from "./App.tsx";
 
 const { values } = parseArgs({ options: { project: { type: "string" }, help: { type: "boolean" } } });
 if (values.help) {
   console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project]\n\nCtrl+L Copilot login, Ctrl+O open project, Ctrl+M models, Ctrl+K commands.\nThe desktop and TUI share the same private local service.");
 } else {
-  let client: MoguriClient | undefined;
+  let client: MoguriSdk | undefined;
   try {
-    const connection = await ensureConnection();
-    client = new MoguriClient(connection, () => readConnection());
-    await client.connect();
+    if (process.stdout.isTTY) console.log(MOGURI_ASCII);
+    client = await connectMoguri();
     let initialSessionId: string | undefined;
     if (values.project) {
       const deadline = Date.now() + 5000;

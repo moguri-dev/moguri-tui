@@ -5,7 +5,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { mkdir, writeFile } from "node:fs/promises";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { MoguriClient } from "../packages/client/src/index.ts";
+import { MoguriSdk as MoguriClient } from "../packages/sdk/src/index.ts";
 import { envelope } from "../apps/service/src/controller.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
 
@@ -54,5 +54,51 @@ test("the actual OpenTUI client selects Copilot, streams, stops and receives a s
     flushSync(() => root.unmount());
     await setup.dispose();
     await fixture.close();
+  }
+});
+
+test("the actual TUI views, edits and restores the SDK system prompt with an explicit warning", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture();
+  const client = new MoguriClient(fixture.service.connection);
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
+  const root = createRoot(setup.renderer);
+  const frameUntil = async (predicate: (frame: string) => boolean) => {
+    const deadline = Date.now() + 8000;
+    do {
+      await new Promise((resolve) => setTimeout(resolve, 20)); await setup.flush();
+      if (predicate(setup.captureCharFrame())) return;
+    } while (Date.now() < deadline);
+    throw new Error(`TUI settings did not settle:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    await client.ready();
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    await frameUntil((frame) => frame.includes("Budget Unlimited"));
+    setup.mockInput.pressKey("g", { ctrl: true });
+    await frameUntil((frame) => frame.includes("Shared Moguri SDK settings"));
+    setup.mockInput.pressEnter();
+    await frameUntil((frame) => frame.includes("can break tool use") && frame.includes("Ctrl+Enter acknowledges risk"));
+    await setup.mockInput.typeText("Generated TUI instruction. ");
+    setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil((frame) => frame.includes("Shared Moguri SDK settings"));
+    await waitFor(() => fixture.service.controller.snapshot().settings.values.systemPrompt.includes("Generated TUI instruction."));
+    setup.mockInput.pressEnter();
+    await frameUntil((frame) => frame.includes("Ctrl+Enter acknowledges risk"));
+    setup.mockInput.pressKey("r", { ctrl: true });
+    await waitFor(() => fixture.service.controller.snapshot().settings.values.systemPrompt === fixture.service.controller.snapshot().settings.defaults.systemPrompt);
+    await frameUntil((frame) => frame.includes("Shared Moguri SDK settings"));
+    setup.mockInput.pressEscape();
+    await frameUntil((frame) => frame.includes("Write a prompt"));
+    await setup.mockInput.typeText("/mcp token generated-auth");
+    setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil((frame) => frame.includes("MCP credential for generated-auth"));
+    await setup.mockInput.typeText("generated-test-secret");
+    await frameUntil((frame) => frame.includes("********"));
+    assert.equal(setup.captureCharFrame().includes("generated-test-secret"), false);
+    assert.equal(fixture.session().draft.text.includes("generated-test-secret"), false);
+    setup.mockInput.pressEscape();
+    assert.equal(fixture.requests.length, 0);
+  } finally {
+    client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close();
   }
 });

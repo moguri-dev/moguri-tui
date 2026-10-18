@@ -13,10 +13,26 @@ approval of project file and shell tools, persistent drafts and queues, distinct
 Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 
+The **importable Moguri SDK** now powers the CLI, TUI and desktop. It exposes
+shared editable/restorable system instructions and permissions, opt-in local
+vector/graph and coding-style memory, standard skills, reviewed evolution
+proposals, curated/approved scripts, declarative plugins, optional tool-less
+subagents and one native MCP gateway. Desktop starts dark and uses the same
+original face-and-bat-wing mascot as the TUI's ASCII loading mark.
+
+Dictation uses local NVIDIA Nemotron 3.5 through a pinned native runtime. The
+user explicitly accepts and downloads the model once. NVIDIA documents
+**40 locales: 19 ready, 13 broad coverage, 8 adaptation-only**, not 22 verified
+ready languages. No cloud ASR fallback or automatic model-weight download occurs.
+
 This is a **macOS development alpha**, not the completed first milestone.
-Sandbox, Remote SSH, kupo, delegated autonomy, finite budgets, other attachment
+Sandbox, Remote SSH, kupo, Autopilot Max, finite budgets, other attachment
 types, worktree management and the broader dashboard are explicitly unavailable.
 Unknown usage and Copilot billing are not presented as zero cost.
+Manual remains the default. Guided still needs human confirmation; Autopilot
+can use only explicit bounded user grants. SendBox has a visible fail-closed
+configuration/readiness surface, but its real worker transport is not qualified
+and Sandbox execution is still unavailable.
 
 ```bash
 npm ci
@@ -30,7 +46,8 @@ In the TUI, **Ctrl+L** starts Copilot sign-in, **Ctrl+M** selects a model, and
 Complete GitHub's device authorization yourself; Moguri does not read IDE login
 files or require another provider's API key.
 
-See [setup and usage](docs/setup.md), the [initial architecture](docs/architecture/overview.md),
+See [setup and usage](docs/setup.md), the [SDK API and CLI](docs/sdk.md),
+the [initial architecture](docs/architecture/overview.md),
 and [Phase 0 evidence and remaining release blockers](docs/architecture/phase-zero.md).
 `npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
 `release/`. It is not a notarized distribution.

@@ -7,6 +7,7 @@ import type { PreparedModel, ProviderAdapter } from "../apps/service/src/provide
 import { startService } from "../apps/service/src/server.ts";
 import { envelope } from "../apps/service/src/controller.ts";
 import { isRecord, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
+import type { PlatformOptions } from "../apps/service/src/platform.ts";
 
 export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 8000): Promise<NonNullable<T>> {
   const deadline = Date.now() + timeout;
@@ -57,6 +58,8 @@ export async function fixtureProvider() {
         const file: unknown = JSON.parse(String(toolMessages[0]!.content));
         if (!isRecord(file)) throw new Error("Invalid file fixture.");
         finish({ name: "write_file", args: { path: "fixture.txt", text: "generated replacement\n", expectedDigest: file.digest } });
+      } else if (prompt.includes("generated propose skill") && toolMessages.length === 0) {
+        finish({ name: "propose_skill", args: { name: "generated-style", content: "---\nname: generated-style\ndescription: Generated style guidance\n---\nPrefer small typed functions.\n" } });
       } else if ((prompt.includes("generated tool") || prompt.includes("generated write")) && toolMessages.length === 0) {
         finish({ name: "read_file", args: { path: "fixture.txt" } });
       } else finish();
@@ -93,14 +96,14 @@ export async function fixtureProvider() {
     },
   };
 }
-export async function setupFixture(options: { workerPath?: string } = {}) {
+export async function setupFixture(options: { workerPath?: string; platform?: PlatformOptions } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(project);
   await writeFile(join(project, "fixture.txt"), "generated original\n");
   const fixture = await fixtureProvider();
-  const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath });
+  const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform: options.platform });
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
   const sessionId = sessionResult.id!;
