@@ -10,7 +10,7 @@ The first executable checkpoint includes an **OpenTUI terminal client** and an
 **Electron desktop app** sharing one local service. It supports GitHub Copilot
 device sign-in, account-enabled model selection, streamed conversations, manual
 approval of project file and shell tools, persistent drafts and queues, distinct
-Queue/Steer/Interrupt delivery, stopping owned process trees, restart recovery,
+Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 
 This is a **macOS development alpha**, not the completed first milestone.
