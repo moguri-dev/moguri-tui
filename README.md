@@ -1,14 +1,8 @@
 # moguri
 
-A harness for your AI that works on your terms, both in a CLI (TUI) format and a desktop app, inspired by OpenCode
-https://github.com/mbianchidev/open-moguri
+A harness for your AI that works on your terms, both in a CLI (TUI) format and a desktop app
 
-Optionally integrates with @mbianchidev/vslocal IDE with a VSX extension 
-Optionally integrates with [@simonw/llm](https://github.com/simonw/llm) for getting access to models
-
-Also see: https://github.com/deepseek-ai/deepseek-harness
-
-Moguri is built from zero with borrowed libraries. The [implementation specification](docs/implementation.md) defines the product and delivery order; [architecture decisions](docs/architecture/decisions.md) records the chosen stack. No application code exists yet.
+Moguri is built from zero with borrowed libraries. The [implementation specification](docs/implementation.md) defines the product and delivery order; [architecture decisions](docs/architecture/decisions.md) records the chosen stack.
 
 ## Features
 
@@ -107,7 +101,7 @@ The feature inventory below captures the broader Moguri vision. The implementati
   - [mbianchidev/sendbox](https://github.com/mbianchidev/sendbox) - native, first-release Sandbox env with scoped local VM execution; missing sandbox support never silently falls back to Local.
   - mbianchidev/porto - for handling local dev servers and docker stacks (via CLI pre-installed)
   - mbianchidev/sql not-so-lite - for local database management (via CLI pre-installed)
-  - mbianchidev/stainless - agentic privacy driven browser, used for dev previews and for launching Playwright (via MCP and open with)
+  - (future) mbianchidev/stainless - agentic privacy driven browser, used for dev previews and for launching Playwright (via MCP and open with)
 
 ## To evaluate
 
