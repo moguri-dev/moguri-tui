@@ -21,3 +21,37 @@ test("the CLI creates and moves local tickets through the same SDK with explicit
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
 });
+
+test("the CLI holds prompts without a model and shares session/project/plan lifecycle APIs", async () => {
+  const fixture = await setupFixture();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  const selected = ["--session", fixture.sessionId];
+  try {
+    const path = join(fixture.directory, "generated-prompt.txt");
+    await writeFile(path, "Generated CLI held prompt.");
+    const held = JSON.parse((await execute(["queue", "hold", path, ...selected])).stdout);
+    assert.ok(held.id);
+    const queue = JSON.parse((await execute(["queue", "list", ...selected])).stdout);
+    assert.equal(queue[0].held, true);
+    assert.equal((await execute(["queue", "copy", held.id, ...selected])).stdout.trim(), "Generated CLI held prompt.");
+    await execute(["session", "rename", "Generated CLI session", ...selected]);
+    await execute(["slash", "/read-only", ...selected]);
+    assert.equal(fixture.session().mode, "read-only");
+    assert.equal(fixture.session().title, "Generated CLI session");
+    const side = JSON.parse((await execute(["session", "spawn", "side", ...selected])).stdout);
+    assert.equal(fixture.service.controller.snapshot().sessions.find((session) => session.id === side.id)?.kind, "side");
+    const projectId = fixture.session().projectId;
+    const configuration = JSON.parse((await execute(["project", "get", projectId])).stdout).configuration;
+    const settingsFile = join(fixture.directory, "generated-settings.json");
+    await writeFile(settingsFile, JSON.stringify({ ...configuration.values, port: 4501 }));
+    await execute(["project", "set", projectId, settingsFile, "--revision", String(configuration.revision)]);
+    assert.equal(fixture.service.controller.snapshot().projectConfigurations[0]?.values.port, 4501);
+    await execute(["slash", "/agent", ...selected]);
+    const plan = JSON.parse((await execute(["plan", "save", path, "--digest", "absent", ...selected])).stdout);
+    assert.ok(plan.id);
+    await execute(["session", "delete", ...selected, "--revision", String(fixture.session().revision), "--confirm-remove"]);
+    assert.equal(fixture.service.controller.snapshot().sessions.some((session) => session.id === fixture.sessionId), false);
+    assert.equal(fixture.service.controller.snapshot().artifacts[0]?.id, plan.id);
+    assert.equal(fixture.requests.length, 0);
+  } finally { await fixture.close(); }
+});
