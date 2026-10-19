@@ -29,12 +29,13 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
   const [capabilityOutput, setCapabilityOutput] = useState("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
-  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model">("mcp");
+  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
+  const availableModels = snapshot?.provider.models.filter((model) => !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
   const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
   const localIssues = snapshot?.issues.filter((issue) => issue.projectId === project?.id && !issue.archived) ?? [];
   const editor = React.useMemo(() => {
@@ -314,6 +315,9 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       case "/model-token":
         if (!argument || argument.includes(" ")) throw new Error("Use /model-token ENDPOINT_ID, then the masked input. Never put a credential in the composer.");
         setTokenKind("model"); setTokenServer(argument); setTokenValue(""); setMode("mcp-token"); break;
+      case "/remote-model-token":
+        if (!argument || argument.includes(" ")) throw new Error("Use /remote-model-token ENDPOINT_ID after probing SSH, then the masked input. Never put a credential in the composer.");
+        setTokenKind("remote-model"); setTokenServer(argument); setTokenValue(""); setMode("mcp-token"); break;
       case "/defaults": show({ global: snapshot?.settings.values.startup.global, profile: snapshot?.settings.values.startup.profile, project: session.projectId ? snapshot?.projectConfigurations.find((configuration) => configuration.projectId === session.projectId)?.values.defaults ?? {} : {}, current: session.controls, sources: session.defaults, guidance: "Edit shared startup settings or project overrides. Existing sessions are never rewritten by default changes." }); break;
       case "/model-settings":
         if (!argument) show({ options: session.controls.modelOptions ?? {}, model: snapshot?.provider.models.find((model) => model.id === session.controls.modelId), context: (await client.sessions.context(session.id)).context });
@@ -323,7 +327,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       case "/model": await configure({ ...session.controls, modelId: argument }); break;
       case "/env":
         if (!["Local", "Sandbox", "Remote"].includes(argument)) throw new Error("Use /env Local, Sandbox, or Remote. Unready backends are rejected.");
-        await configure({ ...session.controls, env: argument as Controls["env"] }); break;
+        await client.sessions.env(session.id, argument as Controls["env"]); break;
       case "/autonomy":
         if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose a documented autonomy level. Only Manual is available.");
         await configure({ ...session.controls, autonomy: argument as Controls["autonomy"] }); break;
@@ -374,7 +378,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
       if (key.name === "backspace") setTokenValue((value) => value.slice(0, -1));
-      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
+      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
@@ -492,9 +496,9 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
-          {snapshot?.provider.models.length ? <select focused flexGrow={1} options={snapshot.provider.models.map((model) => ({ name: model.name, description: `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
+          {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
             onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { await configure({ ...session.controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
-            <text fg={colors.muted}>No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup.</text>}
+            <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
           <text fg={colors.muted}>kupo is unavailable until its routing and isolation contracts are validated.</text></box> :
         mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
         mode === "help" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{`Commands
@@ -512,6 +516,8 @@ Esc composer
 /connect | /cancel-login | /disconnect | /models | /model ID
 /model-settings [JSON|reset] configures working context/thinking via the shared SDK
 /local-models [refresh] inspects configured endpoints without inference or host scans
+/remote [probe|reconcile ID|acknowledge ID] uses pinned SSH, never Local fallback
+/remote-model-token ENDPOINT opens masked remote endpoint credential input
 /model-token ENDPOINT opens a masked endpoint-key input; /defaults shows startup sources
 /new global creates a chat without a workspace
 /meta [REQUEST] | /suggestions [all|run DIGEST|run-all DIGEST] | /attention

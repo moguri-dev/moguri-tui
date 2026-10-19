@@ -14,7 +14,7 @@ export async function main(argv: string[]): Promise<void> {
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
     "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" },
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
-    controls: { type: "string" },
+    controls: { type: "string" }, stdio: { type: "boolean" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -28,6 +28,11 @@ moguri session create --controls FILE  Explicit startup control overrides
 moguri models list|refresh         Copilot and configured local model discovery
 moguri models token ENDPOINT       Piped stdin only, never a shell argument
 moguri models clear-token ENDPOINT Remove the resource-bound endpoint key
+moguri remote status|probe          Pinned SSH worker/runtime readiness
+moguri remote reconcile RUN_ID      Existing receipts/late usage, never replay
+moguri remote acknowledge RUN_ID --confirm-review  After actual process inspection
+moguri remote token|clear-token ENDPOINT  Piped remote endpoint credential
+moguri worker --stdio              Installed versioned SSH worker bridge
 moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
@@ -87,6 +92,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
 `);
     return;
   }
+  if (group === "worker") {
+    await import(new URL(import.meta.url.endsWith(".ts") ? "../../service/src/remote-bridge.ts" : "./remote-bridge.mjs", import.meta.url).href);
+    return;
+  }
   if (group === "tui" || group === "desktop") {
     const require = createRequire(import.meta.url);
     const root = fileURLToPath(new URL(".", import.meta.url));
@@ -140,6 +149,14 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (values.digest || values["confirm-review"]) throw new Error("Use both --digest SHA256 and --confirm-review after inspecting the source snapshot.");
         else output(action === "folder" ? await sdk.attachments.folderPreview(values.session, args[0]) : action === "github" ? await sdk.attachments.githubPreview(values.session, args[0]) : await sdk.attachments.sessionPreview(values.session, args[0]));
       } else throw new Error("Use context file/image/folder/github/session/read. No source is attached implicitly.");
+    } else if (group === "remote") {
+      if (action === "status") output(await sdk.remote.status());
+      else if (action === "probe") { await sdk.remote.probe(); output(await sdk.remote.status()); }
+      else if (action === "reconcile" && args[0]) { await sdk.remote.reconcile(args[0]); output(sdk.getState().snapshot!.executions.find((execution) => execution.id === args[0])); }
+      else if (action === "acknowledge" && args[0] && values["confirm-review"]) output(await sdk.remote.acknowledge(args[0], true));
+      else if (action === "token" && args[0]) output(await sdk.remote.setToken(args[0], await credential()));
+      else if (action === "clear-token" && args[0]) output(await sdk.remote.clearToken(args[0]));
+      else throw new Error("Use remote status/probe/reconcile RUN_ID, acknowledge RUN_ID --confirm-review only after process inspection, or token/clear-token ENDPOINT.");
     } else if (group === "models") {
       if (action === "list") output({ models: snapshot.provider.models, connections: snapshot.provider.connections });
       else if (action === "refresh") { await sdk.models.refresh(); output(sdk.getState().snapshot!.provider); }

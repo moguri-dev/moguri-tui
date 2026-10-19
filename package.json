@@ -48,6 +48,7 @@
     "spike:models": "node scripts/model-controls-spike.mjs",
     "spike:engagement": "node scripts/engagement-spikes.mjs",
     "spike:runtime": "node scripts/runtime-spikes.mjs",
+    "spike:remote": "node scripts/remote-spike.mjs",
     "start": "node scripts/launch.mjs tui",
     "desktop": "node scripts/launch.mjs desktop",
     "service": "node --import tsx apps/service/src/main.ts",

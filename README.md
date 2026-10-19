@@ -33,6 +33,14 @@ session-text snapshots. Unsupported image models preserve the draft/queue
 rather than dropping context. Bare attachment prefixes remain literal until
 the user selects their source.
 
+Core **Remote SSH** execution uses an explicitly pinned host and approved
+remote workspace. The existing worker runs inference and file/command tools
+there; the local service still owns approvals and history. Disconnect/restart
+reconciliation retains late accounting without replaying effects or turning
+partial work into success. Remote embedded consoles, MCP execution, local
+repository-memory retrieval and diff/plan panels remain blocked rather than
+using a local fallback.
+
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
 `/meta` opens a settings chat whose changes require exact human review.
@@ -73,7 +81,7 @@ This is not a malware-free guarantee; script execution stays unavailable until
 a real SendBox boundary is qualified.
 
 This is a **macOS development alpha**, not the completed first milestone.
-Sandbox, Remote SSH, kupo, Autopilot Max, finite budgets, managed worktrees,
+Sandbox, complete remote side-panel/extension transport, kupo, Autopilot Max, finite budgets, managed worktrees,
 multi-profile isolation and the broader dashboard are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot

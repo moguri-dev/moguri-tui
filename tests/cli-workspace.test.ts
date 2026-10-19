@@ -92,3 +92,13 @@ test("the CLI previews exact folders and attaches typed local context without in
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
 });
+test("the CLI exposes unconfigured SSH readiness without pretending a host, model or local fallback", async () => {
+  const fixture = await setupFixture();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    const status = JSON.parse((await execute(["remote", "status"])).stdout).remote;
+    assert.equal(status.ready, false); assert.equal(status.hostFingerprint, null);
+    await assert.rejects(() => execute(["remote", "probe"]), /Configure an SSH target explicitly/);
+    assert.equal(fixture.requests.length, 0);
+  } finally { await fixture.close(); }
+});
