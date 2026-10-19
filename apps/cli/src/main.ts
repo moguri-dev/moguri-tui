@@ -5,13 +5,14 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, SettingsSchema, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema } from "../../../packages/sdk/src/index.ts";
+import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" },
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
+    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -20,6 +21,22 @@ export async function main(argv: string[]): Promise<void> {
 moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
+moguri slash "/read-only" --session ID
+moguri session rename NAME|mode agent|mode read-only --session ID
+moguri session spawn side|agent [NAME] --session ID
+moguri session organize changes.json --session ID --revision N
+moguri session archive|restore|stop|resume --session ID
+moguri session delete --session ID --revision N --confirm-remove
+moguri session from-pr URL|from-issue ID --project ID
+moguri project get|sources|diff|porto ID
+moguri project set ID settings.json --revision N
+moguri project relocate ID PATH --revision N
+moguri project remove ID --revision N --confirm-remove
+moguri project defaults ID BRANCH --revision N --confirm-push
+moguri project import-mcp ID --revision N --confirm-review --digest SHA256
+moguri queue list|copy [ID]|run ID|remove ID --session ID
+moguri queue hold FILE|edit ID FILE|reorder ID ID ... --session ID
+moguri plan read|capture|save FILE --session ID [--digest SHA256_OR_absent]
 moguri service restart|stop|info   Explicit owned-service lifecycle
 moguri config get|set FILE|reset   Shared, restorable settings
 moguri prompt get|set FILE|reset   Editable system prompt (risk acknowledgement required)
@@ -92,7 +109,55 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     const snapshot = sdk.getState().snapshot!;
     const projectId = args[0] ?? values.project;
     if (group === "status") {
-      output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status }) => ({ id, projectId, title, status })) });
+      output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
+    } else if (group === "slash") {
+      if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
+      output(await sdk.slash(values.session, [action, ...args].join(" "), "cli"));
+    } else if (group === "session") {
+      if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }));
+      else {
+        if (!values.session) throw new Error("Choose --session ID from moguri status.");
+        if (action === "rename") output(await sdk.sessions.rename(values.session, args.join(" ")));
+        else if (action === "mode" && (args[0] === "agent" || args[0] === "read-only")) output(await sdk.sessions.mode(values.session, args[0]));
+        else if (action === "spawn" && (args[0] === "agent" || args[0] === "side")) output(await sdk.sessions.spawn(values.session, args[0], args.slice(1).join(" ") || undefined));
+        else if (action === "organize" && args[0]) output(await sdk.sessions.organize(values.session, parse(SessionChangesSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
+        else if (action === "delete" && values["confirm-remove"]) output(await sdk.sessions.delete(values.session, true, expectedRevision()));
+        else if (action && ["archive", "restore", "stop", "resume"].includes(action)) output(await sdk.command({ type: `session.${action}` as "session.archive" | "session.restore" | "session.stop" | "session.resume", sessionId: values.session }));
+        else throw new Error("Use session rename/mode/spawn/organize/archive/restore/stop/resume/delete. Deletion needs --confirm-remove and the observed --revision.");
+      }
+    } else if (group === "project") {
+      if (!args[0]) throw new Error("Choose the project ID from moguri status.");
+      if (action === "get") output(await sdk.projects.configuration(args[0]));
+      else if (action === "sources") output(await sdk.projects.sources(args[0]));
+      else if (action === "diff") output(await sdk.projects.git(args[0]));
+      else if (action === "porto") output(await sdk.projects.porto(args[0]));
+      else if (action === "set" && args[1]) output(await sdk.projects.configure(args[0], parse(ProjectSettingsSchema, JSON.parse(await readFile(args[1], "utf8"))), expectedRevision()));
+      else if (action === "relocate" && args[1]) output(await sdk.projects.relocate(args[0], args[1], expectedRevision()));
+      else if (action === "remove" && values["confirm-remove"]) output(await sdk.projects.remove(args[0], true, expectedRevision()));
+      else if (action === "import-mcp" && values["confirm-review"] && values.digest) output(await sdk.projects.importMcp(args[0], expectedRevision(), true, values.digest));
+      else if (action === "defaults" && args[1] && values["confirm-push"]) {
+        const job = await sdk.projects.initialize(args[0], args[1], expectedRevision(), true);
+        await waitForJob(job.id!, () => sdk.jobs.cancel(job.id!), "Repository defaults");
+      } else throw new Error("Use project get/sources/diff/porto/set/relocate/remove/defaults/import-mcp. Mutations need an observed --revision and any explicit confirmation shown in --help.");
+    } else if (group === "queue" || group === "plan") {
+      const session = snapshot.sessions.find((session) => session.id === values.session);
+      if (!session) throw new Error("Choose an existing --session ID.");
+      if (group === "plan") {
+        if (action === "read") output(await sdk.plans.read(session.id));
+        else if (action === "capture") output(await sdk.plans.capture(session.id, args[0]));
+        else if (action === "save" && args[0] && values.digest) output(await sdk.plans.save(session.id, await readFile(args[0], "utf8"), values.digest));
+        else throw new Error("Use plan read/capture, or plan save FILE --digest OBSERVED_SHA256_OR_absent.");
+      } else if (action === "list") output(session.queue);
+      else if (action === "copy") output(sdk.prompts.text(session.id, args[0]));
+      else if (action === "run" && args[0]) output(await sdk.prompts.release(session.id, args[0], expectedRevision()));
+      else if (action === "remove" && args[0]) output(await sdk.command({ type: "queue.remove", sessionId: session.id, messageId: args[0], expectedRevision: expectedRevision() }));
+      else if (action === "edit" && args[0] && args[1]) output(await sdk.command({ type: "queue.edit", sessionId: session.id, messageId: args[0], text: await readFile(args[1], "utf8"), expectedRevision: expectedRevision() }));
+      else if (action === "reorder") output(await sdk.command({ type: "queue.reorder", sessionId: session.id, messageIds: args, expectedRevision: expectedRevision() }));
+      else if (action === "hold" && args[0]) {
+        if (session.draft.text || session.draft.attachments.length) throw new Error("Save or use the existing draft first. CLI queue hold never replaces unsent edits.");
+        const draft = new DraftEditor(sdk, session.id, session.draft);
+        try { draft.edit(await readFile(args[0], "utf8")); output(await draft.send("queue", true)); } finally { draft.dispose(); }
+      } else throw new Error("Use queue list/copy/run/remove/edit/reorder/hold. Queue mutations use the observed queue --revision.");
     } else if (group === "issues") {
       if (!args[0]) throw new Error("Choose a project or issue ID from moguri status or issues list.");
       if (action === "list") output(await sdk.issues.board(args[0]));
@@ -150,9 +215,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (!values.session) throw new Error("Bind the gateway to --session SESSION_ID. It cannot approve itself.");
         await serveGatewayMcp(sdk, values.session); keep = true;
       } else if (action === "tools") output(await sdk.mcp.tools(args[0] ?? "builtin", args.slice(1).join(" "), 0, values.session));
-      else if (action === "auth" && args[0]) output(await sdk.mcp.auth(args[0]));
+      else if (action === "auth" && args[0]) output(await sdk.mcp.auth(args[0], values.session));
       else if (action === "token" && args[0]) {
-        output(await sdk.mcp.setToken(args[0], await credential()));
+        output(await sdk.mcp.setToken(args[0], await credential(), values.session));
       } else throw new Error("Use mcp --session ID, mcp tools, mcp auth or mcp token.");
     } else if (group === "dictate") {
       if (action === "download") {

@@ -20,6 +20,15 @@ proposals, curated/approved scripts, declarative plugins, optional tool-less
 subagents and one native MCP gateway. Desktop starts dark and uses the same
 original face-and-bat-wing mascot as the TUI's ASCII loading mark.
 
+The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
+commands, enforced read-only sessions and parallel question-only side chats.
+Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
+isolated browser previews, linked PRs and Insights. Sessions support pin/group/
+attach/unread/archive/delete actions; project settings and optional archived
+retention share the same SDK. Deleting a session preserves independent project
+artifacts and external PRs. A terminal is an explicit Local user console, not an
+agent permission or a claimed sandbox.
+
 Dictation uses local NVIDIA Nemotron 3.5 through a pinned native runtime. The
 user explicitly accepts and downloads the model once. NVIDIA documents
 **40 locales: 19 ready, 13 broad coverage, 8 adaptation-only**, not 22 verified
@@ -61,6 +70,8 @@ files or require another provider's API key.
 See [setup and usage](docs/setup.md), the [SDK API and CLI](docs/sdk.md),
 the [initial architecture](docs/architecture/overview.md),
 and [Phase 0 evidence and remaining release blockers](docs/architecture/phase-zero.md).
+The [session workspace contract](docs/architecture/session-workspace.md) records
+Ghostty qualification, deletion/recovery and project-policy boundaries.
 `npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
 `release/`. It is not a notarized distribution.
 CI runs only on pushes to `main`, not pull requests or feature branches.

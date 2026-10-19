@@ -7,6 +7,7 @@ import { parseArgs } from "node:util";
 import { connectMoguri } from "../../../packages/sdk/src/node.ts";
 import { MOGURI_ASCII, type MoguriSdk } from "../../../packages/sdk/src/index.ts";
 import { TuiApp } from "./App.tsx";
+import { nativeActions } from "./native.ts";
 
 const { values } = parseArgs({ options: { project: { type: "string" }, help: { type: "boolean" } } });
 if (values.help) {
@@ -25,7 +26,7 @@ if (values.help) {
       initialSessionId = existing?.id ?? (await client.command({ type: "session.create", projectId: project.id! })).id;
     }
     const renderer = await createCliRenderer({ exitOnCtrlC: false });
-    createRoot(renderer).render(createElement(TuiApp, { client, initialSessionId }));
+    createRoot(renderer).render(createElement(TuiApp, { client, initialSessionId, native: nativeActions }));
   } catch (error) {
     client?.disconnect();
     console.error(error instanceof Error ? error.message : "Moguri TUI could not start.");

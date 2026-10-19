@@ -8,6 +8,7 @@ import { startService } from "../apps/service/src/server.ts";
 import { envelope } from "../apps/service/src/controller.ts";
 import { isRecord, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
+export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
 
 export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 8000): Promise<NonNullable<T>> {
   const deadline = Date.now() + timeout;
@@ -54,16 +55,19 @@ export async function fixtureProvider() {
         response.on("close", () => clearTimeout(timer));
       } else if (prompt.includes("generated command") && toolMessages.length === 0) {
         finish({ name: "run_command", args: { command: "sleep 30 & printf 'GENERATED_CHILD=%s\\n' \"$!\"; wait", timeoutMs: 30_000 } });
+      } else if (prompt.includes("generated forbidden write") && toolMessages.length === 0) {
+        finish({ name: "write_file", args: { path: "forbidden.txt", text: "generated forbidden mutation", expectedDigest: "absent" } });
       } else if (prompt.includes("generated write") && toolMessages.length === 1) {
-        const file: unknown = JSON.parse(String(toolMessages[0]!.content));
-        if (!isRecord(file)) throw new Error("Invalid file fixture.");
-        finish({ name: "write_file", args: { path: "fixture.txt", text: "generated replacement\n", expectedDigest: file.digest } });
+        const text = String(toolMessages[0]!.content);
+        const file: unknown = text.startsWith("{") ? JSON.parse(text) : null;
+        if (isRecord(file) && typeof file.digest === "string") finish({ name: "write_file", args: { path: "fixture.txt", text: "generated replacement\n", expectedDigest: file.digest } });
+        else finish();
       } else if (prompt.includes("generated propose skill") && toolMessages.length === 0) {
         finish({ name: "propose_skill", args: { name: "generated-style", content: "---\nname: generated-style\ndescription: Generated style guidance\n---\nPrefer small typed functions.\n" } });
       } else if ((prompt.includes("generated tool") || prompt.includes("generated write")) && toolMessages.length === 0) {
         finish({ name: "read_file", args: { path: "fixture.txt" } });
       } else finish();
-    })().catch(() => { response.writeHead(500); response.end("Generated provider fixture failed."); });
+    })().catch(() => { if (!response.headersSent) response.writeHead(500); response.end("Generated provider fixture failed."); });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -103,7 +107,7 @@ export async function setupFixture(options: { workerPath?: string; platform?: Pl
   await mkdir(project);
   await writeFile(join(project, "fixture.txt"), "generated original\n");
   const fixture = await fixtureProvider();
-  const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform: options.platform });
+  const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform: options.platform, retentionKey: GENERATED_RETENTION_KEY });
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
   const sessionId = sessionResult.id!;
@@ -116,7 +120,7 @@ export async function setupFixture(options: { workerPath?: string; platform?: Pl
     return service.controller.dispatch(envelope({ type: "message.send", sessionId, expectedRevision: session().draft.revision, delivery }));
   };
   return {
-    ...fixture, directory, project, service, sessionId, session, configure, send,
+    ...fixture, directory, project, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY,
     approve: async (allow = true) => {
       const approval = await waitFor(() => session().pendingApproval);
       return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));

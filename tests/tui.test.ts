@@ -36,7 +36,7 @@ test("the actual OpenTUI client selects Copilot, streams, stops and receives a s
     await waitFor(() => fixture.session().controls.modelId === fixture.modelId);
     await frameUntil((frame) => frame.includes(fixture.modelId) && frame.includes("Write a prompt"));
     await setup.mockInput.typeText("generated slow task");
-    setup.mockInput.pressEnter({ ctrl: true });
+    setup.mockInput.pressEnter({ ctrl: true, shift: true });
     await waitFor(() => fixture.requests.length === 1);
     await frameUntil((frame) => frame.includes("Generated work in progress."));
     setup.mockInput.pressCtrlC();
@@ -133,4 +133,50 @@ test("the actual TUI views, edits and restores the SDK system prompt with an exp
   } finally {
     client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close();
   }
+});
+
+test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, copy and side commands", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture();
+  const client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 100, height: 38, kittyKeyboard: true, exitOnCtrlC: false });
+  const root = createRoot(setup.renderer);
+  const copied: string[] = [];
+  const native = { copy: async (text: string) => { copied.push(text); }, browser: async () => { throw new Error("No external browser in this generated test."); }, file: async () => { throw new Error("No external app in this generated test."); } };
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (text: string) => { await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client, native })));
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("Generated first held prompt");
+    setup.mockInput.pressEnter({ super: true });
+    await waitFor(() => fixture.session().queue.length === 1);
+    await frameUntil("1 queued");
+    await setup.mockInput.typeText("Generated second held prompt");
+    setup.mockInput.pressEnter({ ctrl: true });
+    await waitFor(() => fixture.session().queue.length === 2);
+    assert.ok(fixture.session().queue.every((item) => item.held));
+    assert.equal(fixture.requests.length, 0);
+    await slash("/read-only");
+    await waitFor(() => fixture.session().mode === "read-only");
+    await frameUntil("read-only");
+    await slash("/rename Generated terminal name");
+    await waitFor(() => fixture.session().title === "Generated terminal name");
+    await slash(`/copy ${fixture.session().queue[0]!.id}`);
+    await waitFor(() => copied.length === 1);
+    assert.deepEqual(copied, ["Generated first held prompt"]);
+    await slash("/side");
+    const side = await waitFor(() => client.getState().snapshot?.sessions.find((session) => session.kind === "side"));
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("Generated held side question");
+    setup.mockInput.pressEnter({ super: true });
+    await waitFor(() => fixture.service.controller.snapshot().sessions.find((session) => session.id === side.id)?.queue.length === 1);
+    assert.equal(fixture.service.controller.snapshot().sessions.find((session) => session.id === side.id)?.queue[0]?.held, true);
+    await slash("/termnial");
+    await frameUntil("already a terminal");
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });

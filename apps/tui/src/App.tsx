@@ -4,16 +4,17 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, SettingsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor";
-const editorModes: Mode[] = ["prompt-editor", "settings-editor", "issue-editor", "board-editor"];
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor";
+const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor"];
+export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void> }
 
-export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string }) {
+export function TuiApp({ client, onQuit, initialSessionId, native }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string; native?: TuiNativeActions }) {
   const { snapshot, status, error, events } = useMoguri(client);
   const renderer = useRenderer();
   const { width } = useTerminalDimensions();
@@ -31,6 +32,7 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
   const [linearToken, setLinearToken] = useState(false);
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const editors = useRef(new Map<string, DraftEditor>());
+  useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
@@ -42,7 +44,8 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
     return value;
   }, [client, session?.id]);
   useEffect(() => {
-    if (!selectedId && snapshot?.sessions.length) setSelectedId(snapshot.sessions.find((session) => session.status !== "archived")?.id ?? snapshot.sessions[0]!.id);
+    if (snapshot && (!selectedId || !snapshot.sessions.some((session) => session.id === selectedId))) setSelectedId(snapshot.sessions.find((session) => session.status !== "archived")?.id ?? snapshot.sessions[0]?.id ?? null);
+    if (snapshot) for (const [id, editor] of editors.current) if (!snapshot.sessions.some((session) => session.id === id)) { editor.dispose(); editors.current.delete(id); }
   }, [snapshot, selectedId]);
   useEffect(() => { if (session && editor) editor.receive(session.draft); }, [session?.draft.revision, editor]);
   const perform = async (action: () => Promise<unknown>) => {
@@ -50,7 +53,7 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
   };
   const command = (command: Command) => perform(() => client.command(command));
-  const chooseSession = async (id: string) => { await editor?.flush(); setSelectedId(id); setMode("compose"); };
+  const chooseSession = async (id: string) => { await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); };
   const newSession = async () => {
     await editor?.flush();
     const currentProject = project ?? snapshot?.projects[0];
@@ -89,6 +92,12 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
     const { projectId: _, revision, ...config } = board;
     settingsRevision.current = revision; setSettingsText(JSON.stringify(config, null, 2)); setMode("board-editor");
   };
+  const openProjectEditor = async () => {
+    if (!project) throw new Error("Open a project before configuring it.");
+    const { configuration } = await client.projects.configuration(project.id);
+    settingsRevision.current = configuration.revision;
+    setSettingsText(JSON.stringify(configuration.values, null, 2)); setMode("project-editor");
+  };
   const saveSettings = (text: string) => perform(async () => {
     if (mode === "issue-editor") {
       if (!project) throw new Error("The project is no longer open.");
@@ -100,6 +109,9 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
       if (!project) throw new Error("The project is no longer open.");
       await client.issues.configure(project.id, parse(BoardConfigSchema, JSON.parse(text)), settingsRevision.current);
       setMode("issues"); return;
+    } else if (mode === "project-editor") {
+      if (!project) throw new Error("The project is no longer open.");
+      await client.projects.configure(project.id, parse(ProjectSettingsSchema, JSON.parse(text)), settingsRevision.current);
     } else if (mode === "prompt-editor") await client.prompt.set(text, settingsRevision.current, true);
     else await client.settings.update(parse(SettingsSchema, JSON.parse(text)), settingsRevision.current, true);
     setMode("settings");
@@ -123,14 +135,35 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
     const text = new TextDecoder().decode(event.bytes).replace(/[\r\n]/g, "");
     setTokenValue((value) => (value + text).slice(0, 32768));
   });
-  const submit = async (text: string) => {
+  const slashResult = async (result: SlashResult) => {
+    if (result.kind === "ok") { setNotice(result.message); return; }
+    if (result.kind === "text") { show(result.text); return; }
+    if (result.kind === "session") { await chooseSession(result.sessionId); return; }
+    if (result.kind === "copy") { if (!native) throw new Error("Clipboard access is unavailable in this terminal binding."); await native.copy(result.text); setNotice("Copied."); return; }
+    if (result.panel === "Models") setMode("models");
+    else if (result.panel === "Settings") setMode("settings");
+    else if (result.panel === "Queue") setMode("queue");
+    else if (result.panel === "Insights") show({ session, project, events: events.filter((event) => event.session_id === session?.id).slice(-20) });
+    else if (result.url) { if (!native) throw new Error("Default-browser access is unavailable in this terminal binding."); await native.browser(result.url); }
+    else if (result.path) { if (!native) throw new Error("Default-file access is unavailable in this terminal binding."); await native.file(result.path); }
+    else if (result.text) show(result.text);
+    else throw new Error("This panel is available only in the desktop app.");
+  };
+  const submit = async (text: string, held = false) => {
     if (!session || !editor) throw new Error("Open a project with Ctrl+O, then create a session.");
     const firstSpace = text.indexOf(" ");
     const name = (firstSpace < 0 ? text : text.slice(0, firstSpace)).trim();
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
       if (name === "/steer" || name === "/interrupt") editor.edit(argument);
-      await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue");
+      await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
+      return;
+    }
+    const shared = parseSlash(text);
+    if (shared && isSharedSlash(shared.name) && name !== "/help" && !(name === "/settings" && argument)) {
+      await editor.flush(); editor.edit(""); await editor.flush();
+      try { await slashResult(await client.slash(session.id, text, "tui")); }
+      catch (error) { if (client.getState().snapshot?.sessions.some((item) => item.id === session.id && item.status !== "archived")) editor.edit(text); throw error; }
       return;
     }
     switch (name) {
@@ -184,6 +217,12 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
           await client.settings.reset(section as SettingsSection | "all", snapshot!.settings.revision);
         } else setMode("settings");
         break;
+      case "/project-settings":
+        if (argument === "edit") await openProjectEditor();
+        else show(await client.projects.configuration(session.projectId));
+        break;
+      case "/project-sources": show(await client.projects.sources(session.projectId)); break;
+      case "/porto": show(await client.projects.porto(session.projectId)); break;
       case "/prompt":
         if (argument === "view") show(await client.prompt.preview(session.id));
         else if (argument === "reset") await client.prompt.reset(snapshot!.settings.revision);
@@ -225,7 +264,7 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
         const [operation, id = "builtin", ...rest] = argument.split(" ");
         if (operation === "servers") show(snapshot?.settings.values.mcpServers.map((server) => ({ id: server.id, name: server.name, enabled: server.enabled, transport: server.transport.type })));
         else if (operation === "tools") show(await client.mcp.tools(id, rest.join(" "), 0, session.id));
-        else if (operation === "auth") show(await client.mcp.auth(id));
+        else if (operation === "auth") show(await client.mcp.auth(id, session.id));
         else if (operation === "token" && !rest.length && id !== "builtin") { setLinearToken(false); setTokenServer(id); setTokenValue(""); setMode("mcp-token"); }
         else if (operation === "call" && rest.length >= 3) {
           const [tool, hash, ...json] = rest;
@@ -307,7 +346,7 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
       if (key.name === "backspace") setTokenValue((value) => value.slice(0, -1));
-      else if (key.name === "return" && tokenValue) void perform(async () => { if (linearToken) await client.linear.setToken(tokenValue); else await client.mcp.setToken(tokenServer, tokenValue); setTokenValue(""); setMode("settings"); });
+      else if (key.name === "return" && tokenValue) void perform(async () => { if (linearToken) await client.linear.setToken(tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
@@ -315,6 +354,11 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
     if (key.ctrl && key.name === "q" && editorModes.includes(mode)) { key.preventDefault(); setNotice("Save with Ctrl+Enter or cancel with Esc before leaving this editor."); return; }
     if (editorModes.includes(mode)) {
       if (key.ctrl && key.name === "r" && ["prompt-editor", "settings-editor"].includes(mode)) { key.preventDefault(); void perform(async () => { await client.settings.reset(mode === "prompt-editor" ? "systemPrompt" : "all", settingsRevision.current); setMode("settings"); }); }
+      return;
+    }
+    if (mode === "compose" && key.name === "return" && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {
+      key.preventDefault(); key.stopPropagation();
+      if (editor) void perform(() => submit(editor.getState().text, !key.shift));
       return;
     }
     if (key.name === "f4") { key.preventDefault(); void insertTranscript(); return; }
@@ -364,6 +408,7 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
           <select focused flexGrow={1} options={[
             { name: "System prompt: view, edit, restore", value: "prompt" },
             { name: "All shared settings (JSON): dark theme, guardrails, memory, MCP, optional modes", value: "json" },
+            { name: "Project settings (JSON): repo, folders, scripts, preview port, instructions and MCP", value: "project" },
             { name: "View effective committed system prompt", value: "preview" },
             { name: "Index current repository locally", value: "index" },
             { name: "Read repository import/symbol graph", value: "graph" },
@@ -378,6 +423,7 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
             switch (option?.value) {
               case "prompt": openSettingsEditor(true); break;
               case "json": openSettingsEditor(false); break;
+              case "project": await openProjectEditor(); break;
               case "preview": show(await client.prompt.preview(session?.id)); break;
               case "index": if (!project) throw new Error("Open a project first."); show(await client.memory.index(project.id)); break;
               case "graph": if (!project) throw new Error("Open a project first."); show(await client.memory.graph(project.id)); break;
@@ -393,7 +439,7 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
           <text fg={colors.muted}>Prompt edits can break functionality. Hard permissions remain final.</text>
         </box> :
         editorModes.includes(mode) ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
-          {mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
+          {mode === "project-editor" ? <text fg={colors.attention} height={3} flexShrink={0}>Project policy and bindings. Save never runs scripts or publishes defaults. Ctrl+Enter saves; Esc discards.</text> : mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
           <text fg={colors.attention} height={width >= 100 ? 3 : 4} flexShrink={0}>{SYSTEM_PROMPT_WARNING}</text><text fg={colors.muted} height={2} flexShrink={0}>Ctrl+Enter acknowledges risk and saves. Ctrl+R restores defaults. Esc cancels.</text></>}
           <SettingsTextEditor value={settingsText} change={setSettingsText} submit={(text) => void saveSettings(text)} />
         </box> :
@@ -416,7 +462,8 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
         mode === "help" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{`Commands
 
 Ctrl+O open project    Ctrl+N new session    Ctrl+P sessions
-Ctrl+L Copilot login   Ctrl+M model picker   Ctrl+Enter send/queue
+Ctrl+L Copilot login   Ctrl+M model picker   Cmd/Ctrl+Enter held queue
+Shift+Cmd/Ctrl+Enter send now
 Ctrl+C stop turn      Ctrl+Y approve tool   Ctrl+D deny tool
 Ctrl+B event trace    Ctrl+A archive view   Ctrl+Q save and leave
 Ctrl+R reload draft  Ctrl+S save/keep my draft after a conflict
@@ -435,6 +482,7 @@ Esc composer
 /trace | /details | /reload-draft | /keep-draft
 /policy all | /policy protected
 /settings | /settings edit | /settings reset SECTION
+/project-settings [edit] | /project-sources | /porto
 /prompt | /prompt view | /prompt reset
 /memory index|graph|search TEXT|remember CONVENTION
 /skills import SKILL.md | /plugins import manifest.json
@@ -453,6 +501,8 @@ Esc composer
 /cache install MANAGER SHA256 accept-metadata replace-node-modules
 /linear status|token|clear-token|import CURSOR (optional, off by default)
 
+${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
+
 Unsupported Sandbox, Remote, kupo, Autopilot Max and finite budgets
 fail closed. Guided still needs a human. Autopilot requires explicit
 bounded delegations. Folder, GitHub/session and image attachments
@@ -466,7 +516,7 @@ account authorization are required. Sign-in may enable account
 model policies. Moguri is not an official Copilot partner.
 Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         mode === "trace" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Recent events (last 200 received)</text>{events.filter((event) => !session || event.session_id === session.id).map((event) => <text key={event.id} fg={colors.muted}>{safe(`#${event.seq} ${event.event_type}\n${JSON.stringify(event.payload)}\n`)}</text>)}</scrollbox> :
-        mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Unclaimed messages. /edit, /remove, /reorder and /resume use revision checks.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.delivery}]\n${item.text}\n`)}</text>)}</scrollbox> :
+        mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Held prompts do not run. /run ID releases one. /edit, /remove, /reorder and /copy ID manage prompts.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.held ? "held" : item.delivery}]\n${item.text}\n`)}</text>)}</scrollbox> :
           <scrollbox flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom">
             {!session?.messages.length && <box flexDirection="column" paddingTop={1} paddingBottom={1} gap={1}><text fg={colors.accent}>{MOGURI_ASCII}</text><text fg={colors.accent}><strong>What are we working on?</strong></text><text fg={colors.muted}>{session ? "Choose a model with Ctrl+M, then write a prompt below.\nYou approve each tool before it runs." : "Ctrl+O opens a project. Ctrl+L connects GitHub Copilot.\nSessions and drafts are shared with the desktop app."}</text></box>}
             {session?.messages.slice(detailed ? 0 : -150).map((message) => <box key={message.id} flexDirection="column" paddingTop={1} paddingBottom={1}>
@@ -493,11 +543,11 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         <box height={4} flexShrink={0} flexDirection="column">
           <text fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (Ctrl+M)"}` : "Env Local | Model not set"}</text>
           <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget Unlimited`}</text>
-          <text fg={colors.muted}>{session ? `${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls | cost unavailable` : "Factory defaults. Ctrl+K commands."}</text>
+          <text fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls` : "Factory defaults. Ctrl+K commands."}</text>
         </box>
       </box>
     </box>
-    <box height={2} paddingLeft={2} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>Ctrl+Enter send  Ctrl+C stop  Ctrl+G settings  Ctrl+Space dictate  Ctrl+K commands  Ctrl+Q leave</text></box>
+    <box height={3} paddingLeft={2} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>Cmd/Ctrl+Enter queue | Shift+Cmd/Ctrl+Enter send | Ctrl+C stop | Ctrl+K commands</text></box>
   </box>;
 }
 function TuiComposer({ editor, session, focused, submit }: { editor: DraftEditor; session: Session; focused: boolean; submit: () => void }) {
@@ -508,11 +558,12 @@ function TuiComposer({ editor, session, focused, submit }: { editor: DraftEditor
   }, [draft.text]);
   return <box flexDirection="column" border borderColor={focused ? colors.accent : colors.border} padding={1} marginTop={1} flexShrink={0}>
     <textarea ref={ref} focused={focused} initialValue={draft.text} height={4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.background}
-      placeholder={session.status === "archived" ? "Archived. Use /restore from the command surface." : "Write a prompt. Ctrl+Enter sends. /help for commands."}
-      keyBindings={[{ name: "return", ctrl: true, action: "submit" }]} onSubmit={submit}
+      placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Cmd/Ctrl+Enter queues. /help for commands."}
+      keyBindings={[{ name: "return", ctrl: true, shift: true, action: "submit" }]} onSubmit={submit}
       onContentChange={() => { const text = ref.current?.plainText ?? ""; if (text !== editor.getState().text) editor.edit(text); }} />
     {draft.attachments.length > 0 && <text fg={colors.accent}>{draft.attachments.map((attachment) => `@${attachment.path}`).join("  ")}</text>}
     <text fg={draft.error ? colors.error : colors.muted}>{draft.error ?? (draft.saving ? "Saving draft..." : draft.dirty ? "Unsent edits" : "Draft saved")}</text>
+    {draft.text.startsWith("/") && !/\s/.test(draft.text) && <text fg={colors.accent}>{slashCommands.filter((entry) => entry.name.startsWith(draft.text.slice(1))).slice(0, 4).map((entry) => `/${entry.name}`).join("  ")}</text>}
   </box>;
 }
 function SettingsTextEditor({ value, change, submit }: { value: string; change: (value: string) => void; submit: (value: string) => void }) {

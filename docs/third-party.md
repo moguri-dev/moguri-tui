@@ -14,6 +14,7 @@ notices remain in installed and packaged dependencies.
 | TypeBox | MIT | Public command and private worker validation |
 | `ws` | MIT | Authenticated local event transport |
 | `node-pty` | MIT | Local PTYs and process ownership |
+| `ghostty-web` 0.4.0 and its Ghostty WASM core | MIT | Maintained embedded desktop terminal, VT parsing and canvas rendering; self-hosted WASM, not a custom terminal emulator |
 | `@napi-rs/keyring` | MIT | Explicit OS credential backend |
 | `react-markdown`, `remark-gfm` | MIT | Safe Markdown presentation |
 | Vite, esbuild, tsx | MIT | Builds and development/test TypeScript execution |
