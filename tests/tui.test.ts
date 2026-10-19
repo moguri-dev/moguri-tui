@@ -271,3 +271,26 @@ test("the actual TUI creates and opens an explicit managed root through shared s
     assert.equal(git(["branch", "--show-current"]), "main"); assert.equal(fixture.requests.length, 0);
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
+test("the actual TUI edits a retained document through shared commands and browses it after session deletion", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI retained document did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/artifact new answer Generated TUI retained answer"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Independent retained document.");
+    setup.mockInput.pressKey("a", { super: true });
+    await setup.mockInput.typeText(JSON.stringify({ kind: "answer", name: "Generated TUI retained answer", text: "Generated native TUI artifact body." }, null, 2)); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Independent retained documents");
+    const artifact = await waitFor(() => fixture.service.controller.snapshot().artifacts.find((artifact) => artifact.name === "Generated TUI retained answer"));
+    assert.equal((await client.artifacts.read(artifact.id)).text, "Generated native TUI artifact body.");
+    await client.sessions.delete(fixture.sessionId, true);
+    await frameUntil("Generated TUI retained answer");
+    assert.equal((await client.artifacts.read(artifact.id)).artifact.originSessionId, fixture.sessionId);
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});

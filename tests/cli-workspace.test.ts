@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { setupFixture } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 
@@ -114,6 +114,26 @@ test("the CLI creates an owned worktree and fresh bound chat without switching t
     assert.equal(file.text, "generated original\n");
     assert.equal(fixture.service.controller.snapshot().sessions.find((value) => value.id === created.id)?.workspaceId, workspace.id);
     assert.equal(git(["branch", "--show-current"]), "main");
+    assert.equal(fixture.requests.length, 0);
+  } finally { await fixture.close(); }
+});
+test("the CLI retains typed documents, exports exact revisions and requires reviewed artifact choices for project removal", async () => {
+  const fixture = await setupFixture(), projectId = fixture.session().projectId;
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    const document = join(fixture.directory, "generated-artifact.json"), changes = join(fixture.directory, "generated-artifact-changes.json"), destination = join(fixture.directory, "generated-artifact-export.json");
+    await writeFile(document, JSON.stringify({ kind: "report", name: "Generated CLI retained report", text: "Generated first report." }));
+    const created = JSON.parse((await execute(["artifact", "create", document, "--project", projectId])).stdout);
+    await writeFile(changes, JSON.stringify({ text: "Generated revised report." }));
+    await execute(["artifact", "update", created.id, changes, "--revision", "0"]);
+    await assert.rejects(() => execute(["artifact", "update", created.id, changes, "--revision", "0"]), /changed|Reload/);
+    const saved = JSON.parse((await execute(["artifact", "export", created.id, "--output", destination])).stdout);
+    assert.ok(saved.digest); assert.equal(JSON.parse(await readFile(destination, "utf8")).documents[0].revisions.length, 2);
+    const preview = JSON.parse((await execute(["project", "removal-preview", projectId])).stdout).preview;
+    await assert.rejects(() => execute(["project", "remove", projectId, "--revision", "0", "--confirm-remove"]), /explicitly choose/);
+    await execute(["project", "remove", projectId, "--revision", "0", "--confirm-remove", "--artifacts", "retain", "--digest", preview.digest]);
+    const retained = JSON.parse((await execute(["artifact", "read", created.id])).stdout);
+    assert.equal(retained.artifact.projectId, null); assert.equal(retained.text, "Generated revised report.");
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
 });

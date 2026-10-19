@@ -1,14 +1,14 @@
 import { DatabaseSync } from "node:sqlite";
 import type { startService } from "../../apps/service/src/server.ts";
 
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9): Promise<void> {
   if (version >= 4) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
-    try { db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='managed_workspace_schema'; ${version < 8 ? "DELETE FROM retention_metadata WHERE id='execution_transport_schema';" : ""} ${version < 7 ? "DELETE FROM retention_metadata WHERE id='runtime_foundation_schema';" : ""} ${version < 6 ? "DELETE FROM retention_metadata WHERE id='engagement_schema';" : ""} ${version === 4 ? "DELETE FROM retention_metadata WHERE id='model_controls_schema';" : ""} PRAGMA user_version=${version}; COMMIT;`); } finally { db.close(); }
+    try { db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='retained_artifact_schema'; ${version < 9 ? "DELETE FROM retention_metadata WHERE id='managed_workspace_schema';" : ""} ${version < 8 ? "DELETE FROM retention_metadata WHERE id='execution_transport_schema';" : ""} ${version < 7 ? "DELETE FROM retention_metadata WHERE id='runtime_foundation_schema';" : ""} ${version < 6 ? "DELETE FROM retention_metadata WHERE id='engagement_schema';" : ""} ${version === 4 ? "DELETE FROM retention_metadata WHERE id='model_controls_schema';" : ""} PRAGMA user_version=${version}; COMMIT;`); } finally { db.close(); }
     return;
   }
-  const events = service.controller.events(0);
+  const events = service.store.events();
   const blobs = service.store.db.prepare("SELECT DISTINCT digest FROM blob_payloads").all().map((row) => [String(row.digest), service.store.blob(String(row.digest))] as const);
   const path = service.store.path;
   await service.close();

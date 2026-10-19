@@ -4,15 +4,15 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor";
-const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor"];
-export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void> }
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor";
+const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor"];
+export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
 export function TuiApp({ client, onQuit, initialSessionId, native }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string; native?: TuiNativeActions }) {
   const { snapshot, status, error, events } = useMoguri(client);
@@ -31,6 +31,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
   const [tokenValue, setTokenValue] = useState("");
   const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
+  const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
@@ -98,8 +99,27 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     settingsRevision.current = configuration.revision;
     setSettingsText(JSON.stringify(configuration.values, null, 2)); setMode("project-editor");
   };
+  const openArtifactEditor = (request: ArtifactEditorRequest) => {
+    artifactEditor.current = request;
+    setSettingsText(JSON.stringify(request.id ? { name: request.name, text: request.text, status: request.status } : { kind: request.kind, name: request.name, text: request.text }, null, 2));
+    setMode("artifact-editor");
+  };
+  const openArtifact = async (id?: string) => {
+    if (!id) { openArtifactEditor({ id: null, revision: 0, kind: "research-note", name: "", text: "", status: "active", projectId: session?.projectId ?? null, sessionId: session?.id ?? null }); return; }
+    const result = await client.artifacts.read(id);
+    openArtifactEditor({ ...result.artifact, text: result.text, sessionId: result.artifact.originSessionId });
+  };
   const saveSettings = (text: string) => perform(async () => {
-    if (mode === "issue-editor") {
+    if (mode === "artifact-editor") {
+      const request = artifactEditor.current;
+      if (!request) throw new Error("Open a retained document first.");
+      if (request.id) await client.artifacts.update(request.id, parse(ArtifactChangesSchema, JSON.parse(text)), request.revision);
+      else {
+        const origin = snapshot?.sessions.some((session) => session.id === request.sessionId && session.projectId === request.projectId) ? request.sessionId : null;
+        await client.artifacts.create(origin, { ...parse(ArtifactDraftSchema, JSON.parse(text)), projectId: request.projectId });
+      }
+      setMode("artifacts"); setNotice("Retained independently. No source file, conversation or policy was changed."); return;
+    } else if (mode === "issue-editor") {
       if (!project) throw new Error("The project is no longer open.");
       const fields = parse(IssueInputSchema, JSON.parse(text));
       if (issueEditor.current.id) await client.issues.update(issueEditor.current.id, fields, issueEditor.current.revision);
@@ -140,9 +160,12 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     if (result.kind === "text") { show(result.text); return; }
     if (result.kind === "session") { await chooseSession(result.sessionId); return; }
     if (result.kind === "copy") { if (!native) throw new Error("Clipboard access is unavailable in this terminal binding."); await native.copy(result.text); setNotice("Copied."); return; }
+    if (result.kind === "artifact-editor") { openArtifactEditor(result.artifact); return; }
+    if (result.kind === "export") { if (!native?.saveExport || !result.path) throw new Error("Use /artifact export ID ABSOLUTE_NEW_FILE_PATH with an available native file binding."); const saved = await native.saveExport(result.path, result.document); setNotice(`Export saved to ${saved.path}. Stored copies are unchanged.`); return; }
     if (result.panel === "Models") setMode("models");
     else if (result.panel === "Settings") setMode("settings");
     else if (result.panel === "Queue") setMode("queue");
+    else if (result.panel === "Artifacts") setMode("artifacts");
     else if (result.panel === "Insights") show({ session, project, events: events.filter((event) => event.session_id === session?.id).slice(-20) });
     else if (result.url) { if (!native) throw new Error("Default-browser access is unavailable in this terminal binding."); await native.browser(result.url); }
     else if (result.path) { if (!native) throw new Error("Default-file access is unavailable in this terminal binding."); await native.file(result.path); }
@@ -396,6 +419,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       if (key.ctrl && key.name === "r" && ["prompt-editor", "settings-editor"].includes(mode)) { key.preventDefault(); void perform(async () => { await client.settings.reset(mode === "prompt-editor" ? "systemPrompt" : "all", settingsRevision.current); setMode("settings"); }); }
       return;
     }
+    if (key.name === "f5") { key.preventDefault(); setMode("artifacts"); return; }
     if (mode === "compose" && key.name === "return" && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {
       key.preventDefault(); key.stopPropagation();
       if (editor) void perform(() => submit(editor.getState().text, !key.shift));
@@ -481,10 +505,13 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
           <text fg={colors.muted}>Prompt edits can break functionality. Hard permissions remain final.</text>
         </box> :
         editorModes.includes(mode) ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
-          {mode === "project-editor" ? <text fg={colors.attention} height={3} flexShrink={0}>Project policy and bindings. Save never runs scripts or publishes defaults. Ctrl+Enter saves; Esc discards.</text> : mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
+          {mode === "artifact-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Independent retained document. Only text is copied; model provenance is preserved. Ctrl+Enter saves; Esc discards this edit. Editing does not publish a file or grant permissions.</text> : mode === "project-editor" ? <text fg={colors.attention} height={3} flexShrink={0}>Project policy and bindings. Save never runs scripts or publishes defaults. Ctrl+Enter saves; Esc discards.</text> : mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
           <text fg={colors.attention} height={width >= 100 ? 3 : 4} flexShrink={0}>{SYSTEM_PROMPT_WARNING}</text><text fg={colors.muted} height={2} flexShrink={0}>Ctrl+Enter acknowledges risk and saves. Ctrl+R restores defaults. Esc cancels.</text></>}
           <SettingsTextEditor value={settingsText} change={setSettingsText} submit={(text) => void saveSettings(text)} />
         </box> :
+        mode === "artifacts" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Independent retained documents</text><text fg={colors.muted} height={3}>Session retention does not erase these copies. Profile/project scope and actual source actor remain separate from permission or instructions.</text>
+          <select focused flexGrow={1} options={[{ name: "+ New retained document", description: "Plan, decision, answer, research note or report.", value: "" }, ...(snapshot?.artifacts ?? []).map((artifact) => ({ name: safe(artifact.name), description: `${artifact.kind} / ${artifact.status} / revision ${artifact.revision} / ${artifact.projectId ? snapshot?.projects.find((project) => project.id === artifact.projectId)?.name ?? "Former project" : "Profile"}`, value: artifact.id }))]} onSelect={(_, option) => { if (option) void perform(() => openArtifact(String(option.value) || undefined)); }} />
+          <text fg={colors.muted} height={3}>Enter edits. /artifact ID reads provenance; history/archive/restore/delete/export use shared SDK commands. F5 opens this list without a session. Esc returns.</text></box> :
         mode === "issues" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Local project Kanban / {safe(project?.name ?? "Open a project first")}</text>
           <text fg={colors.muted} height={3}>{board?.columns.map((column) => `${safe(column.name)}: ${localIssues.filter((issue) => issue.phaseId === column.id).length}`).join("  |  ") ?? "No project selected."}</text>
           <select focused flexGrow={1} options={[{ name: "+ New local issue", description: "Feature, bug or misc. No assignee.", value: "" }, ...localIssues.map((issue) => ({
@@ -511,6 +538,7 @@ Ctrl+B event trace    Ctrl+A archive view   Ctrl+Q save and leave
 Ctrl+R reload draft  Ctrl+S save/keep my draft after a conflict
 Ctrl+V scroll full approval arguments
 Ctrl+G shared SDK settings  Ctrl+Space local dictation  F4 insert transcript
+F5 retained documents / artifact editor (also without a session)
 Esc composer
 
 /connect | /cancel-login | /disconnect | /models | /model ID
@@ -584,7 +612,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={10} flexShrink={0}>
           <text fg={colors.attention}><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
           <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(JSON.stringify(session.pendingApproval.call.arguments, null, 2))}</text></scrollbox>
-          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? "Unsandboxed Local. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
+          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
         </box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
         {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}

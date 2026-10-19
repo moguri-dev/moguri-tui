@@ -71,6 +71,14 @@ root. Writers serialize within a root; different worktrees can run concurrently.
 Removal requires a clean, idle, unbound owned checkout and preserves its branch.
 Discovery does not adopt or grant access to unmanaged worktrees.
 
+**Independent artifacts** retain plans, decisions, answers, research notes and
+reports with revisions and actual source provenance. Create them without a
+conversation, or explicitly retain a completed user/model/tool result. Each has
+its own encrypted retention grant. Project removal previews the exact set and
+requires retain, export-then-delete or delete; session retention never erases it.
+Repository materialization/commit and structured-question auto-capture are not
+implemented by this slice.
+
 Dictation uses local NVIDIA Nemotron 3.5 through a pinned native runtime. The
 user explicitly accepts and downloads the model once. NVIDIA documents
 **40 locales: 19 ready, 13 broad coverage, 8 adaptation-only**, not 22 verified

@@ -3,9 +3,9 @@ import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { connectMoguri, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
+import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -15,6 +15,7 @@ export async function main(argv: string[]): Promise<void> {
     "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" },
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
     controls: { type: "string" }, stdio: { type: "boolean" },
+    output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -40,6 +41,16 @@ moguri workspace inspect|reconcile ID [--revision N]
 moguri workspace remove ID --revision N --confirm-remove
 moguri workspace session ID        New chat in an explicit owned worktree
 moguri workspace files|file PATH --session ID
+moguri artifact list|read ID|history ID
+moguri artifact create DOCUMENT.json [--session ID|--project ID]
+moguri artifact update ID CHANGES.json --revision N
+moguri artifact source SOURCE_ID --session ID [--source-type message|tool]
+moguri artifact promote SOURCE_ID KIND NAME --session ID --digest SHA256
+moguri artifact archive|restore|delete ID --revision N [--confirm-remove]
+moguri artifact export ID --output ABSOLUTE_NEW_JSON_PATH
+moguri project removal-preview ID
+moguri project export-artifacts ID --output ABSOLUTE_NEW_JSON_PATH
+moguri project remove ID --revision N --confirm-remove --artifacts retain|delete|export --digest PREVIEW_SHA [--exported-digest SAVED_EXPORT_SHA]
 moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
@@ -156,6 +167,27 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (values.digest || values["confirm-review"]) throw new Error("Use both --digest SHA256 and --confirm-review after inspecting the source snapshot.");
         else output(action === "folder" ? await sdk.attachments.folderPreview(values.session, args[0]) : action === "github" ? await sdk.attachments.githubPreview(values.session, args[0]) : await sdk.attachments.sessionPreview(values.session, args[0]));
       } else throw new Error("Use context file/image/folder/github/session/read. No source is attached implicitly.");
+    } else if (group === "artifact") {
+      if (action === "list") output(snapshot.artifacts);
+      else if (action === "create" && args[0]) {
+        if (values.session && values.project) throw new Error("Choose an origin --session or explicit --project scope, not both.");
+        const document = parse(ArtifactDraftSchema, JSON.parse(await readFile(args[0], "utf8")));
+        output(await sdk.artifacts.create(values.session ?? null, { ...document, ...(!values.session ? { projectId: values.project ?? null } : {}) }));
+      } else if (action === "read" && args[0]) output(await sdk.artifacts.read(args[0], values.revision === undefined ? undefined : expectedRevision()));
+      else if (action === "history" && args[0]) output(await sdk.artifacts.history(args[0]));
+      else if (action === "update" && args[0] && args[1]) output(await sdk.artifacts.update(args[0], parse(ArtifactChangesSchema, JSON.parse(await readFile(args[1], "utf8"))), expectedRevision()));
+      else if ((action === "source" || action === "promote") && args[0] && values.session) {
+        const sourceKind = values["source-type"] ?? "message";
+        if (sourceKind !== "message" && sourceKind !== "tool") throw new Error("Choose --source-type message or tool explicitly.");
+        if (action === "source") output(await sdk.artifacts.source(values.session, sourceKind, args[0]));
+        else {
+          if (!args[1] || !args[2] || !values.digest) throw new Error("Preview the source first, then use artifact promote SOURCE_ID KIND NAME --session ID --digest REVIEWED_SHA256.");
+          output(await sdk.artifacts.promote(values.session, { sourceKind, sourceId: args[0], kind: parse(ArtifactKindSchema, args[1]), name: args.slice(2).join(" "), expectedDigest: values.digest }));
+        }
+      } else if ((action === "archive" || action === "restore") && args[0]) output(await sdk.artifacts.update(args[0], { status: action === "archive" ? "archived" : "active" }, expectedRevision()));
+      else if (action === "delete" && args[0] && values["confirm-remove"]) output(await sdk.artifacts.delete(args[0], expectedRevision(), true));
+      else if (action === "export" && args[0] && values.output) output(await saveArtifactExport(values.output, (await sdk.artifacts.export(args[0])).export));
+      else throw new Error("Use artifact list/read/history/create/update/source/promote/archive/restore/delete/export. Deletes need --revision and --confirm-remove; exports need an absolute new --output path.");
     } else if (group === "workspace") {
       if (action === "list" && args[0]) output(snapshot.managedWorkspaces.filter((workspace) => workspace.projectId === args[0]));
       else if (action === "discover" && args[0]) output(await sdk.workspaces.discover(args[0]));
@@ -183,7 +215,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else throw new Error("Use models list, refresh, token ENDPOINT or clear-token ENDPOINT. Configure explicit endpoint URLs/limits in shared settings.");
     } else if (group === "slash") {
       if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
-      output(await sdk.slash(values.session, [action, ...args].join(" "), "cli"));
+      const result = await sdk.slash(values.session, [action, ...args].join(" "), "cli");
+      if (result.kind === "export" && result.path) output(await saveArtifactExport(result.path, result.document)); else output(result);
     } else if (group === "metachat") {
       if (values.session && values.project) throw new Error("Choose --session or --project, not both. A settings chat cannot silently change its parent's scope.");
       const parent = snapshot.sessions.find((session) => session.id === values.session);
@@ -228,12 +261,17 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "project") {
       if (!args[0]) throw new Error("Choose the project ID from moguri status.");
       if (action === "get") output(await sdk.projects.configuration(args[0]));
+      else if (action === "removal-preview") output(await sdk.artifacts.projectPreview(args[0]));
+      else if (action === "export-artifacts" && values.output) output(await saveArtifactExport(values.output, (await sdk.artifacts.projectExport(args[0])).export));
       else if (action === "sources") output(await sdk.projects.sources(args[0]));
       else if (action === "diff") output(await sdk.projects.git(args[0]));
       else if (action === "porto") output(await sdk.projects.porto(args[0]));
       else if (action === "set" && args[1]) output(await sdk.projects.configure(args[0], parse(ProjectSettingsSchema, JSON.parse(await readFile(args[1], "utf8"))), expectedRevision()));
       else if (action === "relocate" && args[1]) output(await sdk.projects.relocate(args[0], args[1], expectedRevision()));
-      else if (action === "remove" && values["confirm-remove"]) output(await sdk.projects.remove(args[0], true, expectedRevision()));
+      else if (action === "remove" && values["confirm-remove"]) {
+        const artifacts = values.artifacts ? parse(ProjectArtifactChoiceSchema, { action: values.artifacts, expectedDigest: values.digest, ...(values["exported-digest"] ? { exportedDigest: values["exported-digest"] } : {}) }) : undefined;
+        output(await sdk.projects.remove(args[0], true, expectedRevision(), artifacts));
+      }
       else if (action === "import-mcp" && values["confirm-review"] && values.digest) output(await sdk.projects.importMcp(args[0], expectedRevision(), true, values.digest));
       else if (action === "defaults" && args[1] && values["confirm-push"]) {
         const job = await sdk.projects.initialize(args[0], args[1], expectedRevision(), true);
