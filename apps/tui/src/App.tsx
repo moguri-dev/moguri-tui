@@ -4,7 +4,7 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
@@ -29,7 +29,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
   const [capabilityOutput, setCapabilityOutput] = useState("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
-  const [linearToken, setLinearToken] = useState(false);
+  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); }, []);
@@ -214,7 +214,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         break;
       }
       case "/linear":
-        if (argument === "token") { setLinearToken(true); setTokenValue(""); setMode("mcp-token"); }
+        if (argument === "token") { setTokenKind("linear"); setTokenValue(""); setMode("mcp-token"); }
         else if (argument === "clear-token") show(await client.linear.clearToken());
         else if (argument === "import" || argument.startsWith("import ")) show(await client.linear.import(requiredProject(), argument.split(" ")[1]));
         else show(await client.linear.status(requiredProject()));
@@ -278,7 +278,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         else if (operation === "login") { const created = await client.mcp.oauthBegin(id, session.id); show(await client.mcp.oauthStatus(created.id!)); }
         else if (operation === "cancel") show(await client.mcp.oauthCancel(id));
         else if (operation === "clear-oauth") show(await client.mcp.oauthClear(id, session.id));
-        else if (operation === "token" && !rest.length && id !== "builtin") { setLinearToken(false); setTokenServer(id); setTokenValue(""); setMode("mcp-token"); }
+        else if (operation === "token" && !rest.length && id !== "builtin") { setTokenKind("mcp"); setTokenServer(id); setTokenValue(""); setMode("mcp-token"); }
         else if (operation === "call" && rest.length >= 3) {
           const [tool, hash, ...json] = rest;
           const args: unknown = JSON.parse(json.join(" "));
@@ -307,6 +307,14 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       case "/disconnect": await client.command({ type: "provider.logout" }); break;
       case "/cancel-login": await client.command({ type: "provider.cancel" }); break;
       case "/models": setMode("models"); break;
+      case "/local-models":
+        if (argument === "refresh") { await client.models.refresh(); show(client.getState().snapshot?.provider); }
+        else show({ endpoints: snapshot?.settings.values.localModels, connections: snapshot?.provider.connections, guidance: "Use /settings edit to configure exact URLs and model limits. /model-token ENDPOINT opens masked input; no inference or scan occurs during discovery." });
+        break;
+      case "/model-token":
+        if (!argument || argument.includes(" ")) throw new Error("Use /model-token ENDPOINT_ID, then the masked input. Never put a credential in the composer.");
+        setTokenKind("model"); setTokenServer(argument); setTokenValue(""); setMode("mcp-token"); break;
+      case "/defaults": show({ global: snapshot?.settings.values.startup.global, profile: snapshot?.settings.values.startup.profile, project: session.projectId ? snapshot?.projectConfigurations.find((configuration) => configuration.projectId === session.projectId)?.values.defaults ?? {} : {}, current: session.controls, sources: session.defaults, guidance: "Edit shared startup settings or project overrides. Existing sessions are never rewritten by default changes." }); break;
       case "/model-settings":
         if (!argument) show({ options: session.controls.modelOptions ?? {}, model: snapshot?.provider.models.find((model) => model.id === session.controls.modelId), context: (await client.sessions.context(session.id)).context });
         else if (argument === "reset") { const { modelOptions: _, ...controls } = session.controls; await client.sessions.configure(session.id, controls); }
@@ -366,11 +374,19 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
       if (key.name === "backspace") setTokenValue((value) => value.slice(0, -1));
-      else if (key.name === "return" && tokenValue) void perform(async () => { if (linearToken) await client.linear.setToken(tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
+      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
     if (key.name === "escape") { setMode("compose"); return; }
+    if (mode === "compose" && key.name === "tab" && editor) {
+      const trigger = parseAttachmentTrigger(editor.getState().text);
+      if (trigger) {
+        key.preventDefault(); key.stopPropagation();
+        show({ selectedType: attachmentTriggers[trigger.prefix], query: trigger.query, guidance: "Choose explicit /attach-file, /attach-image, /attach-folder, /attach-github, /attach-session or /attach for project files. Preview/confirm source snapshots before sending. Terminal clipboard images use a path fallback. The current prefix text has not attached or executed anything." });
+        return;
+      }
+    }
     if (key.ctrl && key.name === "q" && editorModes.includes(mode)) { key.preventDefault(); setNotice("Save with Ctrl+Enter or cancel with Esc before leaving this editor."); return; }
     if (editorModes.includes(mode)) {
       if (key.ctrl && key.name === "r" && ["prompt-editor", "settings-editor"].includes(mode)) { key.preventDefault(); void perform(async () => { await client.settings.reset(mode === "prompt-editor" ? "systemPrompt" : "all", settingsRevision.current); setMode("settings"); }); }
@@ -472,13 +488,13 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
           }))]} onSelect={(_, option) => { if (option) void perform(async () => openIssueEditor(String(option.value) || undefined)); }} />
           <text fg={colors.muted} height={3}>Enter edits JSON. /board edit configures phases and Linear. /issue move ID PHASE moves tickets. /board refresh reads linked PRs. Esc returns.</text></box> :
         mode === "capability-output" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
-        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{linearToken ? "Linear personal API key" : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
+        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
-        mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select a GitHub Copilot model</text>
-          {snapshot?.provider.models.length ? <select focused flexGrow={1} options={snapshot.provider.models.map((model) => ({ name: model.name, description: `${model.contextWindow} context tokens / GitHub Copilot`, value: model.id }))}
+        mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
+          {snapshot?.provider.models.length ? <select focused flexGrow={1} options={snapshot.provider.models.map((model) => ({ name: model.name, description: `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
             onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { await configure({ ...session.controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
-            <text fg={colors.muted}>No authenticated models. Ctrl+L starts GitHub Copilot sign-in.</text>}
+            <text fg={colors.muted}>No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup.</text>}
           <text fg={colors.muted}>kupo is unavailable until its routing and isolation contracts are validated.</text></box> :
         mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
         mode === "help" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{`Commands
@@ -495,6 +511,8 @@ Esc composer
 
 /connect | /cancel-login | /disconnect | /models | /model ID
 /model-settings [JSON|reset] configures working context/thinking via the shared SDK
+/local-models [refresh] inspects configured endpoints without inference or host scans
+/model-token ENDPOINT opens a masked endpoint-key input; /defaults shows startup sources
 /new global creates a chat without a workspace
 /meta [REQUEST] | /suggestions [all|run DIGEST|run-all DIGEST] | /attention
 /config list|review ID|apply ID SHA256 acknowledge-risk|reject ID SHA256

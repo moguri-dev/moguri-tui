@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema } from "../../../packages/sdk/src/index.ts";
+import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -14,6 +14,7 @@ export async function main(argv: string[]): Promise<void> {
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
     "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" },
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
+    controls: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -23,11 +24,18 @@ moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
 moguri session create [--project ID]  Omit project for a project-free chat
+moguri session create --controls FILE  Explicit startup control overrides
+moguri models list|refresh         Copilot and configured local model discovery
+moguri models token ENDPOINT       Piped stdin only, never a shell argument
+moguri models clear-token ENDPOINT Remove the resource-bound endpoint key
 moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
 moguri configuration review|apply|reject ID --digest SHA256 [--acknowledge-config-risk]
 moguri attention list|read ID
+moguri context file|image PATH --session ID
+moguri context folder PATH|github URL|session SOURCE_ID --session ID [--digest SHA256 --confirm-review]
+moguri context read ATTACHMENT_ID --session ID
 moguri slash "/read-only" --session ID
 moguri session rename NAME|mode agent|mode read-only --session ID
 moguri session spawn side|agent [NAME] --session ID
@@ -123,6 +131,21 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     const projectId = args[0] ?? values.project;
     if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
+    } else if (group === "context") {
+      if (!values.session || !args[0]) throw new Error("Choose --session ID and an explicit source path/reference.");
+      if (action === "file" || action === "image") output(await sdk.attachments.file(values.session, args[0], action === "image" ? "image" : "text"));
+      else if (action === "read") { const result = await sdk.attachments.read(values.session, args[0]); output(result.content.kind === "text" ? result.content.text : { attachment: result.attachment, diagnostic: "Use SDK/desktop for private image bytes; no clipboard capability is assumed." }); }
+      else if (action === "folder" || action === "github" || action === "session") {
+        if (values.digest && values["confirm-review"]) output(action === "folder" ? await sdk.attachments.folder(values.session, args[0], values.digest, true) : action === "github" ? await sdk.attachments.github(values.session, args[0], "public", values.digest, true) : await sdk.attachments.session(values.session, args[0], values.digest, true));
+        else if (values.digest || values["confirm-review"]) throw new Error("Use both --digest SHA256 and --confirm-review after inspecting the source snapshot.");
+        else output(action === "folder" ? await sdk.attachments.folderPreview(values.session, args[0]) : action === "github" ? await sdk.attachments.githubPreview(values.session, args[0]) : await sdk.attachments.sessionPreview(values.session, args[0]));
+      } else throw new Error("Use context file/image/folder/github/session/read. No source is attached implicitly.");
+    } else if (group === "models") {
+      if (action === "list") output({ models: snapshot.provider.models, connections: snapshot.provider.connections });
+      else if (action === "refresh") { await sdk.models.refresh(); output(sdk.getState().snapshot!.provider); }
+      else if (action === "token" && args[0]) output(await sdk.models.setToken(args[0], await credential()));
+      else if (action === "clear-token" && args[0]) output(await sdk.models.clearToken(args[0]));
+      else throw new Error("Use models list, refresh, token ENDPOINT or clear-token ENDPOINT. Configure explicit endpoint URLs/limits in shared settings.");
     } else if (group === "slash") {
       if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
       output(await sdk.slash(values.session, [action, ...args].join(" "), "cli"));
@@ -149,7 +172,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "read" && args[0]) output(await sdk.attention.acknowledge([args[0]]));
       else throw new Error("Use attention list or read ATTENTION_ID. Reading never approves or answers.");
     } else if (group === "session") {
-      if (action === "create") output(await sdk.sessions.create(values.project ?? null));
+      if (action === "create") {
+        let overrides: ControlDefaults | undefined;
+        if (values.controls) { const file = await stat(values.controls); if (!file.isFile() || file.size > 128 * 1024) throw new Error("Choose a bounded control-overrides JSON file."); overrides = parse(ControlDefaultsSchema, JSON.parse(await readFile(values.controls, "utf8"))); }
+        output(await sdk.sessions.create(values.project ?? null, undefined, overrides));
+      }
       else if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }));
       else {
         if (!values.session) throw new Error("Choose --session ID from moguri status.");

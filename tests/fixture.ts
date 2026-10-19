@@ -20,17 +20,20 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
   } while (Date.now() < deadline);
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
-export async function fixtureProvider(options: { reasoning?: boolean } = {}) {
+export async function fixtureProvider(options: { reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean } = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
   const requests: Record<string, unknown>[] = [];
   const held = new Set<ServerResponse>();
+  const headers: (string | undefined)[] = [];
   const server = createServer((request, response) => {
     void (async () => {
+      if (request.method === "GET" && options.exposeModels && request.url?.endsWith("/models")) { response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ id: base.id }] })); return; }
       const chunks = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if (!isRecord(body) || !Array.isArray(body.messages)) throw new Error("Invalid generated provider request.");
       requests.push(body);
+      headers.push(request.headers.authorization);
       const messages = body.messages.filter(isRecord);
       const userIndex = messages.findLastIndex((message) => message.role === "user");
       const prompt = String(messages[userIndex]?.content ?? "");
@@ -63,6 +66,8 @@ export async function fixtureProvider(options: { reasoning?: boolean } = {}) {
         finish({ name: "moguri_config", args: { action: "read", target: "global", section: "notifications" } });
       } else if (prompt.includes("generated config apply") && toolMessages.length === 0) {
         finish({ name: "moguri_config", args: { action: "apply", target: "global", section: "instructions", value: "Generated unauthorized setting." } });
+      } else if (prompt.includes("generated echo credential")) {
+        finish(undefined, `Generated untrusted echo ${request.headers.authorization?.replace(/^Bearer /i, "") ?? "none"}`);
       } else if (prompt.includes("generated question")) {
         finish(undefined, "Which generated option would you prefer?");
       } else if (prompt.includes("generated command") && toolMessages.length === 0) {
@@ -84,8 +89,8 @@ export async function fixtureProvider(options: { reasoning?: boolean } = {}) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture bind failed.");
-  const model = { ...base, ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
-  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, imageInput: false, thinkingLevels: supportedThinking(model) }];
+  const model = { ...base, ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
+  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, imageInput: options.imageInput ?? false, thinkingLevels: supportedThinking(model) }];
   class FixtureProvider implements ProviderAdapter {
     state: ProviderState = { status: "connected", models: catalog, login: null, diagnostic: null };
     onChange = () => {};
@@ -104,7 +109,7 @@ export async function fixtureProvider(options: { reasoning?: boolean } = {}) {
     }
   }
   return {
-    provider: new FixtureProvider(), modelId: model.id, requests,
+    provider: new FixtureProvider(), modelId: model.id, requests, headers, baseUrl: model.baseUrl, contextWindow: model.contextWindow,
     close: async () => {
       for (const response of held) response.destroy();
       server.closeAllConnections();
@@ -112,13 +117,13 @@ export async function fixtureProvider(options: { reasoning?: boolean } = {}) {
     },
   };
 }
-export async function setupFixture(options: { workerPath?: string; platform?: PlatformOptions; reasoning?: boolean } = {}) {
+export async function setupFixture(options: { workerPath?: string; platform?: PlatformOptions; reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(project);
   await writeFile(join(project, "fixture.txt"), "generated original\n");
-  const fixture = await fixtureProvider({ reasoning: options.reasoning });
+  const fixture = await fixtureProvider({ reasoning: options.reasoning, exposeModels: options.exposeModels, imageInput: options.imageInput });
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform: options.platform, retentionKey: GENERATED_RETENTION_KEY });
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
@@ -132,7 +137,7 @@ export async function setupFixture(options: { workerPath?: string; platform?: Pl
     type: "session.configure", sessionId, expectedRevision: session().revision, controls: { ...session().controls, modelId: fixture.modelId },
   }));
   const send = async (text: string, delivery: "queue" | "steer" | "interrupt" = "queue") => {
-    await service.controller.dispatch(envelope({ type: "draft.save", sessionId, expectedRevision: session().draft.revision, text, attachments: [] }));
+    await service.controller.dispatch(envelope({ type: "draft.save", sessionId, expectedRevision: session().draft.revision, text, attachments: session().draft.attachments }));
     return service.controller.dispatch(envelope({ type: "message.send", sessionId, expectedRevision: session().draft.revision, delivery }));
   };
   return {

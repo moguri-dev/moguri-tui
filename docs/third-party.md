@@ -33,6 +33,7 @@ notices remain in installed and packaged dependencies.
 | `cacache` 21.0.1 | ISC | Native npm-compatible content-addressed archive storage with integrity verification |
 | pnpm 12.14.0 | MIT plus included notices | Pinned native script-free installer and shared copy-on-write-capable package store |
 | semver 7.8.5 | ISC | Reject unqualified local/Git/executable dependency specifiers before cache admission |
+| Sharp 0.35.5 | Apache-2.0, with bundled libvips LGPL-2.1-or-later notices | Bounded local image validation/normalization for explicit attachments; no remote conversion or real-image test fixtures |
 
 The managed cache's advisory source is the public OSV batch API. Its use
 requires explicit approval to disclose public dependency names/versions; it

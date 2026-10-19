@@ -77,3 +77,18 @@ test("the CLI creates project-free metachat, previews scope and requires reviewe
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
 });
+test("the CLI previews exact folders and attaches typed local context without inference", async () => {
+  const fixture = await setupFixture();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    const selected = ["--session", fixture.sessionId];
+    const file = join(fixture.directory, "generated-context.txt"); await writeFile(file, "Generated CLI attachment.");
+    const attached = JSON.parse((await execute(["context", "file", file, ...selected])).stdout);
+    assert.equal(fixture.session().draft.attachments[0]?.kind, "local_file");
+    assert.equal((await execute(["context", "read", attached.id, ...selected])).stdout.trim(), "Generated CLI attachment.");
+    const preview = JSON.parse((await execute(["context", "folder", fixture.project, ...selected])).stdout).preview;
+    await execute(["context", "folder", fixture.project, ...selected, "--digest", preview.digest, "--confirm-review"]);
+    assert.equal(fixture.session().draft.attachments[1]?.kind, "folder");
+    assert.equal(fixture.requests.length, 0);
+  } finally { await fixture.close(); }
+});

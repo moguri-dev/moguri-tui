@@ -21,6 +21,18 @@ subagents and one native MCP gateway. Desktop starts dark and uses the same
 original face-and-bat-wing mascot as the TUI's ASCII loading mark.
 The mascot now also carries its small red antenna pom-pom.
 
+Explicitly configured **local OpenAI-compatible models** now share the same
+worker, permissions and accounting as Copilot. Endpoint discovery never scans
+hosts or downloads weights. New sessions resolve snapshotted global,
+Default-profile and project controls, with explicit session overrides and
+visible provenance; existing sessions are not rewritten.
+
+Context supports project/client text, locally normalized clipboard/file
+images, exact reviewed folders, typed GitHub issue/PR references and authorized
+session-text snapshots. Unsupported image models preserve the draft/queue
+rather than dropping context. Bare attachment prefixes remain literal until
+the user selects their source.
+
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
 `/meta` opens a settings chat whose changes require exact human review.
@@ -61,8 +73,8 @@ This is not a malware-free guarantee; script execution stays unavailable until
 a real SendBox boundary is qualified.
 
 This is a **macOS development alpha**, not the completed first milestone.
-Sandbox, Remote SSH, kupo, Autopilot Max, finite budgets, other attachment
-types, worktree management and the broader dashboard are explicitly unavailable.
+Sandbox, Remote SSH, kupo, Autopilot Max, finite budgets, managed worktrees,
+multi-profile isolation and the broader dashboard are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed
@@ -88,6 +100,9 @@ The [session workspace contract](docs/architecture/session-workspace.md) records
 Ghostty qualification, deletion/recovery and project-policy boundaries.
 The [engagement contract](docs/architecture/engagement.md) records OAuth,
 project-free isolation, suggestions, reviewed configuration and notifications.
+The [runtime foundation](docs/architecture/runtime-foundation.md) records local
+models/defaults and the genuine SendBox qualification blocker; [typed inputs](docs/architecture/context-inputs.md)
+records snapshot consent and image/source boundaries.
 `npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
 `release/`. It is not a notarized distribution.
 CI runs only on pushes to `main`, not pull requests or feature branches.

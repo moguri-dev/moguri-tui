@@ -225,3 +225,26 @@ test("the actual TUI creates project-free chats, shows attention and reviews met
     assert.equal(JSON.stringify(fixture.requests).includes('"name":"write_file"'), false);
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
+test("the actual TUI captures explicit typed files and inspects them without pretending clipboard images or calling a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
+  const root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI context did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    const path = `${fixture.directory}/generated-tui-context.txt`;
+    await writeFile(path, "Generated explicit TUI context.");
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/attach-file ${path}`); setup.mockInput.pressEnter({ ctrl: true });
+    const attachment = await waitFor(() => fixture.session().draft.attachments[0]);
+    assert.equal(attachment.kind, "local_file");
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/attached ${attachment.id}`); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Generated explicit TUI context.");
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
