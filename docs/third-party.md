@@ -31,6 +31,7 @@ notices remain in installed and packaged dependencies.
 | NVIDIA Nemotron 3.5 ASR model | OpenMDW-1.1 | Optional user-downloaded GGUF weights, not bundled or implicitly downloaded |
 | `cacache` 21.0.1 | ISC | Native npm-compatible content-addressed archive storage with integrity verification |
 | pnpm 12.14.0 | MIT plus included notices | Pinned native script-free installer and shared copy-on-write-capable package store |
+| semver 7.8.5 | ISC | Reject unqualified local/Git/executable dependency specifiers before cache admission |
 
 The managed cache's advisory source is the public OSV batch API. Its use
 requires explicit approval to disclose public dependency names/versions; it
