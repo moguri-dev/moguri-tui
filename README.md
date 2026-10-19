@@ -21,6 +21,14 @@ subagents and one native MCP gateway. Desktop starts dark and uses the same
 original face-and-bat-wing mascot as the TUI's ASCII loading mark.
 The mascot now also carries its small red antenna pom-pom.
 
+Chats can have **no project**, without inheriting any workspace root or coding
+tools. `/suggestions` previews scoped prior prompts before model analysis;
+`/meta` opens a settings chat whose changes require exact human review.
+MCP HTTP servers support explicit **OAuth with PKCE**, resource-bound keychain
+credentials and refresh. Shared question, approval and done indicators appear
+in both clients. Desktop OS banners are off by default and use generic content
+unless the user opts into previews.
+
 The desktop composer is an icon toolbar: attach, environment, model name,
 autonomy, unlimited-budget/usage, microphone and paper-plane Send. Holding
 Cmd/Ctrl turns Send into a queue clock. Model context and supported thinking
@@ -78,6 +86,8 @@ the [initial architecture](docs/architecture/overview.md),
 and [Phase 0 evidence and remaining release blockers](docs/architecture/phase-zero.md).
 The [session workspace contract](docs/architecture/session-workspace.md) records
 Ghostty qualification, deletion/recovery and project-policy boundaries.
+The [engagement contract](docs/architecture/engagement.md) records OAuth,
+project-free isolation, suggestions, reviewed configuration and notifications.
 `npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
 `release/`. It is not a notarized distribution.
 CI runs only on pushes to `main`, not pull requests or feature branches.

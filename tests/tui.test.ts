@@ -180,3 +180,48 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
     assert.equal(fixture.requests.length, 0);
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
+
+test("the actual TUI creates project-free chats, shows attention and reviews metachat changes without workspace authority", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 46, kittyKeyboard: true, exitOnCtrlC: false });
+  const root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().replace(/│/g, "").replace(/\s+/g, " ").includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (text: string) => { await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    await frameUntil("Write a prompt");
+    await slash("/new global");
+    const session = await waitFor(() => fixture.service.controller.snapshot().sessions.find((session) => session.projectId === null));
+    await frameUntil("No project");
+    setup.mockInput.pressKey("m", { ctrl: true });
+    await frameUntil("Generated Copilot model"); setup.mockInput.pressEnter();
+    await waitFor(() => fixture.service.controller.snapshot().sessions.find((value) => value.id === session.id)?.controls.modelId === fixture.modelId);
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("generated question"); setup.mockInput.pressEnter({ ctrl: true, shift: true });
+    const question = await waitFor(() => fixture.service.controller.snapshot().attention.find((entry) => entry.sessionId === session.id && entry.active && entry.kind === "question"));
+    await frameUntil("Which generated option would you prefer?");
+    await slash("/attention"); await frameUntil('"question"');
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await slash(`/attention read ${question.id}`);
+    await waitFor(() => fixture.service.controller.snapshot().attention.find((entry) => entry.id === question.id)?.acknowledged);
+    await slash("/meta generated config proposal");
+    const meta = await waitFor(() => fixture.service.controller.snapshot().sessions.find((value) => value.kind === "metachat"));
+    await frameUntil("generated config proposal");
+    setup.mockInput.pressEnter({ ctrl: true, shift: true });
+    const proposal = await waitFor(() => fixture.service.controller.snapshot().configurationProposals.find((entry) => entry.sessionId === meta.id));
+    await waitFor(() => fixture.service.controller.snapshot().sessions.find((value) => value.id === meta.id)?.status === "completed");
+    await frameUntil("Write a prompt");
+    await slash(`/config review ${proposal.id}`);
+    await frameUntil("Model advice is not user approval.");
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    assert.equal(fixture.service.controller.snapshot().settings.values.instructions, "");
+    await slash(`/config apply ${proposal.id} ${proposal.contentDigest} acknowledge-risk`);
+    await waitFor(() => fixture.service.controller.snapshot().settings.values.instructions.includes("generated headless"));
+    assert.equal(fixture.service.controller.snapshot().sessions.find((value) => value.id === meta.id)?.projectId, null);
+    assert.equal(JSON.stringify(fixture.requests).includes('"name":"write_file"'), false);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});

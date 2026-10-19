@@ -1,11 +1,11 @@
 import { parseArgs } from "node:util";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema } from "../../../packages/sdk/src/index.ts";
+import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -13,6 +13,7 @@ export async function main(argv: string[]): Promise<void> {
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
     "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" },
+    "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -21,6 +22,12 @@ export async function main(argv: string[]): Promise<void> {
 moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
+moguri session create [--project ID]  Omit project for a project-free chat
+moguri metachat [REQUEST] [--session ID|--project ID]
+moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
+moguri configuration propose FILE --session ID
+moguri configuration review|apply|reject ID --digest SHA256 [--acknowledge-config-risk]
+moguri attention list|read ID
 moguri slash "/read-only" --session ID
 moguri session rename NAME|mode agent|mode read-only --session ID
 moguri session spawn side|agent [NAME] --session ID
@@ -48,6 +55,10 @@ moguri plugins import PROJECT_ID manifest.json
 moguri mcp --session SESSION_ID    Native stdio MCP gateway
 moguri mcp tools SERVER [QUERY]    Bounded tool discovery
 moguri mcp auth SERVER             Credential status (never token values)
+moguri mcp login SERVER [--session ID]  Explicit OAuth; prints the authorization URL
+moguri mcp oauth-status|cancel AUTH_ID
+moguri mcp clear-oauth SERVER [--session ID]
+moguri mcp oauth-client SERVER     Read registered client JSON from piped stdin
 moguri mcp token SERVER            Read a bearer credential from piped stdin
 moguri dictate download --accept-license
 moguri dictate record|file WAV --session SESSION_ID
@@ -115,8 +126,31 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "slash") {
       if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
       output(await sdk.slash(values.session, [action, ...args].join(" "), "cli"));
+    } else if (group === "metachat") {
+      if (values.session && values.project) throw new Error("Choose --session or --project, not both. A settings chat cannot silently change its parent's scope.");
+      const parent = snapshot.sessions.find((session) => session.id === values.session);
+      if (values.session && !parent) throw new Error("Choose an existing parent session.");
+      output(await sdk.metachat.create(parent ? parent.projectId : values.project ?? null, parent?.id, [action, ...args].filter(Boolean).join(" ") || undefined));
+    } else if (group === "suggestions") {
+      if (!values.session) throw new Error("Choose --session ID and preview the exact source scope first.");
+      if (action === "preview") output(await sdk.suggestions.preview(values.session, values["all-projects"] ?? false));
+      else if (action === "generate" && values.digest) output(await sdk.suggestions.generate(values.session, values.digest, values["all-projects"] ?? false, true));
+      else throw new Error("Use suggestions preview, then generate with its reviewed --digest. Cross-project scope requires --all-projects.");
+    } else if (group === "configuration") {
+      if (action === "propose" && args[0] && values.session) {
+        const file = await stat(args[0]); if (!file.isFile() || file.size > 128 * 1024) throw new Error("Choose a regular configuration proposal JSON file up to 128 KiB.");
+        output(await sdk.configuration.propose(values.session, parse(ConfigurationSpecSchema, JSON.parse(await readFile(args[0], "utf8")))));
+      }
+      else if (action === "review" && args[0]) output(await sdk.configuration.review(args[0]));
+      else if ((action === "apply" || action === "reject") && args[0] && values.digest) output(await sdk.configuration.decide(args[0], action === "apply", values.digest, values["acknowledge-config-risk"] ?? false));
+      else throw new Error("Review scope/base/value first; apply needs --digest and --acknowledge-config-risk. Propose reads a bounded JSON file with --session ID.");
+    } else if (group === "attention") {
+      if (action === "list") output(snapshot.attention.filter((entry) => entry.active));
+      else if (action === "read" && args[0]) output(await sdk.attention.acknowledge([args[0]]));
+      else throw new Error("Use attention list or read ATTENTION_ID. Reading never approves or answers.");
     } else if (group === "session") {
-      if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }));
+      if (action === "create") output(await sdk.sessions.create(values.project ?? null));
+      else if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }));
       else {
         if (!values.session) throw new Error("Choose --session ID from moguri status.");
         if (action === "rename") output(await sdk.sessions.rename(values.session, args.join(" ")));
@@ -220,6 +254,15 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         await serveGatewayMcp(sdk, values.session); keep = true;
       } else if (action === "tools") output(await sdk.mcp.tools(args[0] ?? "builtin", args.slice(1).join(" "), 0, values.session));
       else if (action === "auth" && args[0]) output(await sdk.mcp.auth(args[0], values.session));
+      else if (action === "login" && args[0]) { const result = await sdk.mcp.oauthBegin(args[0], values.session); output(await sdk.mcp.oauthStatus(result.id!)); }
+      else if (action === "oauth-status" && args[0]) output(await sdk.mcp.oauthStatus(args[0]));
+      else if (action === "cancel" && args[0]) output(await sdk.mcp.oauthCancel(args[0]));
+      else if (action === "clear-oauth" && args[0]) output(await sdk.mcp.oauthClear(args[0], values.session));
+      else if (action === "oauth-client" && args[0]) {
+        const input: unknown = JSON.parse(await credential());
+        if (!isRecord(input) || typeof input.clientId !== "string" || typeof input.issuer !== "string" || input.clientSecret !== undefined && typeof input.clientSecret !== "string" || input.redirectUri !== undefined && typeof input.redirectUri !== "string") throw new Error("Pipe a registered-client object with clientId, issuer, optional clientSecret and optional fixed loopback redirectUri.");
+        output(await sdk.mcp.oauthClient(args[0], input.clientId, input.issuer, typeof input.clientSecret === "string" ? input.clientSecret : undefined, values.session, typeof input.redirectUri === "string" ? input.redirectUri : undefined));
+      }
       else if (action === "token" && args[0]) {
         output(await sdk.mcp.setToken(args[0], await credential(), values.session));
       } else throw new Error("Use mcp --session ID, mcp tools, mcp auth or mcp token.");

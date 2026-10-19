@@ -1,6 +1,6 @@
 {
   "name": "moguri",
-  "version": "0.5.0-alpha.1",
+  "version": "0.6.0-alpha.1",
   "private": true,
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
@@ -46,6 +46,7 @@
     "spike:workspace": "node scripts/workspace-spikes.mjs",
     "spike:sessions": "node scripts/session-spikes.mjs",
     "spike:models": "node scripts/model-controls-spike.mjs",
+    "spike:engagement": "node scripts/engagement-spikes.mjs",
     "start": "node scripts/launch.mjs tui",
     "desktop": "node scripts/launch.mjs desktop",
     "service": "node --import tsx apps/service/src/main.ts",

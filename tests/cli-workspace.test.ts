@@ -55,3 +55,25 @@ test("the CLI holds prompts without a model and shares session/project/plan life
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
 });
+
+test("the CLI creates project-free metachat, previews scope and requires reviewed configuration digests", async () => {
+  const fixture = await setupFixture();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    const created = JSON.parse((await execute(["session", "create"])).stdout);
+    assert.equal(fixture.service.controller.snapshot().sessions.find((session) => session.id === created.id)?.projectId, null);
+    const preview = JSON.parse((await execute(["suggestions", "preview", "--session", created.id])).stdout);
+    assert.equal(preview.preview.scope, "project-free"); assert.equal(preview.preview.sources.length, 0);
+    const meta = JSON.parse((await execute(["metachat", "Generated settings request", "--session", created.id])).stdout);
+    assert.equal(fixture.service.controller.snapshot().sessions.find((session) => session.id === meta.id)?.kind, "metachat");
+    const path = join(fixture.directory, "generated-config-proposal.json");
+    await writeFile(path, JSON.stringify({ target: "global", section: "instructions", value: "Generated CLI guidance.", reason: "Generated exact review." }));
+    const proposal = JSON.parse((await execute(["configuration", "propose", path, "--session", meta.id])).stdout);
+    const review = JSON.parse((await execute(["configuration", "review", proposal.id])).stdout);
+    await assert.rejects(() => execute(["configuration", "apply", proposal.id, "--digest", review.proposal.contentDigest]), /Acknowledge/);
+    await execute(["configuration", "apply", proposal.id, "--digest", review.proposal.contentDigest, "--acknowledge-config-risk"]);
+    assert.equal(fixture.service.controller.snapshot().settings.values.instructions, "Generated CLI guidance.");
+    assert.deepEqual(JSON.parse((await execute(["attention", "list"])).stdout), []);
+    assert.equal(fixture.requests.length, 0);
+  } finally { await fixture.close(); }
+});

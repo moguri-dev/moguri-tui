@@ -1,11 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import type { startService } from "../../apps/service/src/server.ts";
 
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4): Promise<void> {
-  if (version === 4) {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5): Promise<void> {
+  if (version === 4 || version === 5) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
-    try { db.exec("BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='model_controls_schema'; PRAGMA user_version=4; COMMIT;"); } finally { db.close(); }
+    try { db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='engagement_schema'; ${version === 4 ? "DELETE FROM retention_metadata WHERE id='model_controls_schema';" : ""} PRAGMA user_version=${version}; COMMIT;`); } finally { db.close(); }
     return;
   }
   const events = service.controller.events(0);

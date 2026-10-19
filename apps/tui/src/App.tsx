@@ -53,12 +53,10 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
   };
   const command = (command: Command) => perform(() => client.command(command));
-  const chooseSession = async (id: string) => { await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); };
-  const newSession = async () => {
+  const chooseSession = async (id: string) => { await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
+  const newSession = async (global = false) => {
     await editor?.flush();
-    const currentProject = project ?? snapshot?.projects[0];
-    if (!currentProject) { setMode("project"); return; }
-    const result = await client.command({ type: "session.create", projectId: currentProject.id });
+    const result = await client.sessions.create(global ? null : session?.projectId ?? null);
     setSelectedId(result.id!); setMode("compose"); setShowArchived(false);
   };
   const openProject = async (path: string) => {
@@ -71,6 +69,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     if (!session) throw new Error("Create a session first.");
     return client.command({ type: "session.configure", sessionId: session.id, expectedRevision: session.revision, controls });
   };
+  const requiredProject = () => { if (!session?.projectId) throw new Error("This operation needs a selected project. Use Ctrl+O or open a project chat."); return session.projectId; };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
   const openSettingsEditor = (prompt: boolean) => {
     if (!snapshot) { setNotice("Connect before editing settings."); return; }
@@ -150,7 +149,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     else throw new Error("This panel is available only in the desktop app.");
   };
   const submit = async (text: string, held = false) => {
-    if (!session || !editor) throw new Error("Open a project with Ctrl+O, then create a session.");
+    if (!session || !editor) throw new Error("Create a chat with Ctrl+N, or open a project with Ctrl+O. /new global starts without a project.");
     const firstSpace = text.indexOf(" ");
     const name = (firstSpace < 0 ? text : text.slice(0, firstSpace)).trim();
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
@@ -167,6 +166,17 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       return;
     }
     switch (name) {
+      case "/config": {
+        const [action, id, hash, consent] = argument.split(/\s+/);
+        if (!action || action === "list") show(snapshot?.configurationProposals.filter((proposal) => (proposal.projectId === session.projectId || proposal.sessionId === session.id) && proposal.status === "pending"));
+        else if (action === "review" && id) show(await client.configuration.review(id));
+        else if ((action === "apply" || action === "reject") && id && hash) {
+          if (action === "apply" && consent !== "acknowledge-risk") throw new Error("Review the exact scope/base/value, then use /config apply ID SHA256 acknowledge-risk. A model recommendation is not approval.");
+          await client.configuration.decide(id, action === "apply", hash, action === "apply");
+        } else throw new Error("Use /config list, review ID, apply ID SHA256 acknowledge-risk or reject ID SHA256.");
+        break;
+      }
+      case "/notifications": show({ settings: snapshot?.settings.values.notifications, active: snapshot?.attention.filter((entry) => entry.active), note: "Use /settings edit for preferences. Desktop must run for OS banners. Read acknowledgement does not answer or approve." }); break;
       case "/issues": setMode("issues"); break;
       case "/issue": {
         const [operation, id, value] = argument.split(" ");
@@ -174,7 +184,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         else if (operation === "create") {
           if (!board || id !== "feature" && id !== "bug" && id !== "misc") throw new Error("Use /issue create feature|bug|misc TITLE, or /issue new for the full editor.");
           const title = argument.split(" ").slice(2).join(" ");
-          await client.issues.create(session.projectId, { title, body: "", kind: id, phaseId: board.columns[0]!.id, pullRequestUrl: null }); setMode("issues");
+          await client.issues.create(requiredProject(), { title, body: "", kind: id, phaseId: board.columns[0]!.id, pullRequestUrl: null }); setMode("issues");
         }
         else if (operation === "edit") openIssueEditor(id);
         else {
@@ -188,17 +198,17 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       }
       case "/board":
         if (argument === "edit") openBoardEditor();
-        else if (argument === "refresh") show(await client.issues.refresh(session.projectId));
-        else show(await client.issues.board(session.projectId));
+        else if (argument === "refresh") show(await client.issues.refresh(requiredProject()));
+        else show(await client.issues.board(requiredProject()));
         break;
       case "/cache": {
         const [operation, manager, hash, consent, replacement] = argument.split(" ");
         if (manager !== "npm" && manager !== "pnpm") throw new Error("Choose npm or pnpm. Inspect first, then approve its exact plan.");
-        if (operation === "inspect") show(await client.cache.inspect(session.projectId, manager));
+        if (operation === "inspect") show(await client.cache.inspect(requiredProject(), manager));
         else {
           if (!hash || consent !== "accept-metadata") throw new Error("Use /cache prepare MANAGER SHA256 accept-metadata after reviewing the plan and OSV metadata disclosure.");
-          if (operation === "prepare") show(await client.cache.prepare(session.projectId, manager, hash, true));
-          else if (operation === "install" && replacement === "replace-node-modules") show(await client.cache.install(session.projectId, manager, hash, true));
+          if (operation === "prepare") show(await client.cache.prepare(requiredProject(), manager, hash, true));
+          else if (operation === "install" && replacement === "replace-node-modules") show(await client.cache.install(requiredProject(), manager, hash, true));
           else throw new Error("Managed install also requires replace-node-modules. Scripts stay blocked; no unqualified SendBox fallback.");
         }
         break;
@@ -206,8 +216,8 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       case "/linear":
         if (argument === "token") { setLinearToken(true); setTokenValue(""); setMode("mcp-token"); }
         else if (argument === "clear-token") show(await client.linear.clearToken());
-        else if (argument === "import" || argument.startsWith("import ")) show(await client.linear.import(session.projectId, argument.split(" ")[1]));
-        else show(await client.linear.status(session.projectId));
+        else if (argument === "import" || argument.startsWith("import ")) show(await client.linear.import(requiredProject(), argument.split(" ")[1]));
+        else show(await client.linear.status(requiredProject()));
         break;
       case "/settings":
         if (argument === "edit") openSettingsEditor(false);
@@ -219,10 +229,10 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         break;
       case "/project-settings":
         if (argument === "edit") await openProjectEditor();
-        else show(await client.projects.configuration(session.projectId));
+        else show(await client.projects.configuration(requiredProject()));
         break;
-      case "/project-sources": show(await client.projects.sources(session.projectId)); break;
-      case "/porto": show(await client.projects.porto(session.projectId)); break;
+      case "/project-sources": show(await client.projects.sources(requiredProject())); break;
+      case "/porto": show(await client.projects.porto(requiredProject())); break;
       case "/prompt":
         if (argument === "view") show(await client.prompt.preview(session.id));
         else if (argument === "reset") await client.prompt.reset(snapshot!.settings.revision);
@@ -230,17 +240,17 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         break;
       case "/memory": {
         const [operation, ...rest] = argument.split(" ");
-        if (operation === "index") show(await client.memory.index(session.projectId));
-        else if (operation === "graph") show(await client.memory.graph(session.projectId, rest.join(" ")));
-        else if (operation === "search") show(await client.memory.search(session.projectId, rest.join(" ")));
-        else if (operation === "remember") show(await client.memory.remember(session.projectId, rest.join(" ")));
+        if (operation === "index") show(await client.memory.index(requiredProject()));
+        else if (operation === "graph") show(await client.memory.graph(requiredProject(), rest.join(" ")));
+        else if (operation === "search") show(await client.memory.search(requiredProject(), rest.join(" ")));
+        else if (operation === "remember") show(await client.memory.remember(requiredProject(), rest.join(" ")));
         else throw new Error("Use /memory index, graph, search TEXT or remember CONVENTION. Enable indexing in shared settings first.");
         break;
       }
       case "/skills":
       case "/plugins":
         if (!argument.startsWith("import ")) throw new Error("Use /skills import /path/SKILL.md or /plugins import /path/manifest.json.");
-        show(name === "/skills" ? await client.capabilities.importSkill(session.projectId, argument.slice(7)) : await client.capabilities.importPlugin(session.projectId, argument.slice(7)));
+        show(name === "/skills" ? await client.capabilities.importSkill(requiredProject(), argument.slice(7)) : await client.capabilities.importPlugin(requiredProject(), argument.slice(7)));
         break;
       case "/capabilities": show({ registry: snapshot?.registry.filter((entry) => entry.projectId === session.projectId), proposals: snapshot?.proposals.filter((entry) => entry.projectId === session.projectId) }); break;
       case "/capability": {
@@ -265,6 +275,9 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         if (operation === "servers") show(snapshot?.settings.values.mcpServers.map((server) => ({ id: server.id, name: server.name, enabled: server.enabled, transport: server.transport.type })));
         else if (operation === "tools") show(await client.mcp.tools(id, rest.join(" "), 0, session.id));
         else if (operation === "auth") show(await client.mcp.auth(id, session.id));
+        else if (operation === "login") { const created = await client.mcp.oauthBegin(id, session.id); show(await client.mcp.oauthStatus(created.id!)); }
+        else if (operation === "cancel") show(await client.mcp.oauthCancel(id));
+        else if (operation === "clear-oauth") show(await client.mcp.oauthClear(id, session.id));
         else if (operation === "token" && !rest.length && id !== "builtin") { setLinearToken(false); setTokenServer(id); setTokenValue(""); setMode("mcp-token"); }
         else if (operation === "call" && rest.length >= 3) {
           const [tool, hash, ...json] = rest;
@@ -336,7 +349,9 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         await client.command({ type: "policy.set", allowedEnvs: argument === "all" ? ["Local", "Sandbox", "Remote"] : ["Sandbox", "Remote"] }); break;
       case "/reload-draft": editor.reload(); return;
       case "/keep-draft": await editor.keepMine(); return;
-      case "/new": await newSession(); break;
+      case "/new":
+        if (argument && argument !== "global") throw new Error("Use /new or /new global for a project-free chat.");
+        await newSession(argument === "global"); break;
       case "/open": await openProject(argument); break;
       case "/sessions": setMode("sessions"); break;
       case "/trace": setMode("trace"); break;
@@ -393,12 +408,14 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       type: "approval.respond", sessionId: session.id, approvalId: session.pendingApproval.id, allow: key.name === "y",
     });
   });
-  const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).map((item) => ({
-    name: safe(label(item)), description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? "Project"} / ${item.status}`, value: item.id,
-  })) ?? [];
+  const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).map((item) => {
+    const attention = snapshot.settings.values.notifications.inApp ? snapshot.attention.findLast((entry) => entry.sessionId === item.id && entry.active) : undefined;
+    const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
+    return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? "No project"} / ${item.status}`, value: item.id };
+  }) ?? [];
   return <box width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
     <box height={3} paddingLeft={2} paddingRight={2} alignItems="center" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
-      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(project?.name ?? "local workspace")}  /  {status}</text>
+      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(project?.name ?? (session ? "No project" : "Workspace"))}  /  {status}</text>
     </box>
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {width >= 100 && <box width={26} border={["right"]} borderColor={colors.border} padding={1} flexDirection="column">
@@ -460,7 +477,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select a GitHub Copilot model</text>
           {snapshot?.provider.models.length ? <select focused flexGrow={1} options={snapshot.provider.models.map((model) => ({ name: model.name, description: `${model.contextWindow} context tokens / GitHub Copilot`, value: model.id }))}
-            onSelect={(_, option) => { if (!session) { setNotice("Open a project with Ctrl+O before choosing a session model."); return; } if (option?.value) void perform(async () => { await configure({ ...session.controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
+            onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { await configure({ ...session.controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
             <text fg={colors.muted}>No authenticated models. Ctrl+L starts GitHub Copilot sign-in.</text>}
           <text fg={colors.muted}>kupo is unavailable until its routing and isolation contracts are validated.</text></box> :
         mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
@@ -478,6 +495,11 @@ Esc composer
 
 /connect | /cancel-login | /disconnect | /models | /model ID
 /model-settings [JSON|reset] configures working context/thinking via the shared SDK
+/new global creates a chat without a workspace
+/meta [REQUEST] | /suggestions [all|run DIGEST|run-all DIGEST] | /attention
+/config list|review ID|apply ID SHA256 acknowledge-risk|reject ID SHA256
+/mcp login SERVER | /mcp cancel AUTH_ID | /mcp clear-oauth SERVER
+/notifications shows shared attention preferences and current items
 /env Local | /autonomy Manual | /budget Unlimited
 /attach project/path.txt  (explicit @ project-file snapshot)
 /detach path-or-ID removes an attached snapshot

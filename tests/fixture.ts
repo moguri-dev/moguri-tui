@@ -35,14 +35,15 @@ export async function fixtureProvider(options: { reasoning?: boolean } = {}) {
       const userIndex = messages.findLastIndex((message) => message.role === "user");
       const prompt = String(messages[userIndex]?.content ?? "");
       const toolMessages = messages.slice(userIndex + 1).filter((message) => message.role === "tool");
+      if (prompt.includes("generated provider failure")) { response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "Generated unavailable provider", type: "authentication_error" } })); return; }
       response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
       const chunk = (delta: unknown, finish_reason: string | null = null) => response.write(`data: ${JSON.stringify({
         id: "generated-response", object: "chat.completion.chunk", model: base.id,
         choices: [{ index: 0, delta, finish_reason }],
       })}\n\n`);
-      const finish = (tool?: { name: string; args: Record<string, unknown> }) => {
+      const finish = (tool?: { name: string; args: Record<string, unknown> }, text = "Generated Copilot response. The requested fixture operation is complete.") => {
         if (tool) chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] });
-        else chunk({ role: "assistant", content: "Generated Copilot response. The requested fixture operation is complete." });
+        else chunk({ role: "assistant", content: text });
         chunk({}, tool ? "tool_calls" : "stop");
         response.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
         response.end("data: [DONE]\n\n");
@@ -54,6 +55,16 @@ export async function fixtureProvider(options: { reasoning?: boolean } = {}) {
       } else if (prompt.includes("generated delayed")) {
         const timer = setTimeout(() => finish(), 600);
         response.on("close", () => clearTimeout(timer));
+      } else if (prompt.includes("generated repo config proposal") && toolMessages.length === 0) {
+        finish({ name: "moguri_config", args: { action: "propose", proposal: { target: "repo-instructions", section: "AGENTS.md", value: "Generated cancelled instruction advice.", reason: "Generated source-lookup cancellation." } } });
+      } else if (prompt.includes("generated config proposal") && toolMessages.length === 0) {
+        finish({ name: "moguri_config", args: { action: "propose", proposal: { target: "global", section: "instructions", value: "Use generated headless checks instead of opening a browser.", reason: "Generated model advice for explicit review." } } });
+      } else if (prompt.includes("generated config read") && toolMessages.length === 0) {
+        finish({ name: "moguri_config", args: { action: "read", target: "global", section: "notifications" } });
+      } else if (prompt.includes("generated config apply") && toolMessages.length === 0) {
+        finish({ name: "moguri_config", args: { action: "apply", target: "global", section: "instructions", value: "Generated unauthorized setting." } });
+      } else if (prompt.includes("generated question")) {
+        finish(undefined, "Which generated option would you prefer?");
       } else if (prompt.includes("generated command") && toolMessages.length === 0) {
         finish({ name: "run_command", args: { command: "sleep 30 & printf 'GENERATED_CHILD=%s\\n' \"$!\"; wait", timeoutMs: 30_000 } });
       } else if (prompt.includes("generated forbidden write") && toolMessages.length === 0) {
@@ -112,7 +123,11 @@ export async function setupFixture(options: { workerPath?: string; platform?: Pl
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
   const sessionId = sessionResult.id!;
-  const session = () => service.controller.snapshot().sessions.find((session) => session.id === sessionId)!;
+  const session = () => {
+    const value = service.controller.snapshot().sessions.find((session) => session.id === sessionId)!;
+    if (!value?.projectId) throw new Error("The generated bound fixture session is missing.");
+    return { ...value, projectId: value.projectId };
+  };
   const configure = async () => service.controller.dispatch(envelope({
     type: "session.configure", sessionId, expectedRevision: session().revision, controls: { ...session().controls, modelId: fixture.modelId },
   }));
