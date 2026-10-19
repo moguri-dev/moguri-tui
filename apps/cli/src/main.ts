@@ -9,7 +9,7 @@ import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSch
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
-    help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" },
+    help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" }, workspace: { type: "string" },
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
     "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" },
@@ -33,6 +33,13 @@ moguri remote reconcile RUN_ID      Existing receipts/late usage, never replay
 moguri remote acknowledge RUN_ID --confirm-review  After actual process inspection
 moguri remote token|clear-token ENDPOINT  Piped remote endpoint credential
 moguri worker --stdio              Installed versioned SSH worker bridge
+moguri workspace list PROJECT_ID
+moguri workspace discover PROJECT_ID  Read registrations, never adopt roots
+moguri workspace create PROJECT_ID BRANCH [BASE_REF]
+moguri workspace inspect|reconcile ID [--revision N]
+moguri workspace remove ID --revision N --confirm-remove
+moguri workspace session ID        New chat in an explicit owned worktree
+moguri workspace files|file PATH --session ID
 moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
@@ -149,6 +156,17 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (values.digest || values["confirm-review"]) throw new Error("Use both --digest SHA256 and --confirm-review after inspecting the source snapshot.");
         else output(action === "folder" ? await sdk.attachments.folderPreview(values.session, args[0]) : action === "github" ? await sdk.attachments.githubPreview(values.session, args[0]) : await sdk.attachments.sessionPreview(values.session, args[0]));
       } else throw new Error("Use context file/image/folder/github/session/read. No source is attached implicitly.");
+    } else if (group === "workspace") {
+      if (action === "list" && args[0]) output(snapshot.managedWorkspaces.filter((workspace) => workspace.projectId === args[0]));
+      else if (action === "discover" && args[0]) output(await sdk.workspaces.discover(args[0]));
+      else if (action === "create" && args[0] && args[1]) { const created = await sdk.workspaces.create(args[0], args[1], args[2] ? { baseRef: args[2] } : {}); output(await sdk.workspaces.wait(created.id!)); }
+      else if (action === "inspect" && args[0]) output(await sdk.workspaces.inspect(args[0]));
+      else if (action === "reconcile" && args[0]) output(await sdk.workspaces.reconcile(args[0], expectedRevision()));
+      else if (action === "remove" && args[0] && values["confirm-remove"]) { await sdk.workspaces.remove(args[0], expectedRevision(), true); output(await sdk.workspaces.wait(args[0])); }
+      else if (action === "session" && args[0]) { const workspace = snapshot.managedWorkspaces.find((workspace) => workspace.id === args[0]); if (!workspace) throw new Error("Choose an owned workspace ID."); output(await sdk.sessions.create(workspace.projectId, workspace.branch, { env: "Local" }, workspace.id)); }
+      else if (action === "files" && values.session) output(await sdk.workspaces.files(values.session, args[0] ?? "."));
+      else if (action === "file" && values.session && args[0]) output(await sdk.workspaces.file(values.session, args[0]));
+      else throw new Error("Use workspace list/discover/create/inspect/reconcile/remove/session/files/file. File reads need PATH and --session ID; removal needs the observed revision and --confirm-remove. Branches are preserved.");
     } else if (group === "remote") {
       if (action === "status") output(await sdk.remote.status());
       else if (action === "probe") { await sdk.remote.probe(); output(await sdk.remote.status()); }
@@ -192,9 +210,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (action === "create") {
         let overrides: ControlDefaults | undefined;
         if (values.controls) { const file = await stat(values.controls); if (!file.isFile() || file.size > 128 * 1024) throw new Error("Choose a bounded control-overrides JSON file."); overrides = parse(ControlDefaultsSchema, JSON.parse(await readFile(values.controls, "utf8"))); }
-        output(await sdk.sessions.create(values.project ?? null, undefined, overrides));
+        output(await sdk.sessions.create(values.project ?? null, undefined, overrides, values.workspace));
       }
-      else if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }));
+      else if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }, values.workspace));
       else {
         if (!values.session) throw new Error("Choose --session ID from moguri status.");
         if (action === "rename") output(await sdk.sessions.rename(values.session, args.join(" ")));
@@ -254,11 +272,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "cache") {
       const manager = args[1];
       if (!args[0] || manager !== "npm" && manager !== "pnpm") throw new Error("Choose cache inspect PROJECT_ID npm|pnpm first.");
-      if (action === "inspect") output(await sdk.cache.inspect(args[0], manager));
+      if (action === "inspect") output(await sdk.cache.inspect(args[0], manager, values.workspace));
       else {
         if (!args[2] || !values["accept-dependency-metadata"]) throw new Error("Review the exact plan, then pass its SHA-256 and --accept-dependency-metadata to authorize OSV name/version disclosure. Scripts stay blocked.");
-        const job = action === "prepare" ? await sdk.cache.prepare(args[0], manager, args[2], true) :
-          action === "install" ? await sdk.cache.install(args[0], manager, args[2], true, values["run-scripts"] ?? false) : null;
+        const job = action === "prepare" ? await sdk.cache.prepare(args[0], manager, args[2], true, values.workspace) :
+          action === "install" ? await sdk.cache.install(args[0], manager, args[2], true, values["run-scripts"] ?? false, values.workspace) : null;
         if (!job?.id) throw new Error("Use cache prepare or cache install. Install explicitly replaces this project's node_modules.");
         const id = job.id;
         await waitForJob(id, () => sdk.jobs.cancel(id), "Dependency cache");
@@ -285,9 +303,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else throw new Error("Use prompt get, prompt set FILE or prompt reset.");
     } else if (group === "memory") {
       if (!projectId) throw new Error("Pass a project ID from the shared SDK snapshot.");
-      if (action === "index") output(await sdk.memory.index(projectId));
-      else if (action === "search") output(await sdk.memory.search(projectId, args.slice(1).join(" ")));
-      else if (action === "graph") output(await sdk.memory.graph(projectId, args[1] ?? ""));
+      if (action === "index") output(await sdk.memory.index(projectId, values.workspace));
+      else if (action === "search") output(await sdk.memory.search(projectId, args.slice(1).join(" "), 6, values.workspace));
+      else if (action === "graph") output(await sdk.memory.graph(projectId, args[1] ?? "", values.workspace));
       else throw new Error("Use memory index, search or graph.");
     } else if (group === "skills" || group === "plugins") {
       if (action !== "import" || !args[0] || !args[1]) throw new Error("Use import PROJECT_ID FILE. Imported capabilities start disabled.");

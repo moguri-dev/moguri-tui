@@ -205,11 +205,11 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       case "/cache": {
         const [operation, manager, hash, consent, replacement] = argument.split(" ");
         if (manager !== "npm" && manager !== "pnpm") throw new Error("Choose npm or pnpm. Inspect first, then approve its exact plan.");
-        if (operation === "inspect") show(await client.cache.inspect(requiredProject(), manager));
+        if (operation === "inspect") show(await client.cache.inspect(requiredProject(), manager, session.workspaceId ?? undefined));
         else {
           if (!hash || consent !== "accept-metadata") throw new Error("Use /cache prepare MANAGER SHA256 accept-metadata after reviewing the plan and OSV metadata disclosure.");
-          if (operation === "prepare") show(await client.cache.prepare(requiredProject(), manager, hash, true));
-          else if (operation === "install" && replacement === "replace-node-modules") show(await client.cache.install(requiredProject(), manager, hash, true));
+          if (operation === "prepare") show(await client.cache.prepare(requiredProject(), manager, hash, true, session.workspaceId ?? undefined));
+          else if (operation === "install" && replacement === "replace-node-modules") show(await client.cache.install(requiredProject(), manager, hash, true, false, session.workspaceId ?? undefined));
           else throw new Error("Managed install also requires replace-node-modules. Scripts stay blocked; no unqualified SendBox fallback.");
         }
         break;
@@ -241,9 +241,9 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         break;
       case "/memory": {
         const [operation, ...rest] = argument.split(" ");
-        if (operation === "index") show(await client.memory.index(requiredProject()));
-        else if (operation === "graph") show(await client.memory.graph(requiredProject(), rest.join(" ")));
-        else if (operation === "search") show(await client.memory.search(requiredProject(), rest.join(" ")));
+        if (operation === "index") show(await client.memory.index(requiredProject(), session.workspaceId ?? undefined));
+        else if (operation === "graph") show(await client.memory.graph(requiredProject(), rest.join(" "), session.workspaceId ?? undefined));
+        else if (operation === "search") show(await client.memory.search(requiredProject(), rest.join(" "), 6, session.workspaceId ?? undefined));
         else if (operation === "remember") show(await client.memory.remember(requiredProject(), rest.join(" ")));
         else throw new Error("Use /memory index, graph, search TEXT or remember CONVENTION. Enable indexing in shared settings first.");
         break;
@@ -467,14 +467,14 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
               case "json": openSettingsEditor(false); break;
               case "project": await openProjectEditor(); break;
               case "preview": show(await client.prompt.preview(session?.id)); break;
-              case "index": if (!project) throw new Error("Open a project first."); show(await client.memory.index(project.id)); break;
-              case "graph": if (!project) throw new Error("Open a project first."); show(await client.memory.graph(project.id)); break;
+              case "index": if (!project) throw new Error("Open a project first."); show(await client.memory.index(project.id, session?.workspaceId ?? undefined)); break;
+              case "graph": if (!project) throw new Error("Open a project first."); show(await client.memory.graph(project.id, "", session?.workspaceId ?? undefined)); break;
               case "mcp": show(await client.mcp.tools("builtin", "", 0, session?.id)); break;
               case "registry": show({ registry: snapshot?.registry, proposals: snapshot?.proposals }); break;
               case "voice": show(await client.voice.status()); break;
               case "issues": setMode("issues"); break;
               case "board": openBoardEditor(); break;
-              case "cache": if (!project) throw new Error("Open a project first."); show(await client.cache.inspect(project.id, "npm")); break;
+              case "cache": if (!project) throw new Error("Open a project first."); show(await client.cache.inspect(project.id, "npm", session?.workspaceId ?? undefined)); break;
               case "help": setMode("help"); break;
             }
           }); }} />

@@ -8,6 +8,7 @@ import { TuiApp } from "../apps/tui/src/App.tsx";
 import { MoguriSdk as MoguriClient } from "../packages/sdk/src/index.ts";
 import { envelope } from "../apps/service/src/controller.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
+import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 
 test("the actual OpenTUI client selects Copilot, streams, stops and receives a second client's draft", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture();
@@ -246,5 +247,27 @@ test("the actual TUI captures explicit typed files and inspects them without pre
     await setup.mockInput.typeText(`/attached ${attachment.id}`); setup.mockInput.pressEnter({ ctrl: true });
     await frameUntil("Generated explicit TUI context.");
     assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+test("the actual TUI creates and opens an explicit managed root through shared slash commands", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture(), git = initializeGeneratedRepository(fixture.project), client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI workspace did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/workspace create moguri/generated-tui main"); setup.mockInput.pressEnter({ ctrl: true });
+    const workspace = await waitFor(() => fixture.service.controller.snapshot().managedWorkspaces.find((workspace) => workspace.status === "ready"));
+    await frameUntil("changeSetId"); setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/workspace new ${workspace.id}`); setup.mockInput.pressEnter({ ctrl: true });
+    await waitFor(() => fixture.service.controller.snapshot().sessions.some((session) => session.workspaceId === workspace.id));
+    await frameUntil("Write a prompt");
+    await writeFile(`${workspace.path}/fixture.txt`, "Generated TUI worktree content.");
+    await setup.mockInput.typeText("/file fixture.txt"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Generated TUI worktree content.");
+    assert.equal(git(["branch", "--show-current"]), "main"); assert.equal(fixture.requests.length, 0);
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });

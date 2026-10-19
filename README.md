@@ -63,6 +63,14 @@ retention share the same SDK. Deleting a session preserves independent project
 artifacts and external PRs. A terminal is an explicit Local user console, not an
 agent permission or a claimed sandbox.
 
+**Managed Local worktrees** isolate branch checkouts without moving the attached
+base folder or index. Create, discover, inspect, open and safely remove them
+through the shared SDK, CLI/TUI or project settings. Worker tools, Files,
+Changes, Plan, terminals, memory and dependency installs resolve the same bound
+root. Writers serialize within a root; different worktrees can run concurrently.
+Removal requires a clean, idle, unbound owned checkout and preserves its branch.
+Discovery does not adopt or grant access to unmanaged worktrees.
+
 Dictation uses local NVIDIA Nemotron 3.5 through a pinned native runtime. The
 user explicitly accepts and downloads the model once. NVIDIA documents
 **40 locales: 19 ready, 13 broad coverage, 8 adaptation-only**, not 22 verified
@@ -81,7 +89,7 @@ This is not a malware-free guarantee; script execution stays unavailable until
 a real SendBox boundary is qualified.
 
 This is a **macOS development alpha**, not the completed first milestone.
-Sandbox, complete remote side-panel/extension transport, kupo, Autopilot Max, finite budgets, managed worktrees,
+Sandbox, complete remote side-panel/extension transport, kupo, Autopilot Max, finite budgets,
 multi-profile isolation and the broader dashboard are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
@@ -111,6 +119,8 @@ project-free isolation, suggestions, reviewed configuration and notifications.
 The [runtime foundation](docs/architecture/runtime-foundation.md) records local
 models/defaults and the genuine SendBox qualification blocker; [typed inputs](docs/architecture/context-inputs.md)
 records snapshot consent and image/source boundaries.
+The [managed workspace contract](docs/architecture/managed-workspaces.md)
+records Local ownership, root consistency and partial-operation reconciliation.
 `npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
 `release/`. It is not a notarized distribution.
 CI runs only on pushes to `main`, not pull requests or feature branches.

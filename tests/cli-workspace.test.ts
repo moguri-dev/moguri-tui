@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { join, resolve } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { setupFixture } from "./fixture.ts";
+import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 
 test("the CLI creates and moves local tickets through the same SDK with explicit revision conflicts", async () => {
   const fixture = await setupFixture();
@@ -99,6 +100,20 @@ test("the CLI exposes unconfigured SSH readiness without pretending a host, mode
     const status = JSON.parse((await execute(["remote", "status"])).stdout).remote;
     assert.equal(status.ready, false); assert.equal(status.hostFingerprint, null);
     await assert.rejects(() => execute(["remote", "probe"]), /Configure an SSH target explicitly/);
+    assert.equal(fixture.requests.length, 0);
+  } finally { await fixture.close(); }
+});
+test("the CLI creates an owned worktree and fresh bound chat without switching the base or starting inference", async () => {
+  const fixture = await setupFixture(), git = initializeGeneratedRepository(fixture.project);
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    const workspace = JSON.parse((await execute(["workspace", "create", fixture.session().projectId, "moguri/generated-cli", "main"])).stdout);
+    assert.equal(workspace.status, "ready");
+    const created = JSON.parse((await execute(["workspace", "session", workspace.id])).stdout);
+    const file = JSON.parse((await execute(["workspace", "file", "fixture.txt", "--session", created.id])).stdout);
+    assert.equal(file.text, "generated original\n");
+    assert.equal(fixture.service.controller.snapshot().sessions.find((value) => value.id === created.id)?.workspaceId, workspace.id);
+    assert.equal(git(["branch", "--show-current"]), "main");
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
 });
