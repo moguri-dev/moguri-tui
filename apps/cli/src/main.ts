@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema } from "../../../packages/sdk/src/index.ts";
+import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -25,6 +25,8 @@ moguri slash "/read-only" --session ID
 moguri session rename NAME|mode agent|mode read-only --session ID
 moguri session spawn side|agent [NAME] --session ID
 moguri session organize changes.json --session ID --revision N
+moguri session model-settings options.json --session ID --revision N
+moguri session context --session ID
 moguri session archive|restore|stop|resume --session ID
 moguri session delete --session ID --revision N --confirm-remove
 moguri session from-pr URL|from-issue ID --project ID
@@ -121,6 +123,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (action === "mode" && (args[0] === "agent" || args[0] === "read-only")) output(await sdk.sessions.mode(values.session, args[0]));
         else if (action === "spawn" && (args[0] === "agent" || args[0] === "side")) output(await sdk.sessions.spawn(values.session, args[0], args.slice(1).join(" ") || undefined));
         else if (action === "organize" && args[0]) output(await sdk.sessions.organize(values.session, parse(SessionChangesSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
+        else if (action === "model-settings" && args[0]) output(await sdk.sessions.modelOptions(values.session, parse(ModelOptionsSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
+        else if (action === "context") output(await sdk.sessions.context(values.session));
         else if (action === "delete" && values["confirm-remove"]) output(await sdk.sessions.delete(values.session, true, expectedRevision()));
         else if (action && ["archive", "restore", "stop", "resume"].includes(action)) output(await sdk.command({ type: `session.${action}` as "session.archive" | "session.restore" | "session.stop" | "session.resume", sessionId: values.session }));
         else throw new Error("Use session rename/mode/spawn/organize/archive/restore/stop/resume/delete. Deletion needs --confirm-remove and the observed --revision.");

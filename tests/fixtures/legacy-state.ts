@@ -1,7 +1,13 @@
 import { DatabaseSync } from "node:sqlite";
 import type { startService } from "../../apps/service/src/server.ts";
 
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4): Promise<void> {
+  if (version === 4) {
+    const path = service.store.path; await service.close();
+    const db = new DatabaseSync(path);
+    try { db.exec("BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='model_controls_schema'; PRAGMA user_version=4; COMMIT;"); } finally { db.close(); }
+    return;
+  }
   const events = service.controller.events(0);
   const blobs = service.store.db.prepare("SELECT DISTINCT digest FROM blob_payloads").all().map((row) => [String(row.digest), service.store.blob(String(row.digest))] as const);
   const path = service.store.path;

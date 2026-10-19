@@ -19,6 +19,12 @@ vector/graph and coding-style memory, standard skills, reviewed evolution
 proposals, curated/approved scripts, declarative plugins, optional tool-less
 subagents and one native MCP gateway. Desktop starts dark and uses the same
 original face-and-bat-wing mascot as the TUI's ASCII loading mark.
+The mascot now also carries its small red antenna pom-pom.
+
+The desktop composer is an icon toolbar: attach, environment, model name,
+autonomy, unlimited-budget/usage, microphone and paper-plane Send. Holding
+Cmd/Ctrl turns Send into a queue clock. Model context and supported thinking
+effort are configured together through shared, durable SDK controls.
 
 The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
 commands, enforced read-only sessions and parallel question-only side chats.

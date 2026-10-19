@@ -4,7 +4,7 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
@@ -294,6 +294,11 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       case "/disconnect": await client.command({ type: "provider.logout" }); break;
       case "/cancel-login": await client.command({ type: "provider.cancel" }); break;
       case "/models": setMode("models"); break;
+      case "/model-settings":
+        if (!argument) show({ options: session.controls.modelOptions ?? {}, model: snapshot?.provider.models.find((model) => model.id === session.controls.modelId), context: (await client.sessions.context(session.id)).context });
+        else if (argument === "reset") { const { modelOptions: _, ...controls } = session.controls; await client.sessions.configure(session.id, controls); }
+        else await client.sessions.modelOptions(session.id, parse(ModelOptionsSchema, JSON.parse(argument)));
+        break;
       case "/model": await configure({ ...session.controls, modelId: argument }); break;
       case "/env":
         if (!["Local", "Sandbox", "Remote"].includes(argument)) throw new Error("Use /env Local, Sandbox, or Remote. Unready backends are rejected.");
@@ -472,6 +477,7 @@ Ctrl+G shared SDK settings  Ctrl+Space local dictation  F4 insert transcript
 Esc composer
 
 /connect | /cancel-login | /disconnect | /models | /model ID
+/model-settings [JSON|reset] configures working context/thinking via the shared SDK
 /env Local | /autonomy Manual | /budget Unlimited
 /attach project/path.txt  (explicit @ project-file snapshot)
 /detach path-or-ID removes an attached snapshot

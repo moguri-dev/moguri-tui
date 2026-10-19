@@ -8,6 +8,7 @@ import { startService } from "../apps/service/src/server.ts";
 import { envelope } from "../apps/service/src/controller.ts";
 import { isRecord, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
+import { supportedThinking } from "../apps/service/src/model-controls.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
 
 export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 8000): Promise<NonNullable<T>> {
@@ -19,7 +20,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
   } while (Date.now() < deadline);
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
-export async function fixtureProvider() {
+export async function fixtureProvider(options: { reasoning?: boolean } = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
   const requests: Record<string, unknown>[] = [];
   const held = new Set<ServerResponse>();
@@ -72,8 +73,8 @@ export async function fixtureProvider() {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture bind failed.");
-  const model = { ...base, name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
-  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, imageInput: false }];
+  const model = { ...base, ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
+  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, imageInput: false, thinkingLevels: supportedThinking(model) }];
   class FixtureProvider implements ProviderAdapter {
     state: ProviderState = { status: "connected", models: catalog, login: null, diagnostic: null };
     onChange = () => {};
@@ -100,13 +101,13 @@ export async function fixtureProvider() {
     },
   };
 }
-export async function setupFixture(options: { workerPath?: string; platform?: PlatformOptions } = {}) {
+export async function setupFixture(options: { workerPath?: string; platform?: PlatformOptions; reasoning?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(project);
   await writeFile(join(project, "fixture.txt"), "generated original\n");
-  const fixture = await fixtureProvider();
+  const fixture = await fixtureProvider({ reasoning: options.reasoning });
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform: options.platform, retentionKey: GENERATED_RETENTION_KEY });
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
