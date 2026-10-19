@@ -25,6 +25,18 @@ user explicitly accepts and downloads the model once. NVIDIA documents
 **40 locales: 19 ready, 13 broad coverage, 8 adaptation-only**, not 22 verified
 ready languages. No cloud ASR fallback or automatic model-weight download occurs.
 
+Projects also have a **local Kanban** for feature, bug and misc tickets, with
+custom phases, connected PRs and read-only merge observation. A verified merge
+moves a ticket to the chosen phase. Optional Linear imports start off, use a
+user-supplied keychain credential and never upload local tickets.
+
+The **shared dependency cache** reuses SHA-512-verified archives across projects
+and branches, with npm and pnpm adapters. Exact lock/manifest plans and fresh
+OSV advisory checks gate downloads and reuse. Managed installs block lifecycle
+scripts and hooks, use private staging and keep mutable trees worktree-local.
+This is not a malware-free guarantee; script execution stays unavailable until
+a real SendBox boundary is qualified.
+
 This is a **macOS development alpha**, not the completed first milestone.
 Sandbox, Remote SSH, kupo, Autopilot Max, finite budgets, other attachment
 types, worktree management and the broader dashboard are explicitly unavailable.
@@ -51,6 +63,7 @@ the [initial architecture](docs/architecture/overview.md),
 and [Phase 0 evidence and remaining release blockers](docs/architecture/phase-zero.md).
 `npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
 `release/`. It is not a notarized distribution.
+CI runs only on pushes to `main`, not pull requests or feature branches.
 
 ## Features
 

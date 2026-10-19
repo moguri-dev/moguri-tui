@@ -29,6 +29,13 @@ notices remain in installed and packaged dependencies.
 | `@resvg/resvg-js` | MPL-2.0 | Build-only rasterization of Moguri's original SVG mascot |
 | NVIDIA NeMo-Speech.cpp 0.2.0 | Apache-2.0 plus included upstream notices | Pinned native local recognizer runtime; notices retained with the downloaded runtime |
 | NVIDIA Nemotron 3.5 ASR model | OpenMDW-1.1 | Optional user-downloaded GGUF weights, not bundled or implicitly downloaded |
+| `cacache` 21.0.1 | ISC | Native npm-compatible content-addressed archive storage with integrity verification |
+| pnpm 12.14.0 | MIT plus included notices | Pinned native script-free installer and shared copy-on-write-capable package store |
+
+The managed cache's advisory source is the public OSV batch API. Its use
+requires explicit approval to disclose public dependency names/versions; it
+does not receive repository source or credentials. Linear and GitHub APIs are
+accessed only for explicitly enabled read-only integration work.
 
 No OpenCode source, branding, provider session store or OAuth implementation was
 copied into Moguri. The pi-ai package owns its upstream authentication flow.

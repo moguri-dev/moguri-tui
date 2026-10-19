@@ -4,13 +4,14 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, SettingsSchema, SYSTEM_PROMPT_WARNING, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, SettingsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "capability-output" | "mcp-token";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor";
+const editorModes: Mode[] = ["prompt-editor", "settings-editor", "issue-editor", "board-editor"];
 
 export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string }) {
   const { snapshot, status, error, events } = useMoguri(client);
@@ -27,9 +28,13 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
   const [capabilityOutput, setCapabilityOutput] = useState("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
+  const [linearToken, setLinearToken] = useState(false);
+  const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const editors = useRef(new Map<string, DraftEditor>());
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
+  const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
+  const localIssues = snapshot?.issues.filter((issue) => issue.projectId === project?.id && !issue.archived) ?? [];
   const editor = React.useMemo(() => {
     if (!session) return null;
     let value = editors.current.get(session.id);
@@ -70,8 +75,32 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
     setSettingsText(prompt ? snapshot.settings.values.systemPrompt : JSON.stringify(snapshot.settings.values, null, 2));
     setMode(prompt ? "prompt-editor" : "settings-editor");
   };
+  const openIssueEditor = (id?: string) => {
+    if (!project || !board) throw new Error("Open a project before editing local issues.");
+    const issue = id ? snapshot?.issues.find((issue) => issue.id === id && issue.projectId === project.id) : undefined;
+    if (id && !issue) throw new Error("Choose an issue ID from this project's board.");
+    issueEditor.current = { id: issue?.id ?? null, revision: issue?.revision ?? 0 };
+    setSettingsText(JSON.stringify(issue ? { title: issue.title, body: issue.body, kind: issue.kind, phaseId: issue.phaseId, pullRequestUrl: issue.pullRequest?.url ?? null } :
+      { title: "", body: "", kind: "feature", phaseId: board.columns[0]!.id, pullRequestUrl: null }, null, 2));
+    setMode("issue-editor");
+  };
+  const openBoardEditor = () => {
+    if (!board) throw new Error("Open a project before configuring a board.");
+    const { projectId: _, revision, ...config } = board;
+    settingsRevision.current = revision; setSettingsText(JSON.stringify(config, null, 2)); setMode("board-editor");
+  };
   const saveSettings = (text: string) => perform(async () => {
-    if (mode === "prompt-editor") await client.prompt.set(text, settingsRevision.current, true);
+    if (mode === "issue-editor") {
+      if (!project) throw new Error("The project is no longer open.");
+      const fields = parse(IssueInputSchema, JSON.parse(text));
+      if (issueEditor.current.id) await client.issues.update(issueEditor.current.id, fields, issueEditor.current.revision);
+      else await client.issues.create(project.id, fields);
+      setMode("issues"); return;
+    } else if (mode === "board-editor") {
+      if (!project) throw new Error("The project is no longer open.");
+      await client.issues.configure(project.id, parse(BoardConfigSchema, JSON.parse(text)), settingsRevision.current);
+      setMode("issues"); return;
+    } else if (mode === "prompt-editor") await client.prompt.set(text, settingsRevision.current, true);
     else await client.settings.update(parse(SettingsSchema, JSON.parse(text)), settingsRevision.current, true);
     setMode("settings");
   });
@@ -105,6 +134,48 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
       return;
     }
     switch (name) {
+      case "/issues": setMode("issues"); break;
+      case "/issue": {
+        const [operation, id, value] = argument.split(" ");
+        if (operation === "new") openIssueEditor();
+        else if (operation === "create") {
+          if (!board || id !== "feature" && id !== "bug" && id !== "misc") throw new Error("Use /issue create feature|bug|misc TITLE, or /issue new for the full editor.");
+          const title = argument.split(" ").slice(2).join(" ");
+          await client.issues.create(session.projectId, { title, body: "", kind: id, phaseId: board.columns[0]!.id, pullRequestUrl: null }); setMode("issues");
+        }
+        else if (operation === "edit") openIssueEditor(id);
+        else {
+          const issue = localIssues.find((issue) => issue.id === id) ?? snapshot?.issues.find((issue) => issue.id === id && issue.projectId === project?.id);
+          if (!issue) throw new Error("Use /issues, then choose a project issue ID.");
+          if (operation === "move" && value) await client.issues.move(issue.id, value, issue.revision);
+          else if (operation === "archive" || operation === "restore") await client.issues.archive(issue.id, operation === "archive", issue.revision);
+          else throw new Error("Use /issue new, edit ID, move ID PHASE, archive ID or restore ID.");
+        }
+        break;
+      }
+      case "/board":
+        if (argument === "edit") openBoardEditor();
+        else if (argument === "refresh") show(await client.issues.refresh(session.projectId));
+        else show(await client.issues.board(session.projectId));
+        break;
+      case "/cache": {
+        const [operation, manager, hash, consent, replacement] = argument.split(" ");
+        if (manager !== "npm" && manager !== "pnpm") throw new Error("Choose npm or pnpm. Inspect first, then approve its exact plan.");
+        if (operation === "inspect") show(await client.cache.inspect(session.projectId, manager));
+        else {
+          if (!hash || consent !== "accept-metadata") throw new Error("Use /cache prepare MANAGER SHA256 accept-metadata after reviewing the plan and OSV metadata disclosure.");
+          if (operation === "prepare") show(await client.cache.prepare(session.projectId, manager, hash, true));
+          else if (operation === "install" && replacement === "replace-node-modules") show(await client.cache.install(session.projectId, manager, hash, true));
+          else throw new Error("Managed install also requires replace-node-modules. Scripts stay blocked; no unqualified SendBox fallback.");
+        }
+        break;
+      }
+      case "/linear":
+        if (argument === "token") { setLinearToken(true); setTokenValue(""); setMode("mcp-token"); }
+        else if (argument === "clear-token") show(await client.linear.clearToken());
+        else if (argument === "import" || argument.startsWith("import ")) show(await client.linear.import(session.projectId, argument.split(" ")[1]));
+        else show(await client.linear.status(session.projectId));
+        break;
       case "/settings":
         if (argument === "edit") openSettingsEditor(false);
         else if (argument.startsWith("reset ")) {
@@ -155,7 +226,7 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
         if (operation === "servers") show(snapshot?.settings.values.mcpServers.map((server) => ({ id: server.id, name: server.name, enabled: server.enabled, transport: server.transport.type })));
         else if (operation === "tools") show(await client.mcp.tools(id, rest.join(" "), 0, session.id));
         else if (operation === "auth") show(await client.mcp.auth(id));
-        else if (operation === "token" && !rest.length && id !== "builtin") { setTokenServer(id); setTokenValue(""); setMode("mcp-token"); }
+        else if (operation === "token" && !rest.length && id !== "builtin") { setLinearToken(false); setTokenServer(id); setTokenValue(""); setMode("mcp-token"); }
         else if (operation === "call" && rest.length >= 3) {
           const [tool, hash, ...json] = rest;
           const args: unknown = JSON.parse(json.join(" "));
@@ -236,14 +307,14 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
       if (key.name === "backspace") setTokenValue((value) => value.slice(0, -1));
-      else if (key.name === "return" && tokenValue) void perform(async () => { await client.mcp.setToken(tokenServer, tokenValue); setTokenValue(""); setMode("settings"); });
+      else if (key.name === "return" && tokenValue) void perform(async () => { if (linearToken) await client.linear.setToken(tokenValue); else await client.mcp.setToken(tokenServer, tokenValue); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
     if (key.name === "escape") { setMode("compose"); return; }
-    if (key.ctrl && key.name === "q" && ["prompt-editor", "settings-editor"].includes(mode)) { key.preventDefault(); setNotice("Save with Ctrl+Enter or cancel with Esc before leaving the settings editor."); return; }
-    if (["prompt-editor", "settings-editor"].includes(mode)) {
-      if (key.ctrl && key.name === "r") { key.preventDefault(); void perform(async () => { await client.settings.reset(mode === "prompt-editor" ? "systemPrompt" : "all", settingsRevision.current); setMode("settings"); }); }
+    if (key.ctrl && key.name === "q" && editorModes.includes(mode)) { key.preventDefault(); setNotice("Save with Ctrl+Enter or cancel with Esc before leaving this editor."); return; }
+    if (editorModes.includes(mode)) {
+      if (key.ctrl && key.name === "r" && ["prompt-editor", "settings-editor"].includes(mode)) { key.preventDefault(); void perform(async () => { await client.settings.reset(mode === "prompt-editor" ? "systemPrompt" : "all", settingsRevision.current); setMode("settings"); }); }
       return;
     }
     if (key.name === "f4") { key.preventDefault(); void insertTranscript(); return; }
@@ -299,6 +370,9 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
             { name: "Discover foundational internal MCP scripts", value: "mcp" },
             { name: "Skills, plugins and pending proposals", value: "registry" },
             { name: "Local Nemotron dictation setup/status", value: "voice" },
+            { name: "Local project Kanban issues", value: "issues" },
+            { name: "Configure issue phases and optional Linear (JSON)", value: "board" },
+            { name: "Inspect shared npm dependency cache plan", value: "cache" },
             { name: "Command help: skill imports, review, MCP auth and subagents", value: "help" },
           ].map((option) => ({ ...option, description: "" }))} onSelect={(_, option) => { void perform(async () => {
             switch (option?.value) {
@@ -310,17 +384,27 @@ export function TuiApp({ client, onQuit, initialSessionId }: { client: MoguriCli
               case "mcp": show(await client.mcp.tools("builtin", "", 0, session?.id)); break;
               case "registry": show({ registry: snapshot?.registry, proposals: snapshot?.proposals }); break;
               case "voice": show(await client.voice.status()); break;
+              case "issues": setMode("issues"); break;
+              case "board": openBoardEditor(); break;
+              case "cache": if (!project) throw new Error("Open a project first."); show(await client.cache.inspect(project.id, "npm")); break;
               case "help": setMode("help"); break;
             }
           }); }} />
           <text fg={colors.muted}>Prompt edits can break functionality. Hard permissions remain final.</text>
         </box> :
-        mode === "prompt-editor" || mode === "settings-editor" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
-          <text fg={colors.attention} height={width >= 100 ? 3 : 4} flexShrink={0}>{SYSTEM_PROMPT_WARNING}</text><text fg={colors.muted} height={2} flexShrink={0}>Ctrl+Enter acknowledges risk and saves. Ctrl+R restores defaults. Esc cancels.</text>
+        editorModes.includes(mode) ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          {mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
+          <text fg={colors.attention} height={width >= 100 ? 3 : 4} flexShrink={0}>{SYSTEM_PROMPT_WARNING}</text><text fg={colors.muted} height={2} flexShrink={0}>Ctrl+Enter acknowledges risk and saves. Ctrl+R restores defaults. Esc cancels.</text></>}
           <SettingsTextEditor value={settingsText} change={setSettingsText} submit={(text) => void saveSettings(text)} />
         </box> :
+        mode === "issues" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Local project Kanban / {safe(project?.name ?? "Open a project first")}</text>
+          <text fg={colors.muted} height={3}>{board?.columns.map((column) => `${safe(column.name)}: ${localIssues.filter((issue) => issue.phaseId === column.id).length}`).join("  |  ") ?? "No project selected."}</text>
+          <select focused flexGrow={1} options={[{ name: "+ New local issue", description: "Feature, bug or misc. No assignee.", value: "" }, ...localIssues.map((issue) => ({
+            name: `#${issue.number} ${safe(issue.title)}`, description: `${issue.kind} / ${safe(board?.columns.find((column) => column.id === issue.phaseId)?.name ?? issue.phaseId)}${issue.pullRequest ? ` / PR ${issue.pullRequest.state}` : ""}`, value: issue.id,
+          }))]} onSelect={(_, option) => { if (option) void perform(async () => openIssueEditor(String(option.value) || undefined)); }} />
+          <text fg={colors.muted} height={3}>Enter edits JSON. /board edit configures phases and Linear. /issue move ID PHASE moves tickets. /board refresh reads linked PRs. Esc returns.</text></box> :
         mode === "capability-output" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
-        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>MCP credential for {tokenServer}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
+        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{linearToken ? "Linear personal API key" : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select a GitHub Copilot model</text>
@@ -361,6 +445,13 @@ Esc composer
 /mcp call SERVER TOOL SHA256 JSON | /scripts | /result JOB_ID
 /subagent PROMPT (only when explicitly enabled)
 /dictate status|download accept-license|record|stop|file WAV|insert
+/issues | /issue new | /issue create feature|bug|misc TITLE
+/issue edit ID | /issue move ID PHASE | /issue archive|restore ID
+/board | /board edit | /board refresh
+/cache inspect npm|pnpm
+/cache prepare MANAGER SHA256 accept-metadata
+/cache install MANAGER SHA256 accept-metadata replace-node-modules
+/linear status|token|clear-token|import CURSOR (optional, off by default)
 
 Unsupported Sandbox, Remote, kupo, Autopilot Max and finite budgets
 fail closed. Guided still needs a human. Autopilot requires explicit

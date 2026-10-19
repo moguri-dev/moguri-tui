@@ -57,6 +57,38 @@ test("the actual OpenTUI client selects Copilot, streams, stops and receives a s
   }
 });
 
+test("the actual TUI creates local issues and masks Linear credentials without sending a model turn", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture();
+  const client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
+  const root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 20)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/issue create bug Generated terminal ticket");
+    setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Local project Kanban");
+    await frameUntil("Generated terminal ticket");
+    assert.equal(fixture.service.controller.snapshot().issues[0]?.kind, "bug");
+    setup.mockInput.pressEscape();
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/linear token");
+    setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Linear personal API key");
+    await setup.mockInput.typeText("generated-linear-masked");
+    await frameUntil("********");
+    assert.equal(setup.captureCharFrame().includes("generated-linear-masked"), false);
+    assert.equal(fixture.session().draft.text.includes("generated-linear-masked"), false);
+    setup.mockInput.pressEscape();
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("the actual TUI views, edits and restores the SDK system prompt with an explicit warning", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture();
   const client = new MoguriClient(fixture.service.connection);

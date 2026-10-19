@@ -1,6 +1,6 @@
 {
   "name": "moguri",
-  "version": "0.2.0-alpha.1",
+  "version": "0.3.0-alpha.1",
   "private": true,
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
@@ -37,6 +37,7 @@
     "test:e2e": "playwright test",
     "verify:sdk": "node scripts/verify-sdk.mjs",
     "spike": "node scripts/prepare-native.mjs && node scripts/spikes.mjs",
+    "spike:workspace": "node scripts/workspace-spikes.mjs",
     "start": "node scripts/launch.mjs tui",
     "desktop": "node scripts/launch.mjs desktop",
     "service": "node --import tsx apps/service/src/main.ts",
@@ -53,10 +54,12 @@
     "@types/node": "26.6.5",
     "@types/ws": "8.18.2",
     "ajv": "8.20.0",
+    "cacache": "21.0.1",
     "cheerio": "1.2.0",
     "ignore": "7.0.12",
     "node": "26.12.0",
     "node-pty": "1.1.0",
+    "pnpm": "12.14.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-markdown": "10.1.0",
@@ -70,6 +73,7 @@
     "@electron/packager": "20.3.0",
     "@playwright/test": "1.64.1",
     "@resvg/resvg-js": "2.6.2",
+    "@types/cacache": "20.0.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
@@ -86,6 +90,7 @@
     "node-pty@1.1.0": true,
     "@google/genai": false,
     "protobufjs": false,
-    "fsevents": false
+    "fsevents": false,
+    "pnpm@12.14.0": false
   }
 }
