@@ -49,6 +49,8 @@
     "spike:engagement": "node scripts/engagement-spikes.mjs",
     "spike:runtime": "node scripts/runtime-spikes.mjs",
     "spike:remote": "node scripts/remote-spike.mjs",
+    "spike:worktrees": "node scripts/worktree-spike.mjs",
+    "spike:worker-image": "node scripts/prepare-worker-image.mjs --build",
     "start": "node scripts/launch.mjs tui",
     "desktop": "node scripts/launch.mjs desktop",
     "service": "node --import tsx apps/service/src/main.ts",
