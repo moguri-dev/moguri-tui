@@ -28,6 +28,7 @@
 - Put durable architecture documentation under `docs/`. Update the relevant setup, configuration, architecture, or protocol document in the same change.
 - Setup: `npm ci`. Build: `npm run build`. Type checks: `npm run typecheck`. Full local checks: `npm test` then `npm run test:e2e` after building. Audit: `npm audit --audit-level=moderate`. Phase 0: `npm run spike`.
 - SDK package check after building: `npm run verify:sdk`. Platform primitive spike: `node scripts/platform-spikes.mjs`. Speech runtime preparation verifies a pinned native archive, never downloads model weights. Tests use generated recognizers, never a real microphone or personal credentials.
+- CI runs only for pushes to `main`. Do not trigger it on pull requests or working branches; run required verification locally.
 - Focused checks use `node --import tsx --test tests/<name>.test.ts`; combine related selectors in one invocation. `npm test` includes the native TUI interaction test. Electron tests run hidden, use generated fixtures, and never open the real GitHub authorization page.
 - `npm start -- --project /absolute/path` starts the built TUI; `npm run desktop` starts Electron. `npm run package:mac` builds development macOS arm64 artifacts. Never open an app/browser or complete personal authorization on the user's behalf.
 - Node emits an experimental FFI warning for OpenTUI. Linux CI checks the portable foundation but skips macOS-only agent/UI execution; it is not proof of Linux release readiness.
