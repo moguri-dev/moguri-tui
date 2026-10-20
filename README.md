@@ -120,7 +120,15 @@ user-approved model rates, never a guessed Copilot price. These are admission
 limits, not exact provider-billing guarantees. CLI/TUI, desktop composer,
 settings and the profile usage dashboard share the SDK.
 
-Sandbox, complete remote side-panel/extension transport, kupo, Autopilot Max,
+[Experimental **kupo Single**](docs/architecture/routing.md) is opt-in with an
+explicit approved classifier/solver pool and separate hosted/network-data consent.
+The same owned worker records actual per-call roles/models and keeps normal
+approvals. Desktop settings, TUI and shared slash/SDK controls expose the policy
+and provenance. Invalid, stale or unmetered advice pauses without a fallback.
+Finite inherited caps, images and per-model tuning block this Single alpha.
+
+Sandbox, complete remote side-panel/extension transport, compound kupo workflows,
+Autopilot Max,
 routed wind-down/authorized checkpoint commits and
 broader repository/visibility dashboard filters are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.

@@ -205,7 +205,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     else if (result.panel === "Settings") setMode("settings");
     else if (result.panel === "Queue") setMode("queue");
     else if (result.panel === "Artifacts") setMode("artifacts");
-    else if (result.panel === "Insights") show({ session, project, events: events.filter((event) => event.session_id === session?.id).slice(-20) });
+    else if (result.panel === "Insights") show({ session, project, routings: session ? client.routing.history(session.id) : [], events: events.filter((event) => event.session_id === session?.id).slice(-20) });
     else if (result.url) { if (!native) throw new Error("Default-browser access is unavailable in this terminal binding."); await native.browser(result.url); }
     else if (result.path) { if (!native) throw new Error("Default-file access is unavailable in this terminal binding."); await native.file(result.path); }
     else if (result.text) show(result.text);
@@ -370,7 +370,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       case "/connect": await client.command({ type: "provider.login" }); break;
       case "/disconnect": await client.command({ type: "provider.logout" }); break;
       case "/cancel-login": await client.command({ type: "provider.cancel" }); break;
-      case "/models": setMode("models"); break;
       case "/local-models":
         if (argument === "refresh") { await client.models.refresh(); show(client.getState().snapshot?.provider); }
         else show({ endpoints: snapshot?.settings.values.localModels, connections: snapshot?.provider.connections, guidance: "Use /settings edit to configure exact URLs and model limits. /model-token ENDPOINT opens masked input; no inference or scan occurs during discovery." });
@@ -387,7 +386,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         else if (argument === "reset") { const { modelOptions: _, ...controls } = session.controls; await client.sessions.configure(session.id, controls); }
         else await client.sessions.modelOptions(session.id, parse(ModelOptionsSchema, JSON.parse(argument)));
         break;
-      case "/model": await configure({ ...session.controls, modelId: argument }); break;
       case "/env":
         if (!["Local", "Sandbox", "Remote"].includes(argument)) throw new Error("Use /env Local, Sandbox, or Remote. Unready backends are rejected.");
         await client.sessions.env(session.id, argument as Controls["env"]); break;
@@ -608,10 +606,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
-          {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
-            onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { await configure({ ...session.controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
+          {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ? "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
+            onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
-          <text fg={colors.muted}>kupo is unavailable until its routing and isolation contracts are validated.</text></box> :
+          <text fg={colors.muted} height={4} flexShrink={0}>kupo Single is opt-in. /kupo status shows the approved pool and exact availability. Finite caps, images, model tuning and compound workflows remain blocked. /kupo history shows actual provenance.</text></box> :
         mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
         mode === "help" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{`Commands
 
@@ -673,10 +671,11 @@ Esc composer
 
 ${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
 
-Native Sandbox, kupo and Autopilot Max remain unqualified.
-fail closed. Guided still needs a human. Autopilot requires explicit
-bounded delegations. Folder, GitHub/session and image attachments
-are not implemented. Bare attachment prefixes stay literal.
+Native Sandbox, compound kupo workflows and Autopilot Max remain unqualified.
+kupo Single is experimental and off by default. Configure /kupo set POLICY_JSON
+before explicitly selecting /model kupo. Finite caps, images and model tuning
+remain blocked for Single. Guided needs a human; Autopilot requires explicit
+bounded delegations. Bare attachment prefixes stay literal.
 
 Protected policy blocks all new Local turns in this checkpoint.
 Only turns already running at the policy boundary may finish.

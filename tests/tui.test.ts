@@ -10,6 +10,32 @@ import { envelope } from "../apps/service/src/controller.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { profileFixture } from "./fixtures/profiles.ts";
+import { routedFixture } from "./fixtures/single-routing.ts";
+
+test("the actual TUI selects opt-in Single, clears fixed tuning and shows owned routing provenance", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await routedFixture();
+  await fixture.sdk.sessions.configure(fixture.sessionId, { ...fixture.session().controls, modelId: fixture.solverId });
+  await fixture.sdk.sessions.modelOptions(fixture.sessionId, { contextWindow: 8192 });
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI Single did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk }))); await frameUntil("Write a prompt");
+    setup.mockInput.pressKey("m", { ctrl: true }); await frameUntil("Moguri Single alpha");
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter();
+    await waitFor(() => fixture.session().controls.modelId === "kupo"); await frameUntil("Write a prompt");
+    assert.equal(fixture.session().controls.modelOptions, undefined); assert.equal(fixture.requests.length, 0);
+    await setup.mockInput.typeText("Generated actual terminal Single task."); setup.mockInput.pressEnter({ ctrl: true, shift: true });
+    await fixture.terminal(); await frameUntil("Generated routed solver answer.");
+    assert.deepEqual(fixture.session().usage.map((usage) => usage.role), ["router", "solver"]);
+    await setup.mockInput.typeText("/kupo history"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"classifierModelId"'); await frameUntil('"completed"');
+    assert.equal(fixture.requests.length, 1); assert.equal(fixture.solver.requests.length, 1);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
 
 test("the actual TUI shows solver advice but waits for a different explicit user choice", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture({ questionRecommendation: { choiceIndex: 1, reason: "Generated Guided comparison favors the second choice." } }), client = await new MoguriClient(fixture.service.connection).ready();

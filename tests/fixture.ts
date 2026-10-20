@@ -23,7 +23,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
 export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
-  questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string; replyText?: string; holdAfterTool?: boolean;
+  questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string; replyText?: string; holdAfterTool?: boolean; responseMode?: "text" | "auto"; redirectTo?: string;
 }
 export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
@@ -39,6 +39,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
       if (!isRecord(body) || !Array.isArray(body.messages)) throw new Error("Invalid generated provider request.");
       requests.push(body);
       headers.push(request.headers.authorization);
+      if (options.redirectTo) { response.writeHead(307, { Location: options.redirectTo }).end(); return; }
       const messages = body.messages.filter(isRecord);
       const userIndex = messages.findLastIndex((message) => message.role === "user");
       const prompt = String(messages[userIndex]?.content ?? "");
@@ -60,6 +61,8 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         chunk({ role: "assistant", content: "Generated work in progress." });
         held.add(response);
         response.on("close", () => held.delete(response));
+      } else if (options.responseMode === "text" && !prompt.includes("generated delayed")) {
+        finish();
       } else if (prompt.includes("generated structured question") && toolMessages.length === 0) {
         finish({ name: "ask_user", args: { question: "Choose a generated fixture approach?", choices: options.questionChoices ?? ["Generated first choice", "Generated second choice"], allowFreeform: !prompt.includes("choices only"), ...(options.questionRecommendation ? { recommendation: options.questionRecommendation } : {}) } });
       } else if (prompt.includes("generated delayed")) {
@@ -97,7 +100,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture bind failed.");
   const model = { ...base, ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
-  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, imageInput: options.imageInput ?? false, thinkingLevels: supportedThinking(model) }];
+  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, maxTokens: model.maxTokens, imageInput: options.imageInput ?? false, thinkingLevels: supportedThinking(model) }];
   class FixtureProvider implements ProviderAdapter {
     state: ProviderState = { status: "connected", models: catalog, login: null, diagnostic: null };
     onChange = () => {};
