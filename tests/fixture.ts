@@ -20,7 +20,11 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
   } while (Date.now() < deadline);
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
-export async function fixtureProvider(options: { reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean } = {}) {
+export interface GeneratedProviderOptions {
+  reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
+}
+export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
   const requests: Record<string, unknown>[] = [];
   const held = new Set<ServerResponse>();
@@ -48,7 +52,7 @@ export async function fixtureProvider(options: { reasoning?: boolean; exposeMode
         if (tool) chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] });
         else chunk({ role: "assistant", content: text });
         chunk({}, tool ? "tool_calls" : "stop");
-        response.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
+        if (!options.omitUsage) response.write(`data: ${JSON.stringify({ choices: [], usage: options.usage ?? { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
         response.end("data: [DONE]\n\n");
       };
       if (prompt.includes("generated slow")) {
@@ -91,7 +95,7 @@ export async function fixtureProvider(options: { reasoning?: boolean; exposeMode
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture bind failed.");
-  const model = { ...base, ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
+  const model = { ...base, ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
   const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, imageInput: options.imageInput ?? false, thinkingLevels: supportedThinking(model) }];
   class FixtureProvider implements ProviderAdapter {
     state: ProviderState = { status: "connected", models: catalog, login: null, diagnostic: null };
@@ -119,13 +123,13 @@ export async function fixtureProvider(options: { reasoning?: boolean; exposeMode
     },
   };
 }
-export async function setupFixture(options: { workerPath?: string; platform?: PlatformOptions; reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean } = {}) {
+export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(project);
   await writeFile(join(project, "fixture.txt"), "generated original\n");
-  const fixture = await fixtureProvider({ reasoning: options.reasoning, exposeModels: options.exposeModels, imageInput: options.imageInput });
+  const fixture = await fixtureProvider(options);
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform: options.platform, retentionKey: GENERATED_RETENTION_KEY });
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));

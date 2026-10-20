@@ -101,8 +101,16 @@ This is not a malware-free guarantee; script execution stays unavailable until
 a real SendBox boundary is qualified.
 
 This is a **macOS development alpha**, not the completed first milestone.
-Sandbox, complete remote side-panel/extension transport, kupo, Autopilot Max, finite budgets,
-multi-profile isolation and the broader dashboard are still incomplete.
+Explicit **estimate-based token/USD caps** and a separate Default-profile hard
+policy now share cumulative role-aware reservations. Unknown completion holds
+capacity; deletion, defaults and restart do not refund it. USD needs dated
+user-approved model rates, never a guessed Copilot price. These are admission
+limits, not exact provider-billing guarantees. CLI/TUI, desktop composer,
+settings and the profile usage dashboard share the SDK.
+
+Sandbox, complete remote side-panel/extension transport, kupo, Autopilot Max,
+multi-profile isolation, routed wind-down/authorized checkpoint commits and
+broader repository/visibility dashboard filters are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed

@@ -44,6 +44,30 @@ test("the CLI reviews and materializes exact repository artifacts before its exp
   } finally { sdk.disconnect(); await fixture.close(); }
 });
 
+test("the CLI applies explicit estimated budgets and a separate revision-bound profile policy without making a model call", async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    await fixture.configure();
+    const path = join(fixture.directory, "generated-budget.json"), policy = join(fixture.directory, "generated-budget-policy.json");
+    await writeFile(path, JSON.stringify({ kind: "limited", basis: "estimate", tokens: 50000 }));
+    const saved = await execute(["budget", "set", fixture.sessionId, path, "--confirm-review"]);
+    assert.match(saved.stderr, /Budgets can interrupt/);
+    assert.equal(JSON.parse(saved.stdout).status.remainingTokens, 50000);
+    await writeFile(policy, JSON.stringify({ basis: "estimate", tokens: 100000 }));
+    await execute(["budget", "policy", policy, "--revision", "0", "--confirm-review"]);
+    const dashboard = JSON.parse((await execute(["budget", "dashboard", "--role", "solver"])).stdout);
+    assert.equal(dashboard.policy.limit.tokens, 100000); assert.equal(dashboard.totals.calls, 0);
+    await sdk.slash(fixture.sessionId, "/budget set 90000 - confirm-estimates", "tui");
+    assert.equal((await sdk.budgets.status(fixture.sessionId)).status.remainingTokens, 90000);
+    await assert.rejects(() => sdk.slash(fixture.sessionId, "/dashboard null", "tui"), /object of dashboard/);
+    await writeFile(policy, "null");
+    await execute(["budget", "policy", policy, "--revision", "1", "--confirm-review"]);
+    assert.equal(fixture.service.controller.snapshot().budgetPolicy.limit, null);
+    assert.equal(fixture.requests.length, 0);
+  } finally { sdk.disconnect(); await fixture.close(); }
+});
+
 test("the CLI holds prompts without a model and shares session/project/plan lifecycle APIs", async () => {
   const fixture = await setupFixture();
   const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });

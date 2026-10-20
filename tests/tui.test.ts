@@ -318,3 +318,29 @@ test("the actual TUI answers a canonical question through its choices without in
     assert.deepEqual(client.settings.get()!.values.permissions.tools, []);
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
+
+test("the actual TUI sets warned estimated caps and opens authoritative cumulative accounting with F7", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture({ maxOutputTokens: 128 }); await fixture.configure();
+  const client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI budget did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/budget set 50000 - confirm-estimates");
+    await frameUntil("Budgets can interrupt");
+    setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Session estimate-based cap saved.");
+    assert.equal(fixture.session().controls.budget.kind, "limited");
+    setup.mockInput.pressKey("F7"); await frameUntil('"totals"');
+    setup.mockInput.pressKey("\u001b"); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("Generated native finite budget response."); setup.mockInput.pressEnter({ ctrl: true, shift: true });
+    await fixture.terminal();
+    setup.mockInput.pressKey("F7"); await frameUntil('"knownReportedTokens": 42');
+    assert.equal(fixture.requests.length, 1);
+    assert.equal(fixture.service.controller.snapshot().budgetEntries.length, 1);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});

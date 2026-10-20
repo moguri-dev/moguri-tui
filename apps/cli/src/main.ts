@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -17,6 +18,7 @@ export async function main(argv: string[]): Promise<void> {
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
     "confirm-write": { type: "boolean" }, branch: { type: "string" }, "materialization-id": { type: "string" },
+    model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -53,6 +55,10 @@ moguri artifact materialization|stop-materialization JOB_ID
 moguri question list|read ID
 moguri question answer ID ANSWER_FILE --revision N
 moguri question answer-draft ID --revision N
+moguri budget status SESSION_ID
+moguri budget dashboard [--project ID --folder ID --session ID --provider ID --model ID --role solver]
+moguri budget set SESSION_ID BUDGET.json --confirm-review
+moguri budget policy LIMIT_OR_NULL.json --revision N --confirm-review
 moguri project removal-preview ID
 moguri project export-artifacts ID --output ABSOLUTE_NEW_JSON_PATH
 moguri project materialize-preview ID [--workspace ID] [--branch NEW_LOCAL_BRANCH]
@@ -180,6 +186,22 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "answer" && args[0] && args[1]) output(await sdk.questions.answer(args[0], await readFile(args[1], "utf8"), expectedRevision()));
       else if (action === "answer-draft" && args[0]) output(await sdk.questions.answerDraft(args[0], expectedRevision()));
       else throw new Error("Use question list/read, answer ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
+    } else if (group === "budget") {
+      if (action === "status" && args[0]) output(await sdk.budgets.status(args[0]));
+      else if (action === "dashboard") output(await sdk.budgets.dashboard({ ...(values.project ? { projectId: values.project } : {}), ...(values.folder ? { folderId: values.folder } : {}), ...(values.session ? { sessionId: values.session } : {}), ...(values.model ? { modelId: values.model } : {}), ...(values.provider ? { providerId: values.provider } : {}), ...(values.role ? { role: parse(ModelRoleSchema, values.role) } : {}) }));
+      else if ((action === "set" || action === "policy") && args[action === "set" ? 1 : 0] && values["confirm-review"]) {
+        const path = args[action === "set" ? 1 : 0]!, metadata = await stat(path);
+        if (!metadata.isFile() || metadata.size > 64 * 1024) throw new Error("Choose a regular budget JSON file up to 64 KiB.");
+        const value: unknown = JSON.parse(await readFile(path, "utf8"));
+        console.error(BUDGET_WARNING);
+        if (action === "policy") output(await sdk.budgets.policy(value === null ? null : parse(BudgetLimitSchema, value), expectedRevision(), true));
+        else {
+          const session = snapshot.sessions.find((session) => session.id === args[0]);
+          if (!session) throw new Error("Choose an existing session ID.");
+          await sdk.sessions.configure(session.id, { ...session.controls, budget: parse(SessionBudgetSchema, value) }, session.revision);
+          output(await sdk.budgets.status(session.id));
+        }
+      } else throw new Error("Use budget status SESSION, dashboard, set SESSION BUDGET.json --confirm-review, or policy LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
       else if (action === "create" && args[0]) {
@@ -230,6 +252,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else throw new Error("Use models list, refresh, token ENDPOINT or clear-token ENDPOINT. Configure explicit endpoint URLs/limits in shared settings.");
     } else if (group === "slash") {
       if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
+      if (/^\/budget\s+(?:set|profile)\b/.test(action)) console.error(BUDGET_WARNING);
       const result = await sdk.slash(values.session, [action, ...args].join(" "), "cli");
       if (result.kind === "export" && result.path) output(await saveArtifactExport(result.path, result.document)); else output(result);
     } else if (group === "metachat") {

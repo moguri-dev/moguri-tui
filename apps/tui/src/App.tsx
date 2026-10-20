@@ -4,7 +4,7 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
@@ -357,9 +357,6 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       case "/autonomy":
         if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose a documented autonomy level. Only Manual is available.");
         await configure({ ...session.controls, autonomy: argument as Controls["autonomy"] }); break;
-      case "/budget":
-        if (argument !== "Unlimited") throw new Error("Only /budget Unlimited is enforceable in this checkpoint. No cap was applied.");
-        await configure({ ...session.controls, budget: { kind: "unlimited" } }); break;
       case "/attach":
         if (!argument) throw new Error("Use /attach path/to/project-file. Only explicit project UTF-8 snapshots are supported.");
         await editor.attach(argument); editor.edit(""); await editor.flush(); return;
@@ -423,6 +420,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       return;
     }
     if (key.name === "f5") { key.preventDefault(); setMode("artifacts"); return; }
+    if (key.name === "f7") { key.preventDefault(); void perform(async () => show(await client.budgets.dashboard())); return; }
     if (key.name === "f6") { key.preventDefault(); if (pendingQuestion) setMode("question"); else setNotice("No actual pending question is owned by this turn."); return; }
     if (mode === "compose" && key.name === "return" && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {
       key.preventDefault(); key.stopPropagation();
@@ -554,6 +552,7 @@ Ctrl+R reload draft  Ctrl+S save/keep my draft after a conflict
 Ctrl+V scroll full approval arguments
 Ctrl+G shared SDK settings  Ctrl+Space local dictation  F4 insert transcript
 F5 retained documents / artifact editor (also without a session)
+F7 profile usage dashboard (also without a session)
 F6 actual pending question choices. Shift+Cmd/Ctrl+Enter answers from saved text.
 Esc composer
 
@@ -568,7 +567,8 @@ Esc composer
 /config list|review ID|apply ID SHA256 acknowledge-risk|reject ID SHA256
 /mcp login SERVER | /mcp cancel AUTH_ID | /mcp clear-oauth SERVER
 /notifications shows shared attention preferences and current items
-/env Local | /autonomy Manual | /budget Unlimited
+/env Local | /autonomy Manual | /budget status
+/budget set TOKENS|- USD|- confirm-estimates | /dashboard
 /attach project/path.txt  (explicit @ project-file snapshot)
 /detach path-or-ID removes an attached snapshot
 /steer text | /interrupt text | /stop | /resume
@@ -599,7 +599,7 @@ Esc composer
 
 ${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
 
-Unsupported Sandbox, Remote, kupo, Autopilot Max and finite budgets
+Native Sandbox, kupo and Autopilot Max remain unqualified.
 fail closed. Guided still needs a human. Autopilot requires explicit
 bounded delegations. Folder, GitHub/session and image attachments
 are not implemented. Bare attachment prefixes stay literal.
@@ -639,7 +639,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           submit={() => void perform(() => submit(editor.getState().text))} />}
         <box height={4} flexShrink={0} flexDirection="column">
           <text fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (Ctrl+M)"}` : "Env Local | Model not set"}</text>
-          <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget Unlimited`}</text>
+          <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
           <text fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls` : "Factory defaults. Ctrl+K commands."}</text>
         </box>
       </box>
@@ -654,6 +654,7 @@ function TuiComposer({ editor, session, focused, submit }: { editor: DraftEditor
     if (ref.current && ref.current.plainText !== draft.text) ref.current.setText(draft.text);
   }, [draft.text]);
   return <box flexDirection="column" border borderColor={focused ? colors.accent : colors.border} padding={1} marginTop={1} flexShrink={0}>
+    {/^\/budget\s+(?:set|profile)\b/.test(draft.text) && <text fg={colors.attention} height={3} flexShrink={0}>{BUDGET_WARNING} Input reservations use an explicit estimate-based policy, not a billing guarantee.</text>}
     <textarea ref={ref} focused={focused} initialValue={draft.text} height={4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.background}
       placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Cmd/Ctrl+Enter queues. /help for commands."}
       keyBindings={[{ name: "return", ctrl: true, shift: true, action: "submit" }]} onSubmit={submit}
