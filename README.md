@@ -76,8 +76,10 @@ reports with revisions and actual source provenance. Create them without a
 conversation, or explicitly retain a completed user/model/tool result. Each has
 its own encrypted retention grant. Project removal previews the exact set and
 requires retain, export-then-delete or delete; session retention never erases it.
-Repository materialization/commit and structured-question auto-capture are not
-implemented by this slice.
+Real structured clarifications record actual user answers and retain them by
+default, with an explicit opt-out. Answers never grant tool/Git permissions.
+Repository materialization/commit and work-item/folder artifact organization
+remain separate first-release work.
 
 Dictation uses local NVIDIA Nemotron 3.5 through a pinned native runtime. The
 user explicitly accepts and downloads the model once. NVIDIA documents

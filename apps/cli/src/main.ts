@@ -48,6 +48,9 @@ moguri artifact source SOURCE_ID --session ID [--source-type message|tool]
 moguri artifact promote SOURCE_ID KIND NAME --session ID --digest SHA256
 moguri artifact archive|restore|delete ID --revision N [--confirm-remove]
 moguri artifact export ID --output ABSOLUTE_NEW_JSON_PATH
+moguri question list|read ID
+moguri question answer ID ANSWER_FILE --revision N
+moguri question answer-draft ID --revision N
 moguri project removal-preview ID
 moguri project export-artifacts ID --output ABSOLUTE_NEW_JSON_PATH
 moguri project remove ID --revision N --confirm-remove --artifacts retain|delete|export --digest PREVIEW_SHA [--exported-digest SAVED_EXPORT_SHA]
@@ -167,6 +170,12 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (values.digest || values["confirm-review"]) throw new Error("Use both --digest SHA256 and --confirm-review after inspecting the source snapshot.");
         else output(action === "folder" ? await sdk.attachments.folderPreview(values.session, args[0]) : action === "github" ? await sdk.attachments.githubPreview(values.session, args[0]) : await sdk.attachments.sessionPreview(values.session, args[0]));
       } else throw new Error("Use context file/image/folder/github/session/read. No source is attached implicitly.");
+    } else if (group === "question") {
+      if (action === "list") output(snapshot.questions.filter((question) => !values.session || question.sessionId === values.session));
+      else if (action === "read" && args[0]) { const question = snapshot.questions.find((question) => question.id === args[0]); if (!question) throw new Error("Choose an actual question ID from this profile."); output(question); }
+      else if (action === "answer" && args[0] && args[1]) output(await sdk.questions.answer(args[0], await readFile(args[1], "utf8"), expectedRevision()));
+      else if (action === "answer-draft" && args[0]) output(await sdk.questions.answerDraft(args[0], expectedRevision()));
+      else throw new Error("Use question list/read, answer ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
       else if (action === "create" && args[0]) {

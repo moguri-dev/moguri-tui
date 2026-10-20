@@ -10,7 +10,7 @@ type MoguriClient = MoguriSdk;
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor"];
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
@@ -36,6 +36,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
+  const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
   const availableModels = snapshot?.provider.models.filter((model) => !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
   const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
   const localIssues = snapshot?.issues.filter((issue) => issue.projectId === project?.id && !issue.archived) ?? [];
@@ -178,6 +179,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     const name = (firstSpace < 0 ? text : text.slice(0, firstSpace)).trim();
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
+      if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision); return; }
       if (name === "/steer" || name === "/interrupt") editor.edit(argument);
       await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
       return;
@@ -420,6 +422,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       return;
     }
     if (key.name === "f5") { key.preventDefault(); setMode("artifacts"); return; }
+    if (key.name === "f6") { key.preventDefault(); if (pendingQuestion) setMode("question"); else setNotice("No actual pending question is owned by this turn."); return; }
     if (mode === "compose" && key.name === "return" && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {
       key.preventDefault(); key.stopPropagation();
       if (editor) void perform(() => submit(editor.getState().text, !key.shift));
@@ -469,7 +472,18 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         <text fg={colors.muted}>{"Ctrl+N new session\nCtrl+A active/archive\nCtrl+Q save and leave"}</text>
       </box>}
       <box flexGrow={1} minWidth={0} flexDirection="column" paddingLeft={2} paddingRight={2}>
-        {mode === "settings" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+        {mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
+          {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(pendingQuestion.question)}</text></scrollbox>
+            <select focused flexGrow={1} options={[...pendingQuestion.choices.map((choice, index) => ({ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` })), ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
+              if (!option) return;
+              if (option.value === "freeform") { setMode("compose"); setNotice("Type your actual answer. Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still queues."); return; }
+              const index = Number(String(option.value).slice(7)), choice = pendingQuestion.choices[index];
+              if (choice === undefined) { setNotice("This offered answer is no longer available. Review the current question."); return; }
+              void perform(async () => { await client.questions.answer(pendingQuestion.id, choice, pendingQuestion.revision); setMode("compose"); });
+            }} /></> : <text fg={colors.muted}>This question was answered or cancelled. Esc returns without inventing an answer.</text>}
+          <text fg={colors.muted} height={3}>Never enter credentials. Use connection settings. Source provenance is retained; model confidence cannot grant policy. Esc returns.</text></box> :
+        mode === "settings" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent}><strong>Shared Moguri SDK settings</strong></text><text fg={colors.muted}>Same settings and APIs as desktop. Optional subagents/evolution start off.</text>
           <select focused flexGrow={1} options={[
             { name: "System prompt: view, edit, restore", value: "prompt" },
@@ -539,6 +553,7 @@ Ctrl+R reload draft  Ctrl+S save/keep my draft after a conflict
 Ctrl+V scroll full approval arguments
 Ctrl+G shared SDK settings  Ctrl+Space local dictation  F4 insert transcript
 F5 retained documents / artifact editor (also without a session)
+F6 actual pending question choices. Shift+Cmd/Ctrl+Enter answers from saved text.
 Esc composer
 
 /connect | /cancel-login | /disconnect | /models | /model ID
@@ -614,6 +629,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(JSON.stringify(session.pendingApproval.call.arguments, null, 2))}</text></scrollbox>
           <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
         </box>}
+        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text><text fg={colors.muted} height={2} flexShrink={0}>Type in the saved composer; Shift+Cmd/Ctrl+Enter answers. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
         {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}

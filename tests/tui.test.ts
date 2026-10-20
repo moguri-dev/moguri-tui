@@ -294,3 +294,25 @@ test("the actual TUI edits a retained document through shared commands and brows
     assert.equal(fixture.requests.length, 0);
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
+test("the actual TUI answers a canonical question through its choices without inventing consent", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  await fixture.configure();
+  const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI question did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("generated structured question choices only"); setup.mockInput.pressEnter({ ctrl: true, shift: true });
+    const question = await waitFor(() => fixture.service.controller.snapshot().questions.find((question) => question.status === "open"));
+    await frameUntil("Your actual answer is needed");
+    setup.mockInput.pressKey("F6"); await frameUntil("Actual user question");
+    setup.mockInput.pressEnter();
+    await waitFor(() => fixture.service.controller.snapshot().questions.find((value) => value.id === question.id)?.answer?.actor === "user");
+    await fixture.terminal(); await frameUntil("Write a prompt");
+    assert.equal(fixture.service.controller.snapshot().artifacts[0]?.sources.at(-1)?.actor, "user");
+    assert.deepEqual(client.settings.get()!.values.permissions.tools, []);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});

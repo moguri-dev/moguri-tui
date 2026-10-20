@@ -137,3 +137,20 @@ test("the CLI retains typed documents, exports exact revisions and requires revi
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
 });
+test("the CLI answers only the exact canonical pending question with actual user provenance", { skip: process.platform !== "darwin" }, async () => {
+  const fixture = await setupFixture();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    await fixture.configure(); await fixture.send("generated structured question");
+    const deadline = Date.now() + 8000;
+    while (!fixture.service.controller.snapshot().questions.length && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 15));
+    const question = JSON.parse((await execute(["question", "list", "--session", fixture.sessionId])).stdout)[0];
+    assert.ok(question); assert.equal(question.answer, null);
+    const path = join(fixture.directory, "generated-question-answer.txt");
+    await writeFile(path, "Generated actual CLI answer.");
+    await execute(["question", "answer", question.id, path, "--revision", "0"]); await fixture.terminal();
+    assert.equal(fixture.service.controller.snapshot().questions[0]?.answer?.actor, "user");
+    assert.match((await execute(["artifact", "read", fixture.service.controller.snapshot().artifacts[0]!.id])).stdout, /Generated actual CLI answer/);
+    assert.deepEqual(fixture.service.controller.snapshot().settings.values.permissions.tools, []);
+  } finally { await fixture.close(); }
+});

@@ -55,6 +55,8 @@ export async function fixtureProvider(options: { reasoning?: boolean; exposeMode
         chunk({ role: "assistant", content: "Generated work in progress." });
         held.add(response);
         response.on("close", () => held.delete(response));
+      } else if (prompt.includes("generated structured question") && toolMessages.length === 0) {
+        finish({ name: "ask_user", args: { question: "Choose a generated fixture approach?", choices: ["Generated first choice", "Generated second choice"], allowFreeform: !prompt.includes("choices only") } });
       } else if (prompt.includes("generated delayed")) {
         const timer = setTimeout(() => finish(), 600);
         response.on("close", () => clearTimeout(timer));
