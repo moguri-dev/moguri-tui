@@ -4,17 +4,19 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question";
-const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor"];
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery";
+const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor"];
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
-export function TuiApp({ client, onQuit, initialSessionId, native }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string; native?: TuiNativeActions }) {
+export function TuiApp({ client: initialClient, onQuit, initialSessionId, native }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string; native?: TuiNativeActions }) {
+  const [client, setClient] = useState(initialClient);
+  const clients = useRef(new Set([initialClient]));
   const { snapshot, status, error, events } = useMoguri(client);
   const renderer = useRenderer();
   const { width } = useTerminalDimensions();
@@ -32,8 +34,12 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
   const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
+  const [profiles, setProfiles] = useState<ProfileCatalog | null>(null);
+  const profileEditor = useRef<Profile | null>(null);
+  const switchingProfile = useRef(false);
+  const [profilePending, setProfilePending] = useState(false);
   const editors = useRef(new Map<string, DraftEditor>());
-  useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); }, []);
+  useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); for (const client of clients.current) client.disconnect(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
@@ -57,6 +63,22 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
   };
   const command = (command: Command) => perform(() => client.command(command));
   const chooseSession = async (id: string) => { await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
+  const openProfiles = async () => { setProfiles((await client.profiles.list()).catalog); setMode("profiles"); };
+  const chooseProfile = async (id: string) => {
+    if (switchingProfile.current) throw new Error("A profile switch is already in progress.");
+    if (editorModes.includes(mode)) throw new Error("Save or discard the local editor before switching profiles.");
+    if (snapshot?.jobs.some((job) => job.kind === "voice.record" && job.status === "running")) throw new Error("Stop owned dictation before switching profiles. Audio is not moved.");
+    switchingProfile.current = true; setProfilePending(true);
+    try {
+      for (const editor of editors.current.values()) await editor.flush();
+      const next = await client.profiles.open(id);
+      for (const editor of editors.current.values()) editor.dispose(); editors.current.clear();
+      client.disconnect(); clients.current.delete(client); clients.current.add(next); setClient(next);
+      setSelectedId(null); setMode("compose"); setTokenValue(""); setTokenServer(""); setSettingsText(""); setCapabilityOutput(""); setNotice("");
+      artifactEditor.current = null; issueEditor.current = { id: null, revision: 0 }; profileEditor.current = null;
+    } finally { switchingProfile.current = false; setProfilePending(false); }
+  };
+  const openProfileEditor = (profile: Profile | null) => { profileEditor.current = profile; setSettingsText(JSON.stringify({ name: profile?.name ?? "", color: profile?.color ?? null }, null, 2)); setMode("profile-editor"); };
   const newSession = async (global = false) => {
     await editor?.flush();
     const result = await client.sessions.create(global ? null : session?.projectId ?? null);
@@ -112,7 +134,16 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     openArtifactEditor({ ...result.artifact, text: result.text, sessionId: result.artifact.originSessionId });
   };
   const saveSettings = (text: string) => perform(async () => {
-    if (mode === "artifact-editor") {
+    if (mode === "profile-editor") {
+      if (switchingProfile.current) throw new Error("A profile operation is already in progress.");
+      const values = parse(ProfileDraftSchema, JSON.parse(text)), current = profileEditor.current;
+      switchingProfile.current = true; setProfilePending(true);
+      try {
+        if (current) await client.profiles.update(current.id, values, current.revision);
+        else { const created = await client.profiles.create(values.name, values.color); await client.profiles.wait(created.id!); }
+        await openProfiles(); setNotice("Profile metadata saved. Choose it explicitly; no accounts, projects or context were copied."); return;
+      } finally { switchingProfile.current = false; setProfilePending(false); }
+    } else if (mode === "artifact-editor") {
       const request = artifactEditor.current;
       if (!request) throw new Error("Open a retained document first.");
       if (request.id) await client.artifacts.update(request.id, parse(ArtifactChangesSchema, JSON.parse(text)), request.revision);
@@ -152,12 +183,15 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     await client.voice.insert(session.id, latestTranscript.id, client.getState().snapshot!.sessions.find((item) => item.id === session.id)!.draft.revision);
   });
   usePaste((event) => {
+    if (switchingProfile.current) { event.preventDefault(); return; }
     if (mode !== "mcp-token") return;
     event.preventDefault(); event.stopPropagation();
     const text = new TextDecoder().decode(event.bytes).replace(/[\r\n]/g, "");
     setTokenValue((value) => (value + text).slice(0, 32768));
   });
   const slashResult = async (result: SlashResult) => {
+    if (result.kind === "profiles") { await openProfiles(); return; }
+    if (result.kind === "profile") { await chooseProfile(result.profileId); return; }
     if (result.kind === "ok") { setNotice(result.message); return; }
     if (result.kind === "text") { show(result.text); return; }
     if (result.kind === "session") { await chooseSession(result.sessionId); return; }
@@ -397,6 +431,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
     editor.edit(""); await editor.flush();
   };
   useKeyboard((key) => {
+    if (switchingProfile.current) { key.preventDefault(); key.stopPropagation(); return; }
     if (mode === "mcp-token") {
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
@@ -420,7 +455,8 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
       return;
     }
     if (key.name === "f5") { key.preventDefault(); setMode("artifacts"); return; }
-    if (key.name === "f7") { key.preventDefault(); void perform(async () => show(await client.budgets.dashboard())); return; }
+    if (key.name === "f7") { key.preventDefault(); void perform(async () => show({ ...(await client.budgets.dashboard()), globalBudget: (await client.profiles.list()).catalog.globalBudget })); return; }
+    if (key.name === "f8") { key.preventDefault(); void perform(openProfiles); return; }
     if (key.name === "f6") { key.preventDefault(); if (pendingQuestion) setMode("question"); else setNotice("No actual pending question is owned by this turn."); return; }
     if (mode === "compose" && key.name === "return" && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {
       key.preventDefault(); key.stopPropagation();
@@ -461,17 +497,50 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
   }) ?? [];
   return <box width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
     <box height={3} paddingLeft={2} paddingRight={2} alignItems="center" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
-      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(project?.name ?? (session ? "No project" : "Workspace"))}  /  {status}</text>
+      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}  /  {safe(project?.name ?? (session ? "No project" : "Workspace"))}  /  {profilePending ? "Updating profile..." : status}</text>
     </box>
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {width >= 100 && <box width={26} border={["right"]} borderColor={colors.border} padding={1} flexDirection="column">
         <text fg={colors.muted}>{showArchived ? "ARCHIVED" : "SESSIONS"}  Ctrl+P</text>
         {options.length ? <select flexGrow={1} options={options} focused={mode === "sessions"} selectedBackgroundColor={colors.panel} selectedTextColor={colors.accent} textColor={colors.foreground} descriptionColor={colors.muted}
           onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> : <text fg={colors.muted}>{"\nNo sessions yet.\n\nCtrl+O open project\nCtrl+L connect Copilot"}</text>}
-        <text fg={colors.muted}>{"Ctrl+N new session\nCtrl+A active/archive\nCtrl+Q save and leave"}</text>
+        <text fg={colors.muted}>{"Ctrl+N new session\nCtrl+A active/archive\nF8 profiles\nCtrl+Q save and leave"}</text>
       </box>}
       <box flexGrow={1} minWidth={0} flexDirection="column" paddingLeft={2} paddingRight={2}>
-        {mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+        {mode === "profiles" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>Profiles / {safe(snapshot?.profile?.name ?? client.profileId)}</text>
+          <text fg={colors.muted} height={3}>Accounts, projects, drafts and memory stay separate. Switching does not stop owned work. New profiles copy no private data or model selection.</text>
+          <select focused={!profilePending} flexGrow={1} options={[
+            { name: "+ Create isolated profile", description: "Edit display name and optional #RRGGBB accent.", value: "create" },
+            { name: "Rename / color current profile", description: "Immutable identity and credentials are preserved.", value: "edit" },
+            ...(profiles?.profiles ?? []).map((profile) => ({ name: `${profile.id === client.profileId ? "* " : ""}${safe(profile.name)}`, description: `${profile.status} / ${profile.id}${profile.diagnostic ? ` / ${safe(profile.diagnostic)}` : ""}`, value: `profile:${profile.id}` })),
+          ]} onSelect={(_, option) => { if (!option || switchingProfile.current) return; void perform(async () => {
+            if (option.value === "create") { openProfileEditor(null); return; }
+            const profile = profiles?.profiles.find((profile) => profile.id === (option.value === "edit" ? client.profileId : String(option.value).slice(8)));
+            if (!profile) throw new Error("Refresh the actual profile catalog with F8.");
+            if (option.value === "edit") { openProfileEditor(profile); return; }
+            if (profile.status !== "ready") {
+              profileEditor.current = profile; setMode("profile-recovery"); return;
+            }
+            await chooseProfile(profile.id);
+          }); }} />
+          <text fg={colors.muted} height={3}>F8 refreshes. Enter chooses or edits. Partial setup is never selected or adopted. /profile shows observed revisions and explicit recovery. Esc returns.</text></box> :
+        mode === "profile-recovery" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.attention} height={2}>Owned profile setup / {safe(profileEditor.current?.name ?? "Refresh with F8")}</text>
+          <scrollbox height={10}><text fg={colors.foreground}>{safe(JSON.stringify(profileEditor.current, null, 2))}</text></scrollbox>
+          <text fg={colors.muted} height={4}>Inspect the actual state-directory profiles/ID resource directory before retrying. A retry never adopts unsafe paths, copies accounts, or silently switches the client.</text>
+          <select focused={!profilePending} flexGrow={1} options={[{ name: profileEditor.current?.status === "creating" ? "Stop this owned profile setup" : "I inspected owned resources: retry setup", description: "Explicit user action; partial effects are preserved.", value: "recover" }, { name: "Return without changing setup", description: "No retry or cancellation is inferred.", value: "return" }]} onSelect={(_, option) => { if (!option || switchingProfile.current) return; void perform(async () => {
+            const profile = profileEditor.current;
+            if (option.value === "return") { await openProfiles(); return; }
+            if (!profile) throw new Error("Refresh the actual profile catalog with F8.");
+            switchingProfile.current = true; setProfilePending(true);
+            try {
+              if (profile.status === "creating") await client.profiles.stop(profile.id);
+              else { await client.profiles.retry(profile.id, profile.revision, true); await client.profiles.wait(profile.id); }
+              await openProfiles();
+            } finally { switchingProfile.current = false; setProfilePending(false); }
+          }); }} /></box> :
+        mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(pendingQuestion.question)}</text></scrollbox>
             <select focused flexGrow={1} options={[...pendingQuestion.choices.map((choice, index) => ({ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` })), ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
@@ -518,7 +587,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
           <text fg={colors.muted}>Prompt edits can break functionality. Hard permissions remain final.</text>
         </box> :
         editorModes.includes(mode) ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
-          {mode === "artifact-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Independent retained document. Only text is copied; model provenance is preserved. Ctrl+Enter saves; Esc discards this edit. Editing does not publish a file or grant permissions.</text> : mode === "project-editor" ? <text fg={colors.attention} height={3} flexShrink={0}>Project policy and bindings. Save never runs scripts or publishes defaults. Ctrl+Enter saves; Esc discards.</text> : mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
+          {mode === "profile-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Profile metadata only. Use a display name and null or #RRGGBB color. No account, project or model context is copied. Ctrl+Enter saves; Esc discards. Creation does not switch scope.</text> : mode === "artifact-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Independent retained document. Only text is copied; model provenance is preserved. Ctrl+Enter saves; Esc discards this edit. Editing does not publish a file or grant permissions.</text> : mode === "project-editor" ? <text fg={colors.attention} height={3} flexShrink={0}>Project policy and bindings. Save never runs scripts or publishes defaults. Ctrl+Enter saves; Esc discards.</text> : mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
           <text fg={colors.attention} height={width >= 100 ? 3 : 4} flexShrink={0}>{SYSTEM_PROMPT_WARNING}</text><text fg={colors.muted} height={2} flexShrink={0}>Ctrl+Enter acknowledges risk and saves. Ctrl+R restores defaults. Esc cancels.</text></>}
           <SettingsTextEditor value={settingsText} change={setSettingsText} submit={(text) => void saveSettings(text)} />
         </box> :
@@ -553,6 +622,7 @@ Ctrl+V scroll full approval arguments
 Ctrl+G shared SDK settings  Ctrl+Space local dictation  F4 insert transcript
 F5 retained documents / artifact editor (also without a session)
 F7 profile usage dashboard (also without a session)
+F8 isolated profile picker, create, rename and setup inspection
 F6 actual pending question choices. Shift+Cmd/Ctrl+Enter answers from saved text.
 Esc composer
 
@@ -569,6 +639,7 @@ Esc composer
 /notifications shows shared attention preferences and current items
 /env Local | /autonomy Manual | /budget status
 /budget set TOKENS|- USD|- confirm-estimates | /dashboard
+/profiles | /profile [use ID|create NAME|rename ID REV NAME|retry ID REV confirm-review]
 /attach project/path.txt  (explicit @ project-file snapshot)
 /detach path-or-ID removes an attached snapshot
 /steer text | /interrupt text | /stop | /resume
@@ -654,7 +725,7 @@ function TuiComposer({ editor, session, focused, submit }: { editor: DraftEditor
     if (ref.current && ref.current.plainText !== draft.text) ref.current.setText(draft.text);
   }, [draft.text]);
   return <box flexDirection="column" border borderColor={focused ? colors.accent : colors.border} padding={1} marginTop={1} flexShrink={0}>
-    {/^\/budget\s+(?:set|profile)\b/.test(draft.text) && <text fg={colors.attention} height={3} flexShrink={0}>{BUDGET_WARNING} Input reservations use an explicit estimate-based policy, not a billing guarantee.</text>}
+    {/^\/budget\s+(?:set|profile|global)\b/.test(draft.text) && <text fg={colors.attention} height={3} flexShrink={0}>{BUDGET_WARNING} Input reservations use an explicit estimate-based policy, not a billing guarantee.</text>}
     <textarea ref={ref} focused={focused} initialValue={draft.text} height={4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.background}
       placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Cmd/Ctrl+Enter queues. /help for commands."}
       keyBindings={[{ name: "return", ctrl: true, shift: true, action: "submit" }]} onSubmit={submit}

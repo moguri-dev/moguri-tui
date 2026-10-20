@@ -9,6 +9,47 @@ import { MoguriSdk as MoguriClient } from "../packages/sdk/src/index.ts";
 import { envelope } from "../apps/service/src/controller.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
+import { profileFixture } from "./fixtures/profiles.ts";
+
+test("the actual TUI creates and renames an isolated profile, flushes old drafts and switches back without rebinding editors", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+  const fixture = await profileFixture(), first = await fixture.sdk.sessions.create(null, "Generated terminal Default");
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI profiles did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const select = (index: number) => { for (let step = 0; step < index; step++) setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter(); };
+  const replaceEditor = async (value: unknown) => { setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify(value)); setup.mockInput.pressEnter({ ctrl: true }); };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk })));
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("Generated private Default draft remains owned.");
+    setup.mockInput.pressKey("F8"); await frameUntil("Create isolated profile"); setup.mockInput.pressEnter();
+    await frameUntil("Profile metadata only.");
+    await replaceEditor({ name: "Generated terminal Beta", color: "#557799" });
+    await frameUntil("Create isolated profile");
+    await frameUntil("Generated terminal Beta");
+    const profile = (await fixture.sdk.profiles.list()).catalog.profiles.find((profile) => profile.name === "Generated terminal Beta")!;
+    select(3); await frameUntil("No sessions yet.");
+    assert.equal(fixture.service.controller.snapshot().sessions.find((session) => session.id === first.id)?.draft.text, "Generated private Default draft remains owned.");
+    assert.equal(setup.captureCharFrame().includes("Generated private Default draft remains owned."), false);
+    setup.mockInput.pressKey("n", { ctrl: true }); await frameUntil("Write a prompt");
+    const beta = await fixture.service.profiles.control(profile.id);
+    await waitFor(() => beta.snapshot().sessions.length === 1);
+    assert.equal(beta.snapshot().sessions[0]?.controls.modelId, null);
+    setup.mockInput.pressKey("F8"); await frameUntil("Create isolated profile"); select(1);
+    await frameUntil("Profile metadata only.");
+    setup.mockInput.pressKey("q", { ctrl: true }); await frameUntil("Save with Ctrl+Enter");
+    await replaceEditor({ name: "Generated terminal Beta renamed", color: "#776655" });
+    await frameUntil("Create isolated profile");
+    await frameUntil("Generated terminal Beta renamed");
+    select(2); await frameUntil("Generated private Default draft remains owned.");
+    assert.equal(fixture.service.controller.snapshot().sessions.length, 1);
+    assert.equal(beta.snapshot().sessions.length, 1);
+    assert.equal(fixture.providers.reduce((sum, provider) => sum + provider.requests.length, 0), 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
 
 test("the actual OpenTUI client selects Copilot, streams, stops and receives a second client's draft", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture();

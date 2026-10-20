@@ -5,12 +5,12 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
-    help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" }, workspace: { type: "string" },
+    help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" }, workspace: { type: "string" }, profile: { type: "string" }, color: { type: "string" },
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
     "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" },
@@ -27,6 +27,12 @@ export async function main(argv: string[]): Promise<void> {
 moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
+moguri COMMAND --profile ID        Immutable scope; never changes another client
+moguri profile list|create NAME [--color '#RRGGBB']
+moguri profile update ID CHANGES.json --revision N
+moguri profile retry ID --revision N --confirm-review
+moguri profile stop ID             Explicit owned setup cancellation
+moguri profile defaults CONTROLS.json --revision N  Shared global preferences
 moguri session create [--project ID]  Omit project for a project-free chat
 moguri session create --controls FILE  Explicit startup control overrides
 moguri models list|refresh         Copilot and configured local model discovery
@@ -59,6 +65,7 @@ moguri budget status SESSION_ID
 moguri budget dashboard [--project ID --folder ID --session ID --provider ID --model ID --role solver]
 moguri budget set SESSION_ID BUDGET.json --confirm-review
 moguri budget policy LIMIT_OR_NULL.json --revision N --confirm-review
+moguri budget global LIMIT_OR_NULL.json --revision N --confirm-review
 moguri project removal-preview ID
 moguri project export-artifacts ID --output ABSOLUTE_NEW_JSON_PATH
 moguri project materialize-preview ID [--workspace ID] [--branch NEW_LOCAL_BRANCH]
@@ -131,8 +138,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     const require = createRequire(import.meta.url);
     const root = fileURLToPath(new URL(".", import.meta.url));
     const runtime = group === "desktop" ? require("electron") as string : process.execPath;
-    const args = group === "desktop" ? [fileURLToPath(new URL("..", import.meta.url))] : [`${root}tui.mjs`, ...(values.project ? ["--project", values.project] : [])];
-    const child = spawn(runtime, args, { stdio: "inherit" });
+    const args = group === "desktop" ? [fileURLToPath(new URL("..", import.meta.url))] : [`${root}tui.mjs`, ...(values.project ? ["--project", values.project] : []), ...(values.profile ? ["--profile", values.profile] : [])];
+    const child = spawn(runtime, args, { stdio: "inherit", env: { ...process.env, ...(values.profile ? { MOGURI_PROFILE_ID: values.profile } : {}) } });
     await new Promise<void>((resolve, reject) => { child.on("error", reject); child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`Moguri ${group} exited with ${code}.`))); });
     return;
   }
@@ -145,7 +152,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     }
     return;
   }
-  const sdk = await connectMoguri();
+  const sdk = await connectMoguri({ profileId: values.profile ?? process.env.MOGURI_PROFILE_ID });
   let keep = false;
   const output = (value: unknown) => console.log(typeof value === "string" ? value : JSON.stringify(value, null, 2));
   const waitForJob = async (jobId: string, stop: () => Promise<unknown>, label = "Dictation", result?: () => Promise<unknown>) => {
@@ -171,6 +178,14 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     const projectId = args[0] ?? values.project;
     if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
+    } else if (group === "profile" || group === "profiles") {
+      if (!action || action === "list") output(await sdk.profiles.list());
+      else if (action === "create" && args.length) { const created = await sdk.profiles.create(args.join(" "), values.color ?? null); output(await sdk.profiles.wait(created.id!)); }
+      else if (action === "update" && args[0] && args[1]) output(await sdk.profiles.update(args[0], parse(ProfileChangesSchema, JSON.parse(await readFile(args[1], "utf8"))), expectedRevision()));
+      else if (action === "retry" && args[0] && values["confirm-review"]) { await sdk.profiles.retry(args[0], expectedRevision(), true); output(await sdk.profiles.wait(args[0])); }
+      else if (action === "stop" && args[0]) output(await sdk.profiles.stop(args[0]));
+      else if (action === "defaults" && args[0]) output(await sdk.profiles.defaults(parse(ControlDefaultsSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
+      else throw new Error("Use profile list/create/update/retry/stop/defaults. Updates need an observed revision; retry requires explicit --confirm-review after resource inspection. Use --profile ID to select scope.");
     } else if (group === "context") {
       if (!values.session || !args[0]) throw new Error("Choose --session ID and an explicit source path/reference.");
       if (action === "file" || action === "image") output(await sdk.attachments.file(values.session, args[0], action === "image" ? "image" : "text"));
@@ -189,19 +204,20 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "budget") {
       if (action === "status" && args[0]) output(await sdk.budgets.status(args[0]));
       else if (action === "dashboard") output(await sdk.budgets.dashboard({ ...(values.project ? { projectId: values.project } : {}), ...(values.folder ? { folderId: values.folder } : {}), ...(values.session ? { sessionId: values.session } : {}), ...(values.model ? { modelId: values.model } : {}), ...(values.provider ? { providerId: values.provider } : {}), ...(values.role ? { role: parse(ModelRoleSchema, values.role) } : {}) }));
-      else if ((action === "set" || action === "policy") && args[action === "set" ? 1 : 0] && values["confirm-review"]) {
+      else if ((action === "set" || action === "policy" || action === "global") && args[action === "set" ? 1 : 0] && values["confirm-review"]) {
         const path = args[action === "set" ? 1 : 0]!, metadata = await stat(path);
         if (!metadata.isFile() || metadata.size > 64 * 1024) throw new Error("Choose a regular budget JSON file up to 64 KiB.");
         const value: unknown = JSON.parse(await readFile(path, "utf8"));
         console.error(BUDGET_WARNING);
-        if (action === "policy") output(await sdk.budgets.policy(value === null ? null : parse(BudgetLimitSchema, value), expectedRevision(), true));
+        if (action === "global") output(await sdk.profiles.globalBudget(value === null ? null : parse(BudgetLimitSchema, value), expectedRevision(), true));
+        else if (action === "policy") output(await sdk.budgets.policy(value === null ? null : parse(BudgetLimitSchema, value), expectedRevision(), true));
         else {
           const session = snapshot.sessions.find((session) => session.id === args[0]);
           if (!session) throw new Error("Choose an existing session ID.");
           await sdk.sessions.configure(session.id, { ...session.controls, budget: parse(SessionBudgetSchema, value) }, session.revision);
           output(await sdk.budgets.status(session.id));
         }
-      } else throw new Error("Use budget status SESSION, dashboard, set SESSION BUDGET.json --confirm-review, or policy LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
+      } else throw new Error("Use budget status SESSION, dashboard, set SESSION BUDGET.json --confirm-review, or policy/global LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
       else if (action === "create" && args[0]) {
@@ -252,7 +268,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else throw new Error("Use models list, refresh, token ENDPOINT or clear-token ENDPOINT. Configure explicit endpoint URLs/limits in shared settings.");
     } else if (group === "slash") {
       if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
-      if (/^\/budget\s+(?:set|profile)\b/.test(action)) console.error(BUDGET_WARNING);
+      if (/^\/budget\s+(?:set|profile|global)\b/.test(action)) console.error(BUDGET_WARNING);
       const result = await sdk.slash(values.session, [action, ...args].join(" "), "cli");
       if (result.kind === "export" && result.path) output(await saveArtifactExport(result.path, result.document)); else output(result);
     } else if (group === "metachat") {

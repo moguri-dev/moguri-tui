@@ -9,14 +9,14 @@ import { MOGURI_ASCII, type MoguriSdk } from "../../../packages/sdk/src/index.ts
 import { TuiApp } from "./App.tsx";
 import { nativeActions } from "./native.ts";
 
-const { values } = parseArgs({ options: { project: { type: "string" }, help: { type: "boolean" } } });
+const { values } = parseArgs({ options: { project: { type: "string" }, profile: { type: "string" }, help: { type: "boolean" } } });
 if (values.help) {
-  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project]\n\nCtrl+L Copilot login, Ctrl+O open project, Ctrl+M models, Ctrl+K commands.\nThe desktop and TUI share the same private local service.");
+  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nCtrl+L Copilot login, Ctrl+O open project, Ctrl+M models, F8 profiles, Ctrl+K commands.\nThe desktop and TUI share the same private local service.");
 } else {
   let client: MoguriSdk | undefined;
   try {
     if (process.stdout.isTTY) console.log(MOGURI_ASCII);
-    client = await connectMoguri();
+    client = await connectMoguri({ profileId: values.profile ?? process.env.MOGURI_PROFILE_ID });
     let initialSessionId: string | undefined;
     if (values.project) {
       const deadline = Date.now() + 5000;

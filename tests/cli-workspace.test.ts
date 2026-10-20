@@ -7,6 +7,39 @@ import { readFile, writeFile } from "node:fs/promises";
 import { setupFixture } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { profileFixture } from "./fixtures/profiles.ts";
+
+test("the CLI manages profiles and uses explicit or inherited immutable scope without moving another client", async () => {
+  const fixture = await profileFixture();
+  const execute = (args: string[], profile = "default") => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: fixture.stateDir, MOGURI_PROFILE_ID: profile } });
+  try {
+    const first = await fixture.sdk.sessions.create(null, "Generated CLI Default");
+    const profile = JSON.parse((await execute(["profile", "create", "Generated CLI Beta", "--color", "#557799"])).stdout);
+    assert.equal(profile.status, "ready");
+    const empty = JSON.parse((await execute(["status", "--profile", profile.id])).stdout);
+    assert.equal(empty.profileId, profile.id); assert.deepEqual(empty.sessions, []); assert.deepEqual(empty.projects, []);
+    const created = JSON.parse((await execute(["session", "create"], profile.id)).stdout);
+    const own = JSON.parse((await execute(["status", "--profile", "default"], profile.id)).stdout);
+    assert.deepEqual(own.sessions.map((session: { id: string }) => session.id), [first.id]);
+    const beta = await fixture.sdk.profiles.open(profile.id); fixture.clients.push(beta);
+    assert.equal(beta.getState().snapshot!.sessions[0]?.id, created.id);
+    assert.equal(beta.getState().snapshot!.sessions[0]?.controls.modelId, null);
+    const changes = join(fixture.directory, "generated-profile-changes.json"); await writeFile(changes, JSON.stringify({ name: "Generated CLI Beta renamed", color: "#776655" }));
+    await execute(["profile", "update", profile.id, changes, "--revision", String(profile.revision)]);
+    await assert.rejects(() => execute(["profile", "update", profile.id, changes, "--revision", String(profile.revision)]), /metadata changed/);
+    const navigation = JSON.parse((await execute(["slash", `/profile use ${profile.id}`, "--session", first.id!])).stdout);
+    assert.deepEqual(navigation, { kind: "profile", profileId: profile.id }); assert.equal(fixture.sdk.profileId, "default");
+    const global = join(fixture.directory, "generated-global-limit.json"); await writeFile(global, JSON.stringify({ basis: "estimate", tokens: 50_000 }));
+    await execute(["budget", "global", global, "--revision", "0", "--confirm-review", "--profile", profile.id]);
+    assert.equal((await fixture.sdk.profiles.list()).catalog.globalBudget.limit?.tokens, 50_000);
+    const controls = join(fixture.directory, "generated-global-controls.json"); await writeFile(controls, JSON.stringify({ autonomy: "Guided" }));
+    await execute(["profile", "defaults", controls, "--revision", "0"]);
+    const next = await beta.sessions.create(null, "Generated inherited defaults");
+    assert.equal(beta.getState().snapshot!.sessions.find((session) => session.id === next.id)?.controls.autonomy, "Guided");
+    await assert.rejects(() => execute(["status", "--profile", "generated-unregistered"]), /existing user profile|ready registered|does not exist/);
+    assert.equal(fixture.providers.reduce((sum, provider) => sum + provider.requests.length, 0), 0);
+  } finally { await fixture.close(); }
+});
 
 test("the CLI creates and moves local tickets through the same SDK with explicit revision conflicts", async () => {
   const fixture = await setupFixture();
