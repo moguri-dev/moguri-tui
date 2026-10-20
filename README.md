@@ -49,9 +49,10 @@ Core **Remote SSH** execution uses an explicitly pinned host and approved
 remote workspace. The existing worker runs inference and file/command tools
 there; the local service still owns approvals and history. Disconnect/restart
 reconciliation retains late accounting without replaying effects or turning
-partial work into success. Remote embedded consoles, MCP execution, local
-repository-memory retrieval and diff/plan panels remain blocked rather than
-using a local fallback.
+partial work into success. Files, Git changes and read-only plan views now use
+the actual SSH workspace through the same SDK and slash commands. Remote
+embedded consoles, MCP execution and repository-memory retrieval remain blocked
+rather than using a local fallback; direct Remote plan saves are not qualified.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
