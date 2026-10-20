@@ -24,8 +24,15 @@ The mascot now also carries its small red antenna pom-pom.
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
 hosts or downloads weights. New sessions resolve snapshotted global,
-Default-profile and project controls, with explicit session overrides and
+current-profile and project controls, with explicit session overrides and
 visible provenance; existing sessions are not rewritten.
+
+Isolated **profiles** use immutable SDK clients over the same local authority.
+Desktop's profile selector, TUI **F8** and CLI `--profile ID` preserve separate
+accounts, projects, drafts, memory and artifacts. Creating a profile neither
+copies data nor selects it. Global environment policy, shared startup
+preferences and optional global hard budgets cannot be escaped by switching.
+Old owned work stays in its original profile.
 
 Context supports project/client text, locally normalized clipboard/file
 images, exact reviewed folders, typed GitHub issue/PR references and authorized
@@ -101,15 +108,15 @@ This is not a malware-free guarantee; script execution stays unavailable until
 a real SendBox boundary is qualified.
 
 This is a **macOS development alpha**, not the completed first milestone.
-Explicit **estimate-based token/USD caps** and a separate Default-profile hard
-policy now share cumulative role-aware reservations. Unknown completion holds
+Explicit **estimate-based token/USD caps** and separate profile/global hard
+policies now share cumulative role-aware reservations. Unknown completion holds
 capacity; deletion, defaults and restart do not refund it. USD needs dated
 user-approved model rates, never a guessed Copilot price. These are admission
 limits, not exact provider-billing guarantees. CLI/TUI, desktop composer,
 settings and the profile usage dashboard share the SDK.
 
 Sandbox, complete remote side-panel/extension transport, kupo, Autopilot Max,
-multi-profile isolation, routed wind-down/authorized checkpoint commits and
+routed wind-down/authorized checkpoint commits and
 broader repository/visibility dashboard filters are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot

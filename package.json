@@ -1,6 +1,6 @@
 {
   "name": "moguri",
-  "version": "0.7.0-alpha.1",
+  "version": "0.8.0-alpha.1",
   "private": true,
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
@@ -30,7 +30,8 @@
     "dist",
     "scripts/prepare-native.mjs",
     "docs/setup.md",
-    "docs/sdk.md"
+    "docs/sdk.md",
+    "docs/architecture/profiles.md"
   ],
   "engines": {
     "node": ">=26.4.0 <27"
