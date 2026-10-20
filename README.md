@@ -120,6 +120,10 @@ capacity; deletion, defaults and restart do not refund it. USD needs dated
 user-approved model rates, never a guessed Copilot price. These are admission
 limits, not exact provider-billing guarantees. CLI/TUI, desktop composer,
 settings and the profile usage dashboard share the SDK.
+Dashboard views now add UTC presets/year/custom ranges, calendar buckets,
+captured price history and retained per-call/owning-turn records. Observed
+stream delivery metrics disclose missing coverage and are not GPU-throughput
+or productivity claims; cache subsets never inflate reported totals.
 
 [Experimental **kupo Single**](docs/architecture/routing.md) is opt-in with an
 explicit approved classifier/solver pool and separate hosted/network-data consent.
