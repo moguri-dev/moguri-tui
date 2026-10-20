@@ -1,11 +1,35 @@
 import { DatabaseSync } from "node:sqlite";
 import type { startService } from "../../apps/service/src/server.ts";
 
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13): Promise<void> {
   if (version >= 4) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
-    try { db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='budget_ledger_schema'; ${version < 12 ? "DELETE FROM retention_metadata WHERE id='artifact_repository_schema';" : ""} ${version < 11 ? "DELETE FROM retention_metadata WHERE id='structured_question_schema';" : ""} ${version < 10 ? "DELETE FROM retention_metadata WHERE id='retained_artifact_schema';" : ""} ${version < 9 ? "DELETE FROM retention_metadata WHERE id='managed_workspace_schema';" : ""} ${version < 8 ? "DELETE FROM retention_metadata WHERE id='execution_transport_schema';" : ""} ${version < 7 ? "DELETE FROM retention_metadata WHERE id='runtime_foundation_schema';" : ""} ${version < 6 ? "DELETE FROM retention_metadata WHERE id='engagement_schema';" : ""} ${version === 4 ? "DELETE FROM retention_metadata WHERE id='model_controls_schema';" : ""} PRAGMA user_version=${version}; COMMIT;`); } finally { db.close(); }
+    try {
+      if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.profile_id') NOT IN ('default','_global')").get()?.count)) throw new Error("Generate Default-only legacy fixtures without dropping another user profile.");
+      db.exec(`BEGIN IMMEDIATE; DROP TRIGGER events_no_delete;
+        DELETE FROM events WHERE json_extract(data,'$.profile_id')='_global';
+        CREATE TRIGGER events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;`);
+      for (const table of ["blob_payloads", "retention_keys", "retention_forgotten"]) db.prepare(`DELETE FROM ${table} WHERE scope='profile/_global' OR scope GLOB 'profile/_global/*'`).run();
+      if (db.prepare("PRAGMA table_info(receipts)").all().some((column) => column.name === "profile_id")) {
+        if (Number(db.prepare("SELECT count(*) AS count FROM receipts WHERE profile_id<>'default'").get()?.count)) throw new Error("A legacy fixture cannot discard scoped command receipts.");
+        db.exec(`CREATE TABLE receipts_legacy(id TEXT PRIMARY KEY,digest TEXT NOT NULL,result TEXT NOT NULL);
+          INSERT INTO receipts_legacy SELECT id,digest,result FROM receipts WHERE profile_id='default';
+          DROP TABLE receipts; ALTER TABLE receipts_legacy RENAME TO receipts;`);
+      }
+      db.exec(`DELETE FROM retention_metadata WHERE id='profile_scope_schema';
+        ${version < 13 ? "DELETE FROM retention_metadata WHERE id='budget_ledger_schema';" : ""}
+        ${version < 12 ? "DELETE FROM retention_metadata WHERE id='artifact_repository_schema';" : ""}
+        ${version < 11 ? "DELETE FROM retention_metadata WHERE id='structured_question_schema';" : ""}
+        ${version < 10 ? "DELETE FROM retention_metadata WHERE id='retained_artifact_schema';" : ""}
+        ${version < 9 ? "DELETE FROM retention_metadata WHERE id='managed_workspace_schema';" : ""}
+        ${version < 8 ? "DELETE FROM retention_metadata WHERE id='execution_transport_schema';" : ""}
+        ${version < 7 ? "DELETE FROM retention_metadata WHERE id='runtime_foundation_schema';" : ""}
+        ${version < 6 ? "DELETE FROM retention_metadata WHERE id='engagement_schema';" : ""}
+        ${version === 4 ? "DELETE FROM retention_metadata WHERE id='model_controls_schema';" : ""}
+        PRAGMA user_version=${version}; COMMIT;`);
+    } catch (error) { if (db.isTransaction) db.exec("ROLLBACK"); throw error; }
+    finally { db.close(); }
     return;
   }
   const events = service.store.events();
