@@ -13,6 +13,39 @@ import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { profileFixture } from "./fixtures/profiles.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
 import { remoteFixture } from "./fixtures/remote-service.ts";
+import { compactionFixture } from "./fixtures/compaction-service.ts";
+
+test("the actual TUI explicitly generates, reviews, applies and restores one metered context proposal", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await compactionFixture();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI compaction did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (command: string, expected: string) => {
+    await frameUntil("Write a prompt"); await setup.mockInput.typeText(command); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil(expected);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk })));
+    await slash('/compact preview {"keepRecentTurns":1}', '"compaction.preview"');
+    assert.equal(fixture.requests.length, 3); setup.mockInput.pressEscape();
+    const preview = (await fixture.sdk.compactions.preview(fixture.sessionId, { keepRecentTurns: 1 })).preview;
+    await slash(`/compact generate ${JSON.stringify({ digest: preview.digest, modelId: preview.modelId, keepRecentTurns: preview.keepRecentTurns })} confirm-cost`, "requested");
+    await fixture.terminal(); setup.mockInput.pressEscape();
+    const entry = (await fixture.sdk.compactions.state(fixture.sessionId)).compactions.at(-1)!;
+    await slash(`/compact read ${entry.id}`, "Generated summary");
+    setup.mockInput.pressEscape();
+    await slash(`/compact apply ${entry.id} ${entry.revision} confirm-reviewed`, "Reviewed context prefix applied");
+    assert.equal(fixture.session().activeCompactionId, entry.id); setup.mockInput.pressEscape();
+    const state = await fixture.sdk.compactions.state(fixture.sessionId);
+    await slash(`/compact restore ${entry.id} ${state.sourceDigest} confirm-restore`, "Original retained context restored");
+    assert.equal(fixture.session().activeCompactionId, null);
+    assert.equal(fixture.requests.length, 4);
+    assert.equal((await fixture.sdk.budgets.calls({ role: "compaction" })).calls[0]?.reportedTokens, 42);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
 
 test("the actual TUI queries dated aggregate and retained per-call telemetry without another model request", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture({ stream: { chunks: ["Generated ", "TUI ", "telemetry."], delayMs: 25 } }), client = await new MoguriClient(fixture.service.connection).ready();

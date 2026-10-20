@@ -81,6 +81,7 @@ moguri context file|image PATH --session ID
 moguri context folder PATH|github URL|session SOURCE_ID --session ID [--digest SHA256 --confirm-review]
 moguri context read ATTACHMENT_ID --session ID
 moguri slash "/read-only" --session ID
+moguri slash '/compact preview {"keepRecentTurns":1}' --session ID
 moguri session rename NAME|mode agent|mode read-only --session ID
 moguri session spawn side|agent [NAME] --session ID
 moguri session organize changes.json --session ID --revision N

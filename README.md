@@ -125,6 +125,14 @@ captured price history and retained per-call/owning-turn records. Observed
 stream delivery metrics disclose missing coverage and are not GPU-throughput
 or productivity claims; cache subsets never inflate reported totals.
 
+**Reviewed text-context compaction** now uses one explicitly authorized,
+tool-less Local/SSH model call through the same SDK. Previewing does not infer;
+generation, actual history/content review, apply/discard and original-context
+restore are separate actions. Complete recent turns, original encrypted history
+and drafts remain retained; rejected/unknown calls still count. Desktop exposes
+review under Model, and CLI/TUI share `/compact`. Images, automatic compaction
+and implicit kupo compactor selection are not supported.
+
 [Experimental **kupo Single**](docs/architecture/routing.md) is opt-in with an
 explicit approved classifier/solver pool and separate hosted/network-data consent.
 The same owned worker records actual per-call roles/models and keeps normal
