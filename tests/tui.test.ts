@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { createElement } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { TuiApp } from "../apps/tui/src/App.tsx";
 import { MoguriSdk as MoguriClient } from "../packages/sdk/src/index.ts";
 import { envelope } from "../apps/service/src/controller.ts";
@@ -11,6 +12,36 @@ import { setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { profileFixture } from "./fixtures/profiles.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
+import { remoteFixture } from "./fixtures/remote-service.ts";
+
+test("the actual TUI reads SSH files, changes and plan text without a local opener or model request", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await remoteFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  initializeGeneratedRepository(fixture.workspace);
+  await writeFile(join(fixture.workspace, "fixture.txt"), "Generated remote-only TUI file edit.\n");
+  await mkdir(join(fixture.workspace, "docs")); await writeFile(join(fixture.workspace, "docs/plan.md"), "Generated remote-only TUI plan.\n");
+  await fixture.probe(); await fixture.select();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI Remote workspace did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (command: string, expected: string) => {
+    await frameUntil("Write a prompt"); await setup.mockInput.typeText(command); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil(expected);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    await slash("/file fixture.txt", "Generated remote-only TUI file edit.");
+    setup.mockInput.pressEscape();
+    await slash("/diff", "+Generated remote-only TUI file edit.");
+    setup.mockInput.pressEscape();
+    await slash("/plan", "Generated remote-only TUI plan.");
+    assert.equal(setup.captureCharFrame().includes("Default-file access is unavailable"), false);
+    assert.equal(await readFile(join(fixture.project, "fixture.txt"), "utf8"), "generated original\n");
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
 
 test("the actual TUI selects opt-in Single, clears fixed tuning and shows owned routing provenance", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await routedFixture();
