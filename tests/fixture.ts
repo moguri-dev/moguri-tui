@@ -23,7 +23,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
 export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
-  questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string;
+  questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string; replyText?: string;
 }
 export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
@@ -49,7 +49,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         id: "generated-response", object: "chat.completion.chunk", model: base.id,
         choices: [{ index: 0, delta, finish_reason }],
       })}\n\n`);
-      const finish = (tool?: { name: string; args: Record<string, unknown> }, text = "Generated Copilot response. The requested fixture operation is complete.") => {
+      const finish = (tool?: { name: string; args: Record<string, unknown> }, text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
         if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] }); }
         else chunk({ role: "assistant", content: text });
         chunk({}, tool ? "tool_calls" : "stop");
