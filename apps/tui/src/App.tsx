@@ -4,14 +4,14 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery";
-const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor"];
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor";
+const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
 export function TuiApp({ client: initialClient, onQuit, initialSessionId, native }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string; native?: TuiNativeActions }) {
@@ -34,6 +34,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
+  const planEditor = useRef<PlanEditorRequest | null>(null), planSaving = useRef(false);
+  const [planPending, setPlanPending] = useState(false);
   const [profiles, setProfiles] = useState<ProfileCatalog | null>(null);
   const profileEditor = useRef<Profile | null>(null);
   const switchingProfile = useRef(false);
@@ -65,7 +67,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
   };
   const command = (command: Command) => perform(() => client.command(command));
-  const chooseSession = async (id: string) => { await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
+  const chooseSession = async (id: string) => { if (editorModes.includes(mode)) throw new Error("Save or discard the local editor before selecting another session."); await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
   const openProfiles = async () => { setProfiles((await client.profiles.list()).catalog); setMode("profiles"); };
   const chooseProfile = async (id: string) => {
     if (switchingProfile.current) throw new Error("A profile switch is already in progress.");
@@ -79,6 +81,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       client.disconnect(); clients.current.delete(client); clients.current.add(next); setClient(next);
       setSelectedId(null); setMode("compose"); setTokenValue(""); setTokenServer(""); setSettingsText(""); setCapabilityOutput(""); setNotice("");
       artifactEditor.current = null; issueEditor.current = { id: null, revision: 0 }; profileEditor.current = null;
+      planEditor.current = null;
     } finally { switchingProfile.current = false; setProfilePending(false); }
   };
   const openProfileEditor = (profile: Profile | null) => { profileEditor.current = profile; setSettingsText(JSON.stringify({ name: profile?.name ?? "", color: profile?.color ?? null }, null, 2)); setMode("profile-editor"); };
@@ -137,7 +140,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     openArtifactEditor({ ...result.artifact, text: result.text, sessionId: result.artifact.originSessionId });
   };
   const saveSettings = (text: string) => perform(async () => {
-    if (mode === "profile-editor") {
+    if (mode === "plan-editor") {
+      const target = planEditor.current, value: unknown = JSON.parse(text);
+      if (!target || !isRecord(value) || Object.keys(value).some((key) => key !== "text") || typeof value.text !== "string") throw new Error("Edit only the plan's text field. Reopen /plan edit to review a new source binding.");
+      if (planSaving.current) throw new Error("The exact plan save is still settling. Its edit is preserved.");
+      planSaving.current = true; setPlanPending(true);
+      try {
+        const saved = await client.plans.save(target.sessionId, value.text, target.digest, target.bindingDigest);
+        planEditor.current = null; setMode("compose"); setNotice(`Plan saved and independently retained as ${saved.id}. No model or Local fallback was used.`); return;
+      } finally { planSaving.current = false; setPlanPending(false); }
+    } else if (mode === "profile-editor") {
       if (switchingProfile.current) throw new Error("A profile operation is already in progress.");
       const values = parse(ProfileDraftSchema, JSON.parse(text)), current = profileEditor.current;
       switchingProfile.current = true; setProfilePending(true);
@@ -201,7 +213,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (result.kind === "copy") { if (!native) throw new Error("Clipboard access is unavailable in this terminal binding."); await native.copy(result.text); setNotice("Copied."); return; }
     if (result.kind === "artifact-editor") { openArtifactEditor(result.artifact); return; }
     if (result.kind === "export") { if (!native?.saveExport || !result.path) throw new Error("Use /artifact export ID ABSOLUTE_NEW_FILE_PATH with an available native file binding."); const saved = await native.saveExport(result.path, result.document); setNotice(`Export saved to ${saved.path}. Stored copies are unchanged.`); return; }
-    if (result.panel === "Models") setMode("models");
+    if (result.panel === "Plan" && result.planEditor) { planEditor.current = result.planEditor; setSettingsText(JSON.stringify({ text: result.planEditor.text }, null, 2)); setMode("plan-editor"); }
+    else if (result.panel === "Models") setMode("models");
     else if (result.panel === "Settings") setMode("settings");
     else if (result.panel === "Queue") setMode("queue");
     else if (result.panel === "Artifacts") setMode("artifacts");
@@ -433,6 +446,17 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   };
   useKeyboard((key) => {
     if (switchingProfile.current) { key.preventDefault(); key.stopPropagation(); return; }
+    if (mode === "plan-editor" && planSaving.current) {
+      if (key.name === "escape" || key.ctrl && ["q", "c"].includes(key.name)) {
+        key.preventDefault(); key.stopPropagation();
+        if (key.ctrl && key.name === "c" && planEditor.current) {
+          const target = planEditor.current, save = client.getState().snapshot?.planSaves.findLast((save) => save.sessionId === target.sessionId && save.status === "running");
+          if (save) void perform(() => client.plans.stopSave(target.sessionId, save.id));
+          else setNotice("No exact stoppable save is published yet. Inspect /plan saves; no other turn was stopped.");
+        } else setNotice("The exact plan save is still settling. Ctrl+C requests its owned stop; your editor is preserved.");
+      }
+      return;
+    }
     if (mode === "mcp-token") {
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
@@ -588,9 +612,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.muted}>Prompt edits can break functionality. Hard permissions remain final.</text>
         </box> :
         editorModes.includes(mode) ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
-          {mode === "profile-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Profile metadata only. Use a display name and null or #RRGGBB color. No account, project or model context is copied. Ctrl+Enter saves; Esc discards. Creation does not switch scope.</text> : mode === "artifact-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Independent retained document. Only text is copied; model provenance is preserved. Ctrl+Enter saves; Esc discards this edit. Editing does not publish a file or grant permissions.</text> : mode === "project-editor" ? <text fg={colors.attention} height={3} flexShrink={0}>Project policy and bindings. Save never runs scripts or publishes defaults. Ctrl+Enter saves; Esc discards.</text> : mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
+          {mode === "plan-editor" ? <text fg={colors.accent} height={5} flexShrink={0}>Exact {planEditor.current?.env} plan / {safe(planEditor.current?.boundary ? `${planEditor.current.boundary.root}/${planEditor.current.path}` : planEditor.current?.path ?? "")}. Edit text only. Ctrl+Enter writes and retains this reviewed binding; Esc discards before saving. No model call or Local fallback. Partial outcomes preserve the editor.</text> : mode === "profile-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Profile metadata only. Use a display name and null or #RRGGBB color. No account, project or model context is copied. Ctrl+Enter saves; Esc discards. Creation does not switch scope.</text> : mode === "artifact-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Independent retained document. Only text is copied; model provenance is preserved. Ctrl+Enter saves; Esc discards this edit. Editing does not publish a file or grant permissions.</text> : mode === "project-editor" ? <text fg={colors.attention} height={3} flexShrink={0}>Project policy and bindings. Save never runs scripts or publishes defaults. Ctrl+Enter saves; Esc discards.</text> : mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
           <text fg={colors.attention} height={width >= 100 ? 3 : 4} flexShrink={0}>{SYSTEM_PROMPT_WARNING}</text><text fg={colors.muted} height={2} flexShrink={0}>Ctrl+Enter acknowledges risk and saves. Ctrl+R restores defaults. Esc cancels.</text></>}
-          <SettingsTextEditor value={settingsText} change={setSettingsText} submit={(text) => void saveSettings(text)} />
+          {planPending ? <box flexDirection="column" flexGrow={1}><text fg={colors.attention} height={3}>Saving exact owned plan. Ctrl+C requests this save's stop; the editor stays preserved until settlement.</text><scrollbox flexGrow={1}><text fg={colors.foreground}>{safe(settingsText)}</text></scrollbox></box> : <SettingsTextEditor value={settingsText} change={setSettingsText} submit={(text) => void saveSettings(text)} />}
         </box> :
         mode === "artifacts" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Independent retained documents</text><text fg={colors.muted} height={3}>Session retention does not erase these copies. Profile/project scope and actual source actor remain separate from permission or instructions.</text>
           <select focused flexGrow={1} options={[{ name: "+ New retained document", description: "Plan, decision, answer, research note or report.", value: "" }, ...(snapshot?.artifacts ?? []).map((artifact) => ({ name: safe(artifact.name), description: `${artifact.kind} / ${artifact.status} / revision ${artifact.revision} / ${artifact.projectId ? snapshot?.projects.find((project) => project.id === artifact.projectId)?.name ?? "Former project" : "Profile"}`, value: artifact.id }))]} onSelect={(_, option) => { if (option) void perform(() => openArtifact(String(option.value) || undefined)); }} />

@@ -52,7 +52,10 @@ reconciliation retains late accounting without replaying effects or turning
 partial work into success. Files, Git changes and read-only plan views now use
 the actual SSH workspace through the same SDK and slash commands. Remote
 embedded consoles, MCP execution and repository-memory retrieval remain blocked
-rather than using a local fallback; direct Remote plan saves are not qualified.
+rather than using a local fallback. Explicit Remote plan saves now bind the
+reviewed peer/root/path/digest and run one owned filesystem operation without a
+model, preserving independent Remote-boundary snapshots. Stops, lost receipts,
+changed scopes and recovery keep partial outcomes honest and never replay writes.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;

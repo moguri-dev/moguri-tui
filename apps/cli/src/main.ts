@@ -13,7 +13,7 @@ export async function main(argv: string[]): Promise<void> {
     help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" }, workspace: { type: "string" }, profile: { type: "string" }, color: { type: "string" },
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
-    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" },
+    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" }, binding: { type: "string" },
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
@@ -98,7 +98,8 @@ moguri project defaults ID BRANCH --revision N --confirm-push
 moguri project import-mcp ID --revision N --confirm-review --digest SHA256
 moguri queue list|copy [ID]|run ID|remove ID --session ID
 moguri queue hold FILE|edit ID FILE|reorder ID ID ... --session ID
-moguri plan read|capture|save FILE --session ID [--digest SHA256_OR_absent]
+moguri plan read|saves|info SAVE_ID|stop SAVE_ID --session ID
+moguri plan save FILE --session ID --digest SHA256_OR_absent [--binding REMOTE_BINDING_SHA]
 moguri service restart|stop|info   Explicit owned-service lifecycle
 moguri config get|set FILE|reset   Shared, restorable settings
 moguri prompt get|set FILE|reset   Editable system prompt (risk acknowledgement required)
@@ -350,9 +351,12 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (!session) throw new Error("Choose an existing --session ID.");
       if (group === "plan") {
         if (action === "read") output(await sdk.plans.read(session.id));
+        else if (action === "saves") output(await sdk.plans.saves(session.id));
+        else if (action === "info" && args[0]) output(await sdk.plans.saveInfo(session.id, args[0]));
+        else if (action === "stop" && args[0]) output(await sdk.plans.stopSave(session.id, args[0]));
         else if (action === "capture") output(await sdk.plans.capture(session.id, args[0]));
-        else if (action === "save" && args[0] && values.digest) output(await sdk.plans.save(session.id, await readFile(args[0], "utf8"), values.digest));
-        else throw new Error("Use plan read/capture, or plan save FILE --digest OBSERVED_SHA256_OR_absent.");
+        else if (action === "save" && args[0] && values.digest) output(await sdk.plans.save(session.id, await readFile(args[0], "utf8"), values.digest, values.binding));
+        else throw new Error("Use plan read/capture/saves, info SAVE_ID, stop SAVE_ID, or plan save FILE --digest OBSERVED_SHA256_OR_absent. A partial Remote save is not automatically replayed.");
       } else if (action === "list") output(session.queue);
       else if (action === "copy") output(sdk.prompts.text(session.id, args[0]));
       else if (action === "run" && args[0]) output(await sdk.prompts.release(session.id, args[0], expectedRevision()));

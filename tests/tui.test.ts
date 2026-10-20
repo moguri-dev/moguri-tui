@@ -14,6 +14,61 @@ import { profileFixture } from "./fixtures/profiles.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
 import { remoteFixture } from "./fixtures/remote-service.ts";
 import { compactionFixture } from "./fixtures/compaction-service.ts";
+import { remotePlanFixture } from "./fixtures/remote-plan-service.ts";
+import { holdRemoteFrame } from "./fixtures/remote-frame-gate.ts";
+
+test("the actual TUI keeps a pending Remote plan editor and stops only its owned save", { skip: process.platform !== "darwin", timeout: 20_000 }, async (t) => {
+  const fixture = await remotePlanFixture(), gate = holdRemoteFrame(t, fixture.controller.remote, "approval");
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI pending Remote plan did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk })));
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/plan edit"); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Exact Remote plan");
+    const text = "Generated pending terminal plan stays in its editor.";
+    setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ text })); setup.mockInput.pressEnter({ ctrl: true });
+    await waitFor(() => gate.held); await frameUntil("Saving exact owned plan");
+    setup.mockInput.pressEscape(); await frameUntil("The exact plan save is still settling.");
+    setup.mockInput.pressKey("c", { ctrl: true }); await waitFor(() => fixture.session().status === "stopping"); gate.release();
+    await waitFor(() => fixture.controller.snapshot().planSaves[0]?.status === "stopped");
+    await frameUntil("Owned plan save stopped");
+    await frameUntil("Exact Remote plan"); await frameUntil(text);
+    assert.equal((await fixture.sdk.plans.saves(fixture.sessionId)).saves[0]?.status, "stopped");
+    await assert.rejects(() => readFile(join(fixture.workspace, "docs/plan.md")), { code: "ENOENT" });
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    assert.equal(fixture.requests.length, 0);
+  } finally { gate.release(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
+test("the actual TUI edits and retains a reviewed Remote plan without a Local opener or model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await remotePlanFixture();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI Remote plan did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk, native: { browser: async () => { throw new Error("No browser in Remote plan test."); }, file: async () => { throw new Error("No Local opener in Remote plan test."); }, copy: async () => {} } })));
+    await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/plan edit"); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Exact Remote plan");
+    const text = "Generated terminal  exact Remote plan.\n\tGenerated retained indentation.\n";
+    setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ text })); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Plan saved and independently retained"); await frameUntil("Write a prompt");
+    assert.equal(await readFile(join(fixture.workspace, "docs/plan.md"), "utf8"), text);
+    await assert.rejects(() => readFile(join(fixture.project, "docs/plan.md")), { code: "ENOENT" });
+    const saved = (await fixture.sdk.plans.saves(fixture.sessionId)).saves[0]!;
+    assert.equal(saved.status, "completed"); assert.ok(saved.artifactId);
+    assert.equal((await fixture.sdk.artifacts.read(saved.artifactId!)).text, text);
+    await setup.mockInput.typeText(`/plan info ${saved.id}`); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"plan.save-info"');
+    assert.equal(fixture.requests.length, 0); assert.equal(fixture.session().usage.length, 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
 
 test("the actual TUI explicitly generates, reviews, applies and restores one metered context proposal", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await compactionFixture();
