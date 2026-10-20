@@ -1,13 +1,19 @@
 import { DatabaseSync } from "node:sqlite";
+import assert from "node:assert/strict";
 import type { startService } from "../../apps/service/src/server.ts";
+import { PROTOCOL_VERSION } from "../../packages/protocol/src/index.ts";
 
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16): Promise<void> {
+export function assertCurrentSchema(store: { db: DatabaseSync }): void {
+  assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
+}
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17): Promise<void> {
   if (version >= 4) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
       if (version >= 14) {
-        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='remote_workspace_read_schema';
+        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='stream_telemetry_schema';
+          ${version < 17 ? "DELETE FROM retention_metadata WHERE id='remote_workspace_read_schema';" : ""}
           ${version < 16 ? "DELETE FROM retention_metadata WHERE id='single_routing_schema';" : ""}
           ${version === 14 ? "DELETE FROM retention_metadata WHERE id='guided_advice_schema';" : ""}
           PRAGMA user_version=${version}; COMMIT;`);
@@ -24,7 +30,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
           INSERT INTO receipts_legacy SELECT id,digest,result FROM receipts WHERE profile_id='default';
           DROP TABLE receipts; ALTER TABLE receipts_legacy RENAME TO receipts;`);
       }
-      db.exec(`DELETE FROM retention_metadata WHERE id IN ('profile_scope_schema','guided_advice_schema','single_routing_schema','remote_workspace_read_schema');
+      db.exec(`DELETE FROM retention_metadata WHERE id IN ('profile_scope_schema','guided_advice_schema','single_routing_schema','remote_workspace_read_schema','stream_telemetry_schema');
         ${version < 13 ? "DELETE FROM retention_metadata WHERE id='budget_ledger_schema';" : ""}
         ${version < 12 ? "DELETE FROM retention_metadata WHERE id='artifact_repository_schema';" : ""}
         ${version < 11 ? "DELETE FROM retention_metadata WHERE id='structured_question_schema';" : ""}

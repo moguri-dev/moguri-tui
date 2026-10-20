@@ -14,6 +14,26 @@ import { profileFixture } from "./fixtures/profiles.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
 import { remoteFixture } from "./fixtures/remote-service.ts";
 
+test("the actual TUI queries dated aggregate and retained per-call telemetry without another model request", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture({ stream: { chunks: ["Generated ", "TUI ", "telemetry."], delayMs: 25 } }), client = await new MoguriClient(fixture.service.connection).ready();
+  await fixture.configure(); await fixture.send("Generated TUI telemetry source."); await fixture.terminal();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI telemetry did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText('/dashboard {"range":{"kind":"days","days":7},"bucket":"day"}'); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"budget.dashboard"'); await frameUntil('"reportedTokens": 42');
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText('/dashboard calls {"limit":1}'); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"budget.calls"'); await frameUntil('"modelId"');
+    assert.equal(fixture.requests.length, 1);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("the actual TUI reads SSH files, changes and plan text without a local opener or model request", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await remoteFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   initializeGeneratedRepository(fixture.workspace);

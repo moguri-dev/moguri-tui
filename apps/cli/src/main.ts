@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
-import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema } from "../../../packages/sdk/src/index.ts";
+import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -18,7 +18,7 @@ export async function main(argv: string[]): Promise<void> {
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
     "confirm-write": { type: "boolean" }, branch: { type: "string" }, "materialization-id": { type: "string" },
-    model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" },
+    model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -62,7 +62,8 @@ moguri question list|read ID
 moguri question answer ID ANSWER_FILE --revision N
 moguri question answer-draft ID --revision N
 moguri budget status SESSION_ID
-moguri budget dashboard [--project ID --folder ID --session ID --provider ID --model ID --role solver]
+moguri budget dashboard|calls [--project ID --folder ID --session ID --provider ID --model ID --role solver]
+moguri budget dashboard --filters '{"range":{"kind":"days","days":30},"bucket":"week"}'
 moguri budget set SESSION_ID BUDGET.json --confirm-review
 moguri budget policy LIMIT_OR_NULL.json --revision N --confirm-review
 moguri budget global LIMIT_OR_NULL.json --revision N --confirm-review
@@ -203,7 +204,14 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else throw new Error("Use question list/read, answer ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
     } else if (group === "budget") {
       if (action === "status" && args[0]) output(await sdk.budgets.status(args[0]));
-      else if (action === "dashboard") output(await sdk.budgets.dashboard({ ...(values.project ? { projectId: values.project } : {}), ...(values.folder ? { folderId: values.folder } : {}), ...(values.session ? { sessionId: values.session } : {}), ...(values.model ? { modelId: values.model } : {}), ...(values.provider ? { providerId: values.provider } : {}), ...(values.role ? { role: parse(ModelRoleSchema, values.role) } : {}) }));
+      else if (action === "dashboard" || action === "calls") {
+        if (values.filters && Buffer.byteLength(values.filters) > 64 * 1024) throw new Error("Usage filters are limited to 64 KiB of JSON.");
+        const filters: unknown = values.filters ? JSON.parse(values.filters) : {};
+        if (!isRecord(filters) || Object.hasOwn(filters, "type")) throw new Error("Use a JSON object of usage filter fields, not a query type.");
+        const query = parse(BudgetQuerySchema, { ...filters, ...(values.project ? { projectId: values.project } : {}), ...(values.folder ? { folderId: values.folder } : {}), ...(values.session ? { sessionId: values.session } : {}), ...(values.model ? { modelId: values.model } : {}), ...(values.provider ? { providerId: values.provider } : {}), ...(values.role ? { role: parse(ModelRoleSchema, values.role) } : {}), type: action === "calls" ? "budget.calls" : "budget.dashboard" });
+        if (query.type === "budget.status") throw new Error("Use dashboard or calls filters.");
+        output(await sdk.query(query));
+      }
       else if ((action === "set" || action === "policy" || action === "global") && args[action === "set" ? 1 : 0] && values["confirm-review"]) {
         const path = args[action === "set" ? 1 : 0]!, metadata = await stat(path);
         if (!metadata.isFile() || metadata.size > 64 * 1024) throw new Error("Choose a regular budget JSON file up to 64 KiB.");
@@ -217,7 +225,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           await sdk.sessions.configure(session.id, { ...session.controls, budget: parse(SessionBudgetSchema, value) }, session.revision);
           output(await sdk.budgets.status(session.id));
         }
-      } else throw new Error("Use budget status SESSION, dashboard, set SESSION BUDGET.json --confirm-review, or policy/global LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
+      } else throw new Error("Use budget status SESSION, dashboard/calls [--filters JSON], set SESSION BUDGET.json --confirm-review, or policy/global LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
       else if (action === "create" && args[0]) {
