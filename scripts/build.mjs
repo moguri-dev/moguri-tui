@@ -12,6 +12,7 @@ await cp(new URL("../.native/speech", import.meta.url), "dist/native/speech", { 
 const nodeBuild = { bundle: true, platform: "node", format: "esm", target: "node26", packages: "external" };
 await Promise.all([
   build({ entryPoints: ["apps/service/src/main.ts"], outfile: "dist/service.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external" }),
+  build({ ...nodeBuild, entryPoints: ["apps/service/src/server.ts"], outfile: "dist/runtime.mjs" }),
   build({ entryPoints: ["apps/service/src/worker.ts"], outfile: "dist/worker.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/mcp-worker.ts"], outfile: "dist/mcp-worker.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/remote-bridge.ts"], outfile: "dist/remote-bridge.mjs" }),
