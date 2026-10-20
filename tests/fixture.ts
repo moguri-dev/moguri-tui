@@ -24,6 +24,7 @@ export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
   questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string; replyText?: string; holdAfterTool?: boolean; responseMode?: "text" | "auto"; redirectTo?: string;
+  stream?: { chunks: string[]; delayMs: number };
 }
 export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
@@ -57,7 +58,14 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         if (!options.omitUsage) response.write(`data: ${JSON.stringify({ choices: [], usage: options.usage ?? { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
         response.end("data: [DONE]\n\n");
       };
-      if (prompt.includes("generated slow") || options.holdAfterTool && messages.some((message) => message.role === "tool")) {
+      if (options.stream) {
+        for (const text of options.stream.chunks) {
+          if (response.destroyed) return;
+          chunk({ role: "assistant", content: text });
+          await new Promise((resolve) => setTimeout(resolve, options.stream!.delayMs));
+        }
+        if (!response.destroyed) finish(undefined, "");
+      } else if (prompt.includes("generated slow") || options.holdAfterTool && messages.some((message) => message.role === "tool")) {
         chunk({ role: "assistant", content: "Generated work in progress." });
         held.add(response);
         response.on("close", () => held.delete(response));
