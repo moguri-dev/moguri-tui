@@ -134,8 +134,9 @@ broader repository/visibility dashboard filters are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed
-configuration/readiness surface, but its real worker transport is not qualified
-and Sandbox execution is still unavailable.
+configuration/readiness surface. The verified 0.2.1 release passes native worker
+primitives, but cold networking and the SDK lifecycle remain unqualified;
+installing it alone does not enable Sandbox execution.
 
 ```bash
 npm ci
