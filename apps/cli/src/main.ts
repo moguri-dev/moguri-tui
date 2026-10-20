@@ -16,6 +16,7 @@ export async function main(argv: string[]): Promise<void> {
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
+    "confirm-write": { type: "boolean" }, branch: { type: "string" }, "materialization-id": { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -48,12 +49,15 @@ moguri artifact source SOURCE_ID --session ID [--source-type message|tool]
 moguri artifact promote SOURCE_ID KIND NAME --session ID --digest SHA256
 moguri artifact archive|restore|delete ID --revision N [--confirm-remove]
 moguri artifact export ID --output ABSOLUTE_NEW_JSON_PATH
+moguri artifact materialization|stop-materialization JOB_ID
 moguri question list|read ID
 moguri question answer ID ANSWER_FILE --revision N
 moguri question answer-draft ID --revision N
 moguri project removal-preview ID
 moguri project export-artifacts ID --output ABSOLUTE_NEW_JSON_PATH
-moguri project remove ID --revision N --confirm-remove --artifacts retain|delete|export --digest PREVIEW_SHA [--exported-digest SAVED_EXPORT_SHA]
+moguri project materialize-preview ID [--workspace ID] [--branch NEW_LOCAL_BRANCH]
+moguri project materialize-artifacts ID --digest REVIEW_SHA --confirm-write [--workspace ID] [--branch NEW_LOCAL_BRANCH]
+moguri project remove ID --revision N --confirm-remove --artifacts retain|delete|export|materialize --digest SET_SHA [--exported-digest EXPORT_SHA|--materialization-id JOB_ID]
 moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
@@ -138,13 +142,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
   const sdk = await connectMoguri();
   let keep = false;
   const output = (value: unknown) => console.log(typeof value === "string" ? value : JSON.stringify(value, null, 2));
-  const waitForJob = async (jobId: string, stop: () => Promise<unknown>, label = "Dictation") => {
+  const waitForJob = async (jobId: string, stop: () => Promise<unknown>, label = "Dictation", result?: () => Promise<unknown>) => {
     const cancel = () => { void stop().catch((error: unknown) => console.error(`${label} stop was not confirmed: ${error instanceof Error ? error.message : "inspect the active job"}`)); };
     process.once("SIGINT", cancel);
     try {
-      const job = await sdk.jobs.wait(jobId); output(job);
-      if (job.status !== "completed") throw new Error(job.error ?? `${label} ${job.status}; no success was recorded.`);
-      output(await sdk.mcp.readResult(jobId));
+      const job = await sdk.jobs.wait(jobId);
+      if (job.status !== "completed") { output(job); throw new Error(job.error ?? `${label} ${job.status}; no success was recorded.`); }
+      if (result) output(await result()); else { output(job); output(await sdk.mcp.readResult(jobId)); }
     } finally { process.off("SIGINT", cancel); }
   };
   const expectedRevision = () => {
@@ -184,6 +188,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         output(await sdk.artifacts.create(values.session ?? null, { ...document, ...(!values.session ? { projectId: values.project ?? null } : {}) }));
       } else if (action === "read" && args[0]) output(await sdk.artifacts.read(args[0], values.revision === undefined ? undefined : expectedRevision()));
       else if (action === "history" && args[0]) output(await sdk.artifacts.history(args[0]));
+      else if (action === "materialization" && args[0]) output(await sdk.artifacts.materialization(args[0]));
+      else if (action === "stop-materialization" && args[0]) { await sdk.artifacts.materialization(args[0]); output(await sdk.jobs.cancel(args[0])); }
       else if (action === "update" && args[0] && args[1]) output(await sdk.artifacts.update(args[0], parse(ArtifactChangesSchema, JSON.parse(await readFile(args[1], "utf8"))), expectedRevision()));
       else if ((action === "source" || action === "promote") && args[0] && values.session) {
         const sourceKind = values["source-type"] ?? "message";
@@ -272,13 +278,18 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (action === "get") output(await sdk.projects.configuration(args[0]));
       else if (action === "removal-preview") output(await sdk.artifacts.projectPreview(args[0]));
       else if (action === "export-artifacts" && values.output) output(await saveArtifactExport(values.output, (await sdk.artifacts.projectExport(args[0])).export));
+      else if (action === "materialize-preview") output(await sdk.artifacts.materializePreview(args[0], { ...(values.workspace ? { workspaceId: values.workspace } : {}), ...(values.branch ? { commitBranch: values.branch } : {}) }));
+      else if (action === "materialize-artifacts" && values.digest && values["confirm-write"]) {
+        const job = await sdk.artifacts.materialize(args[0], values.digest, { ...(values.workspace ? { workspaceId: values.workspace } : {}), ...(values.branch ? { commitBranch: values.branch } : {}) });
+        await waitForJob(job.id!, () => sdk.jobs.cancel(job.id!), "Artifact repository copy", () => sdk.artifacts.materialization(job.id!));
+      }
       else if (action === "sources") output(await sdk.projects.sources(args[0]));
       else if (action === "diff") output(await sdk.projects.git(args[0]));
       else if (action === "porto") output(await sdk.projects.porto(args[0]));
       else if (action === "set" && args[1]) output(await sdk.projects.configure(args[0], parse(ProjectSettingsSchema, JSON.parse(await readFile(args[1], "utf8"))), expectedRevision()));
       else if (action === "relocate" && args[1]) output(await sdk.projects.relocate(args[0], args[1], expectedRevision()));
       else if (action === "remove" && values["confirm-remove"]) {
-        const artifacts = values.artifacts ? parse(ProjectArtifactChoiceSchema, { action: values.artifacts, expectedDigest: values.digest, ...(values["exported-digest"] ? { exportedDigest: values["exported-digest"] } : {}) }) : undefined;
+        const artifacts = values.artifacts ? parse(ProjectArtifactChoiceSchema, { action: values.artifacts, expectedDigest: values.digest, ...(values["exported-digest"] ? { exportedDigest: values["exported-digest"] } : {}), ...(values["materialization-id"] ? { materializationId: values["materialization-id"] } : {}) }) : undefined;
         output(await sdk.projects.remove(args[0], true, expectedRevision(), artifacts));
       }
       else if (action === "import-mcp" && values["confirm-review"] && values.digest) output(await sdk.projects.importMcp(args[0], expectedRevision(), true, values.digest));

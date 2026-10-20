@@ -280,14 +280,16 @@ test("the actual TUI edits a retained document through shared commands and brows
     throw new Error(`TUI retained document did not show ${text}:\n${setup.captureCharFrame()}`);
   };
   try {
+    const folder = await client.projects.folder("Generated TUI artifact folder");
     flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
     await setup.mockInput.typeText("/artifact new answer Generated TUI retained answer"); setup.mockInput.pressEnter({ ctrl: true });
     await frameUntil("Independent retained document.");
     setup.mockInput.pressKey("a", { super: true });
-    await setup.mockInput.typeText(JSON.stringify({ kind: "answer", name: "Generated TUI retained answer", text: "Generated native TUI artifact body." }, null, 2)); setup.mockInput.pressEnter({ ctrl: true });
+    await setup.mockInput.typeText(JSON.stringify({ kind: "answer", name: "Generated TUI retained answer", text: "Generated native TUI artifact body.", folderId: folder.id, workItemId: null }, null, 2)); setup.mockInput.pressEnter({ ctrl: true });
     await frameUntil("Independent retained documents");
     const artifact = await waitFor(() => fixture.service.controller.snapshot().artifacts.find((artifact) => artifact.name === "Generated TUI retained answer"));
     assert.equal((await client.artifacts.read(artifact.id)).text, "Generated native TUI artifact body.");
+    assert.equal((await client.artifacts.read(artifact.id)).artifact.folderId, folder.id);
     await client.sessions.delete(fixture.sessionId, true);
     await frameUntil("Generated TUI retained answer");
     assert.equal((await client.artifacts.read(artifact.id)).artifact.originSessionId, fixture.sessionId);

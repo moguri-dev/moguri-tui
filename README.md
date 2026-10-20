@@ -78,8 +78,10 @@ its own encrypted retention grant. Project removal previews the exact set and
 requires retain, export-then-delete or delete; session retention never erases it.
 Real structured clarifications record actual user answers and retain them by
 default, with an explicit opt-out. Answers never grant tool/Git permissions.
-Repository materialization/commit and work-item/folder artifact organization
-remain separate first-release work.
+Documents can associate with profile folders and project work items. Explicit
+reviewed repository copies preserve complete history under `artifacts/`, with an
+optional new local Git branch. No checkout, push or unrelated staging changes;
+project deletion re-verifies the actual copy and any requested commit.
 
 Dictation uses local NVIDIA Nemotron 3.5 through a pinned native runtime. The
 user explicitly accepts and downloads the model once. NVIDIA documents

@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { setupFixture } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
+import { MoguriSdk } from "../packages/sdk/src/index.ts";
 
 test("the CLI creates and moves local tickets through the same SDK with explicit revision conflicts", async () => {
   const fixture = await setupFixture();
@@ -21,6 +22,26 @@ test("the CLI creates and moves local tickets through the same SDK with explicit
     assert.equal(board.issues[0].phaseId, "in-progress");
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
+});
+
+test("the CLI reviews and materializes exact repository artifacts before its explicit deletion choice", async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    const projectId = fixture.session().projectId, document = join(fixture.directory, "generated-repo-document.json");
+    await writeFile(document, JSON.stringify({ kind: "report", name: "Generated CLI repository report", text: "Generated exact CLI revision." }));
+    await execute(["artifact", "create", document, "--project", projectId]);
+    const preview = JSON.parse((await execute(["project", "materialize-preview", projectId])).stdout).preview;
+    await assert.rejects(() => execute(["project", "materialize-artifacts", projectId, "--digest", preview.digest]), /confirm|materializ|Use project/);
+    const copy = JSON.parse((await execute(["project", "materialize-artifacts", projectId, "--digest", preview.digest, "--confirm-write"])).stdout);
+    assert.equal(copy.job.status, "completed");
+    assert.equal(copy.result.fileDigest, preview.fileDigest);
+    const shared = await sdk.slash(fixture.sessionId, `/project-removal materialization ${copy.job.id}`, "tui");
+    assert.ok(shared.kind === "text" && JSON.parse(shared.text).result.path === copy.result.path);
+    await execute(["project", "remove", projectId, "--revision", "0", "--confirm-remove", "--artifacts", "materialize", "--digest", preview.setDigest, "--materialization-id", copy.job.id]);
+    assert.equal(fixture.service.controller.snapshot().projects.length, 0);
+    assert.ok((await readFile(join(copy.result.root, copy.result.path), "utf8")).includes("Generated exact CLI revision."));
+  } finally { sdk.disconnect(); await fixture.close(); }
 });
 
 test("the CLI holds prompts without a model and shares session/project/plan lifecycle APIs", async () => {

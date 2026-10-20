@@ -102,7 +102,8 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
   };
   const openArtifactEditor = (request: ArtifactEditorRequest) => {
     artifactEditor.current = request;
-    setSettingsText(JSON.stringify(request.id ? { name: request.name, text: request.text, status: request.status } : { kind: request.kind, name: request.name, text: request.text }, null, 2));
+    const associations = { folderId: request.folderId ?? null, workItemId: request.workItemId ?? null };
+    setSettingsText(JSON.stringify(request.id ? { name: request.name, text: request.text, status: request.status, ...associations } : { kind: request.kind, name: request.name, text: request.text, ...associations }, null, 2));
     setMode("artifact-editor");
   };
   const openArtifact = async (id?: string) => {
@@ -525,7 +526,7 @@ export function TuiApp({ client, onQuit, initialSessionId, native }: { client: M
         </box> :
         mode === "artifacts" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Independent retained documents</text><text fg={colors.muted} height={3}>Session retention does not erase these copies. Profile/project scope and actual source actor remain separate from permission or instructions.</text>
           <select focused flexGrow={1} options={[{ name: "+ New retained document", description: "Plan, decision, answer, research note or report.", value: "" }, ...(snapshot?.artifacts ?? []).map((artifact) => ({ name: safe(artifact.name), description: `${artifact.kind} / ${artifact.status} / revision ${artifact.revision} / ${artifact.projectId ? snapshot?.projects.find((project) => project.id === artifact.projectId)?.name ?? "Former project" : "Profile"}`, value: artifact.id }))]} onSelect={(_, option) => { if (option) void perform(() => openArtifact(String(option.value) || undefined)); }} />
-          <text fg={colors.muted} height={3}>Enter edits. /artifact ID reads provenance; history/archive/restore/delete/export use shared SDK commands. F5 opens this list without a session. Esc returns.</text></box> :
+          <text fg={colors.muted} height={3}>Enter edits text, folderId and workItemId. /artifact ID reads provenance. /project-removal materialize-preview reviews a repository copy. F5 works without a session. Esc returns.</text></box> :
         mode === "issues" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Local project Kanban / {safe(project?.name ?? "Open a project first")}</text>
           <text fg={colors.muted} height={3}>{board?.columns.map((column) => `${safe(column.name)}: ${localIssues.filter((issue) => issue.phaseId === column.id).length}`).join("  |  ") ?? "No project selected."}</text>
           <select focused flexGrow={1} options={[{ name: "+ New local issue", description: "Feature, bug or misc. No assignee.", value: "" }, ...localIssues.map((issue) => ({
