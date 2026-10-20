@@ -118,6 +118,12 @@ test("the actual TUI queries dated aggregate and retained per-call telemetry wit
     setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
     await setup.mockInput.typeText('/dashboard calls {"limit":1}'); setup.mockInput.pressEnter({ ctrl: true });
     await frameUntil('"budget.calls"'); await frameUntil('"modelId"');
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText('/dashboard operations {"limit":1}'); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"telemetry.operations"'); await frameUntil('"attempts": 0');
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/dashboard storage"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"telemetry.storage"'); await frameUntil('"measurement": "key-backed-retained-ciphertext"');
     assert.equal(fixture.requests.length, 1);
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });

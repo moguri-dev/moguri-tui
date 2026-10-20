@@ -127,6 +127,11 @@ Dashboard views now add UTC presets/year/custom ranges, calendar buckets,
 captured price history and retained per-call/owning-turn records. Observed
 stream delivery metrics disclose missing coverage and are not GPU-throughput
 or productivity claims; cache subsets never inflate reported totals.
+Tool/MCP outcomes now have a sanitized, session-independent ledger with an
+explicit known-result failure rate and separate denied/stopped/partial/unknown
+counts. Dashboard, CLI/TUI and SDK also expose current-profile key-backed
+ciphertext sizes, not physical disk usage or reclaimed space. Earlier deleted
+tool history remains unavailable.
 
 **Reviewed text-context compaction** now uses one explicitly authorized,
 tool-less Local/SSH model call through the same SDK. Previewing does not infer;

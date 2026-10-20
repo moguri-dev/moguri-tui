@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
-import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema } from "../../../packages/sdk/src/index.ts";
+import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -64,6 +64,8 @@ moguri question answer-draft ID --revision N
 moguri budget status SESSION_ID
 moguri budget dashboard|calls [--project ID --folder ID --session ID --provider ID --model ID --role solver]
 moguri budget dashboard --filters '{"range":{"kind":"days","days":30},"bucket":"week"}'
+moguri telemetry operations [--project ID --session ID --filters JSON]
+moguri telemetry storage           Current profile key-backed ciphertext, not disk usage
 moguri budget set SESSION_ID BUDGET.json --confirm-review
 moguri budget policy LIMIT_OR_NULL.json --revision N --confirm-review
 moguri budget global LIMIT_OR_NULL.json --revision N --confirm-review
@@ -204,6 +206,17 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "answer" && args[0] && args[1]) output(await sdk.questions.answer(args[0], await readFile(args[1], "utf8"), expectedRevision()));
       else if (action === "answer-draft" && args[0]) output(await sdk.questions.answerDraft(args[0], expectedRevision()));
       else throw new Error("Use question list/read, answer ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
+    } else if (group === "telemetry") {
+      if (action === "storage") {
+        if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("Storage is a current profile measurement, not a dated/project/model view. Select --profile ID instead.");
+        output(await sdk.telemetry.storage());
+      } else if (action === "operations") {
+        if (values.filters && Buffer.byteLength(values.filters) > 64 * 1024) throw new Error("Telemetry filters are limited to 64 KiB of JSON.");
+        const filters: unknown = values.filters ? JSON.parse(values.filters) : {};
+        if (!isRecord(filters) || Object.hasOwn(filters, "type")) throw new Error("Use an object of operation filter fields, not a query type.");
+        const query = parse(TelemetryQuerySchema, { ...filters, ...(values.project ? { projectId: values.project } : {}), ...(values.folder ? { folderId: values.folder } : {}), ...(values.session ? { sessionId: values.session } : {}), ...(values.model ? { modelId: values.model } : {}), ...(values.provider ? { providerId: values.provider } : {}), ...(values.role ? { role: parse(ModelRoleSchema, values.role) } : {}), type: "telemetry.operations" });
+        output(await sdk.query(query));
+      } else throw new Error("Use telemetry operations or storage. Operation results and storage are not model usage or physical disk totals.");
     } else if (group === "budget") {
       if (action === "status" && args[0]) output(await sdk.budgets.status(args[0]));
       else if (action === "dashboard" || action === "calls") {

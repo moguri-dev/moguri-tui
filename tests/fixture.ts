@@ -25,6 +25,7 @@ export interface GeneratedProviderOptions {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
   questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string; replyText?: string; holdAfterTool?: boolean; responseMode?: "text" | "auto"; redirectTo?: string;
   stream?: { chunks: string[]; delayMs: number };
+  mcpCall?: { serverId: string; tool: string; arguments: Record<string, unknown>; schemaDigest: string };
 }
 export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
@@ -88,6 +89,10 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         finish(undefined, `Generated untrusted echo ${request.headers.authorization?.replace(/^Bearer /i, "") ?? "none"}`);
       } else if (prompt.includes("generated question")) {
         finish(undefined, "Which generated option would you prefer?");
+      } else if (prompt.includes("generated mcp call") && options.mcpCall && toolMessages.length === 0) {
+        finish({ name: "mcp_gateway", args: { action: "call", ...options.mcpCall } });
+      } else if (prompt.includes("generated failing command") && toolMessages.length === 0) {
+        finish({ name: "run_command", args: { command: "printf 'Generated command failure\\n' >&2; exit 7", timeoutMs: 2000 } });
       } else if (prompt.includes("generated command") && toolMessages.length === 0) {
         finish({ name: "run_command", args: { command: "sleep 30 & printf 'GENERATED_CHILD=%s\\n' \"$!\"; wait", timeoutMs: 30_000 } });
       } else if (prompt.includes("generated forbidden write") && toolMessages.length === 0) {

@@ -480,7 +480,12 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       return;
     }
     if (key.name === "f5") { key.preventDefault(); setMode("artifacts"); return; }
-    if (key.name === "f7") { key.preventDefault(); void perform(async () => show({ ...(await client.budgets.dashboard()), globalBudget: (await client.profiles.list()).catalog.globalBudget })); return; }
+    if (key.name === "f7") {
+      key.preventDefault(); void perform(async () => {
+        const [budget, profiles, operations, storage] = await Promise.all([client.budgets.dashboard(), client.profiles.list(), client.telemetry.operations({ limit: 10 }), client.telemetry.storage()]);
+        show({ ...budget, globalBudget: profiles.catalog.globalBudget, operations, storage: storage.storage });
+      }); return;
+    }
     if (key.name === "f8") { key.preventDefault(); void perform(openProfiles); return; }
     if (key.name === "f6") { key.preventDefault(); if (pendingQuestion) setMode("question"); else setNotice("No actual pending question is owned by this turn."); return; }
     if (mode === "compose" && key.name === "return" && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {

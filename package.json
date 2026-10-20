@@ -1,6 +1,6 @@
 {
   "name": "moguri",
-  "version": "0.14.0-alpha.1",
+  "version": "0.15.0-alpha.1",
   "private": true,
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
@@ -38,6 +38,7 @@
     "docs/architecture/execution-transports.md",
     "docs/architecture/session-workspace.md",
     "docs/architecture/budgets.md",
+    "docs/architecture/operation-telemetry.md",
     "docs/architecture/context-compaction.md",
     "docs/architecture/remote-plan-primitives.md",
     "docs/architecture/remote-plan-saves.md"
