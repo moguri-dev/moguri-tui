@@ -78,6 +78,13 @@ attach/unread/archive/delete actions; project settings and optional archived
 retention share the same SDK. Deleting a session preserves independent project
 artifacts and external PRs. A terminal is an explicit Local user console, not an
 agent permission or a claimed sandbox.
+Local user consoles now retain an authenticated per-profile owner across
+explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
+inspection reattach the same process, never replay input or automatically
+replace an old console. Ordinary service stop closes known groups; private
+cleanup failures retain explicit retryable intent. Output stays bounded and
+volatile, not conversation/model context. See the
+[ownership boundary](docs/architecture/terminal-reattachment.md).
 
 **Managed Local worktrees** isolate branch checkouts without moving the attached
 base folder or index. Create, discover, inspect, open and safely remove them

@@ -50,6 +50,13 @@ moguri workspace inspect|reconcile ID [--revision N]
 moguri workspace remove ID --revision N --confirm-remove
 moguri workspace session ID        New chat in an explicit owned worktree
 moguri workspace files|file PATH --session ID
+moguri terminal list [--session ID]  Existing profile-owned consoles and actual Local roots
+moguri terminal open --session ID   Explicit new user console, not an agent tool
+moguri terminal read|reconcile|close ID
+moguri terminal owner-reconcile OWNER_ID  Inspect even an owner with no terminal intent
+moguri terminal owner-acknowledge OWNER_ID --confirm-review  No cleanup proof is inferred
+moguri terminal input ID            Piped UTF-8 input only; no automatic replay
+moguri terminal acknowledge ID --confirm-review  Only after actual process inspection
 moguri artifact list|read ID|history ID
 moguri artifact create DOCUMENT.json [--session ID|--project ID]
 moguri artifact update ID CHANGES.json --revision N
@@ -154,7 +161,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
   }
   if (group === "service") {
     if (!action || !["stop", "restart", "info"].includes(action)) throw new Error("Use service info, service stop or service restart.");
-    if (action === "stop" || action === "restart") await stopMoguriService();
+    if (action === "stop" || action === "restart") await stopMoguriService(undefined, { preserveTerminals: action === "restart" });
     if (action !== "stop") {
       const connection = await ensureConnection({ servicePath: sdkServicePath() });
       console.log(JSON.stringify({ pid: connection.pid, protocolVersion: connection.protocolVersion, stateDir: stateDirectory() }));
@@ -187,6 +194,24 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     const projectId = args[0] ?? values.project;
     if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
+    } else if (group === "terminal") {
+      if (!action || action === "list") {
+        const terminals = snapshot.terminals.filter((terminal) => !values.session || terminal.sessionId === values.session);
+        output({ terminals, owners: snapshot.terminalOwners, warning: "Owners are shared only within this profile. Local user consoles, volatile bounded output; no agent context, automatic replacement or input replay." });
+      } else if (action === "open" && values.session) output(await sdk.terminal.open(values.session));
+      else if (action === "read" && args[0]) output(await sdk.terminal.read(args[0]));
+      else if (action === "reconcile" && args[0]) { await sdk.terminal.reconcile(args[0]); output(sdk.getState().snapshot!.terminals.find((terminal) => terminal.id === args[0])); }
+      else if (action === "owner-reconcile" && args[0]) { await sdk.terminal.reconcileOwner(args[0]); output(sdk.getState().snapshot!.terminalOwners.find((owner) => owner.id === args[0])); }
+      else if (action === "owner-acknowledge" && args[0] && values["confirm-review"]) output(await sdk.terminal.acknowledgeOwner(args[0], true));
+      else if (action === "close" && args[0]) output(await sdk.terminal.close(args[0]));
+      else if (action === "acknowledge" && args[0] && values["confirm-review"]) output(await sdk.terminal.acknowledge(args[0], true));
+      else if (action === "input" && args[0]) {
+        if (process.stdin.isTTY) throw new Error("Pipe the exact UTF-8 input through stdin. Terminal input is not accepted in command arguments or automatically replayed.");
+        process.stdin.setEncoding("utf8");
+        let data = "";
+        for await (const chunk of process.stdin) { data += String(chunk); if (Buffer.byteLength(data) > 65536) throw new Error("One terminal input batch is limited to 64 KiB; nothing was submitted."); }
+        await sdk.terminal.input(args[0], data); output({ acknowledged: true, warning: "Accepted by the exact owned PTY, not proof a shell command succeeded. No input was persisted or replayed." });
+      } else throw new Error("Use terminal list/open/read/reconcile/close/input/acknowledge. Open needs --session ID; acknowledgement needs --confirm-review after process inspection.");
     } else if (group === "profile" || group === "profiles") {
       if (!action || action === "list") output(await sdk.profiles.list());
       else if (action === "create" && args.length) { const created = await sdk.profiles.create(args.join(" "), values.color ?? null); output(await sdk.profiles.wait(created.id!)); }

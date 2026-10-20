@@ -37,6 +37,7 @@
     "docs/architecture/routing.md",
     "docs/architecture/execution-transports.md",
     "docs/architecture/session-workspace.md",
+    "docs/architecture/terminal-reattachment.md",
     "docs/architecture/budgets.md",
     "docs/architecture/operation-telemetry.md",
     "docs/architecture/repository-telemetry.md",

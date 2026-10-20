@@ -147,7 +147,11 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
   await mkdir(project);
   await writeFile(join(project, "fixture.txt"), "generated original\n");
   const fixture = await fixtureProvider(options);
-  const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform: options.platform, retentionKey: GENERATED_RETENTION_KEY });
+  const terminalSecrets = new Map<string, string>();
+  const terminalSlot = (id: string) => { if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/.test(id)) throw new Error("Generated terminal credential must fit the explicit production secret-backend namespace."); return id; };
+  const terminalVault = { read: async (id: string) => terminalSecrets.get(terminalSlot(id)) ?? null, write: async (id: string, value: string) => { terminalSecrets.set(terminalSlot(id), value); }, remove: async (id: string) => { terminalSecrets.delete(terminalSlot(id)); } };
+  const platform = { ...options.platform, terminal: { ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
+  const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
   const sessionId = sessionResult.id!;
@@ -164,7 +168,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     return service.controller.dispatch(envelope({ type: "message.send", sessionId, expectedRevision: session().draft.revision, delivery }));
   };
   return {
-    ...fixture, directory, project, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY,
+    ...fixture, directory, project, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: platform.terminal.vault,
     approve: async (allow = true) => {
       const approval = await waitFor(() => session().pendingApproval);
       return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));
