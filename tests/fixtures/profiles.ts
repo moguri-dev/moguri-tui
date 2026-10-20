@@ -6,9 +6,9 @@ import { startService } from "../../apps/service/src/server.ts";
 import type { PlatformOptions } from "../../apps/service/src/platform.ts";
 import { fixtureProvider } from "../fixture.ts";
 
-export async function profileFixture(extra?: (profileId: string, directory: string) => PlatformOptions, workerPath?: string) {
+export async function profileFixture(extra?: (profileId: string, directory: string) => PlatformOptions, workerPath?: string, holdAfterTool = false) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-profiles-")), stateDir = join(directory, "state"), key = Buffer.alloc(32, 0x6a);
-  const providers = await Promise.all([fixtureProvider({ maxOutputTokens: 128 }), fixtureProvider({ maxOutputTokens: 128 }), fixtureProvider({ maxOutputTokens: 128 })]);
+  const providers = await Promise.all([fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool }), fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool }), fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool })]);
   const assigned = new Map<string, typeof providers[number]>([["default", providers[0]!]]), vaults = new Map<string, Map<string, string>>();
   const options = { stateDir, retentionKey: key, workerPath, profiles: {
     provider: (id: string) => {

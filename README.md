@@ -33,6 +33,8 @@ accounts, projects, drafts, memory and artifacts. Creating a profile neither
 copies data nor selects it. Global environment policy, shared startup
 preferences and optional global hard budgets cannot be escaped by switching.
 Old owned work stays in its original profile.
+Remote writers sharing a pinned peer and canonical workspace serialize across
+profile/target aliases and Local mappings; failed-root quarantine survives restart.
 Guided questions can include an explicitly labeled current-solver recommendation
 without another model call. You still choose the actual answer or tool approval;
 advice retains its model provenance and cannot grant permissions.
