@@ -1,11 +1,15 @@
 import { DatabaseSync } from "node:sqlite";
 import type { startService } from "../../apps/service/src/server.ts";
 
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14): Promise<void> {
   if (version >= 4) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
+      if (version === 14) {
+        db.exec("BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='guided_advice_schema'; PRAGMA user_version=14; COMMIT;");
+        return;
+      }
       if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.profile_id') NOT IN ('default','_global')").get()?.count)) throw new Error("Generate Default-only legacy fixtures without dropping another user profile.");
       db.exec(`BEGIN IMMEDIATE; DROP TRIGGER events_no_delete;
         DELETE FROM events WHERE json_extract(data,'$.profile_id')='_global';
@@ -17,7 +21,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
           INSERT INTO receipts_legacy SELECT id,digest,result FROM receipts WHERE profile_id='default';
           DROP TABLE receipts; ALTER TABLE receipts_legacy RENAME TO receipts;`);
       }
-      db.exec(`DELETE FROM retention_metadata WHERE id='profile_scope_schema';
+      db.exec(`DELETE FROM retention_metadata WHERE id IN ('profile_scope_schema','guided_advice_schema');
         ${version < 13 ? "DELETE FROM retention_metadata WHERE id='budget_ledger_schema';" : ""}
         ${version < 12 ? "DELETE FROM retention_metadata WHERE id='artifact_repository_schema';" : ""}
         ${version < 11 ? "DELETE FROM retention_metadata WHERE id='structured_question_schema';" : ""}

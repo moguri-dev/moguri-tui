@@ -23,6 +23,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
 export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
+  questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string;
 }
 export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
@@ -49,7 +50,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         choices: [{ index: 0, delta, finish_reason }],
       })}\n\n`);
       const finish = (tool?: { name: string; args: Record<string, unknown> }, text = "Generated Copilot response. The requested fixture operation is complete.") => {
-        if (tool) chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] });
+        if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] }); }
         else chunk({ role: "assistant", content: text });
         chunk({}, tool ? "tool_calls" : "stop");
         if (!options.omitUsage) response.write(`data: ${JSON.stringify({ choices: [], usage: options.usage ?? { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
@@ -60,7 +61,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         held.add(response);
         response.on("close", () => held.delete(response));
       } else if (prompt.includes("generated structured question") && toolMessages.length === 0) {
-        finish({ name: "ask_user", args: { question: "Choose a generated fixture approach?", choices: ["Generated first choice", "Generated second choice"], allowFreeform: !prompt.includes("choices only") } });
+        finish({ name: "ask_user", args: { question: "Choose a generated fixture approach?", choices: options.questionChoices ?? ["Generated first choice", "Generated second choice"], allowFreeform: !prompt.includes("choices only"), ...(options.questionRecommendation ? { recommendation: options.questionRecommendation } : {}) } });
       } else if (prompt.includes("generated delayed")) {
         const timer = setTimeout(() => finish(), 600);
         response.on("close", () => clearTimeout(timer));

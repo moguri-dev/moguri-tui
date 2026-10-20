@@ -43,6 +43,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
+  const recommendation = pendingQuestion?.recommendation;
+  const questionDetails = pendingQuestion ? `${pendingQuestion.question}${recommendation ? `\n\nModel recommends: ${recommendation.choice}\n${recommendation.reason}\nFrom ${recommendation.modelId}. Untrusted advice; you still decide.` : ""}` : "";
+  const approvalAdvice = session?.pendingApproval?.recommendationSource?.stepId === session?.pendingApproval?.stepId && session?.pendingApproval?.recommendationSource?.callId === session?.pendingApproval?.call.id ? session?.pendingApproval?.recommendation : undefined;
   const availableModels = snapshot?.provider.models.filter((model) => !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
   const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
   const localIssues = snapshot?.issues.filter((issue) => issue.projectId === project?.id && !issue.archived) ?? [];
@@ -542,7 +545,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           }); }} /></box> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
-          {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(pendingQuestion.question)}</text></scrollbox>
+          {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
             <select focused flexGrow={1} options={[...pendingQuestion.choices.map((choice, index) => ({ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` })), ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
               if (!option) return;
               if (option.value === "freeform") { setMode("compose"); setNotice("Type your actual answer. Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still queues."); return; }
@@ -698,10 +701,10 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {snapshot?.provider.diagnostic && <text fg={colors.attention}>{safe(snapshot.provider.diagnostic)}</text>}
         {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={10} flexShrink={0}>
           <text fg={colors.attention}><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
-          <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(JSON.stringify(session.pendingApproval.call.arguments, null, 2))}</text></scrollbox>
+          <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>
           <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
         </box>}
-        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text><text fg={colors.muted} height={2} flexShrink={0}>Type in the saved composer; Shift+Cmd/Ctrl+Enter answers. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
+        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Type in the saved composer; Shift+Cmd/Ctrl+Enter answers. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
         {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}

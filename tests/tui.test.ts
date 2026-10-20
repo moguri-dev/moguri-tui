@@ -11,6 +11,29 @@ import { setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { profileFixture } from "./fixtures/profiles.ts";
 
+test("the actual TUI shows solver advice but waits for a different explicit user choice", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture({ questionRecommendation: { choiceIndex: 1, reason: "Generated Guided comparison favors the second choice." } }), client = await new MoguriClient(fixture.service.connection).ready();
+  await client.sessions.configure(fixture.sessionId, { ...fixture.session().controls, modelId: fixture.modelId, autonomy: "Guided" });
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI Guided advice did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("generated structured question choices only"); setup.mockInput.pressEnter({ ctrl: true, shift: true });
+    await frameUntil("Model advises: Generated second choice");
+    const question = await waitFor(() => client.getState().snapshot!.questions.find((question) => question.status === "open"));
+    assert.equal(question.answer, null); assert.equal(fixture.requests.length, 1);
+    setup.mockInput.pressKey("F6"); await frameUntil("Model recommends: Generated second choice"); await frameUntil("Generated Guided comparison");
+    setup.mockInput.pressEnter(); await fixture.terminal(); await client.refresh();
+    const answered = client.getState().snapshot!.questions.find((value) => value.id === question.id)!;
+    assert.equal(answered.answer?.text, question.choices[0]); assert.equal(answered.answer?.actor, "user");
+    assert.equal(answered.recommendation?.choice, question.choices[1]); assert.equal(fixture.requests.length, 2);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("the actual TUI creates and renames an isolated profile, flushes old drafts and switches back without rebinding editors", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
   const fixture = await profileFixture(), first = await fixture.sdk.sessions.create(null, "Generated terminal Default");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
