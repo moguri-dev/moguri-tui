@@ -5,10 +5,10 @@ import { fixtureProvider, setupFixture, waitFor, type GeneratedProviderOptions }
 import type { PlatformOptions } from "../../apps/service/src/platform.ts";
 import { createSshTarget } from "./ssh-target.ts";
 
-export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean } = {}) {
+export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean; platform?: PlatformOptions } = {}) {
   const remote = configuration.env === "Remote";
   const secrets = new Map<string, string>(), vault = { read: async (id: string) => secrets.get(id) ?? null, write: async (id: string, value: string) => { secrets.set(id, value); }, remove: async (id: string) => { secrets.delete(id); } };
-  const options: GeneratedProviderOptions & { platform?: PlatformOptions } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text", platform: { remote: { vault, modelsVault: vault } } };
+  const options: GeneratedProviderOptions & { platform?: PlatformOptions } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text", platform: { ...configuration.platform, remote: { ...configuration.platform?.remote, vault, modelsVault: vault } } };
   const solverOptions: GeneratedProviderOptions = { maxOutputTokens: 128, exposeModels: true, replyText: "Generated routed solver answer." };
   const fixture = await setupFixture(options), solver = await fixtureProvider(solverOptions);
   const sdk = await new MoguriSdk(fixture.service.connection).ready();

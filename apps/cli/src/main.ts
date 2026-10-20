@@ -66,6 +66,10 @@ moguri budget dashboard|calls [--project ID --folder ID --session ID --provider 
 moguri budget dashboard --filters '{"range":{"kind":"days","days":30},"bucket":"week"}'
 moguri telemetry operations [--project ID --session ID --filters JSON]
 moguri telemetry storage           Current profile key-backed ciphertext, not disk usage
+moguri repository preview|state --session ID
+moguri repository refresh --session ID --digest BINDING --revision N --confirm-review
+moguri repository clear --session ID --revision N --confirm-review
+moguri repository stop JOB_ID --session ID
 moguri budget set SESSION_ID BUDGET.json --confirm-review
 moguri budget policy LIMIT_OR_NULL.json --revision N --confirm-review
 moguri budget global LIMIT_OR_NULL.json --revision N --confirm-review
@@ -206,6 +210,17 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "answer" && args[0] && args[1]) output(await sdk.questions.answer(args[0], await readFile(args[1], "utf8"), expectedRevision()));
       else if (action === "answer-draft" && args[0]) output(await sdk.questions.answerDraft(args[0], expectedRevision()));
       else throw new Error("Use question list/read, answer ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
+    } else if (group === "repository") {
+      if (!values.session) throw new Error("Choose an explicit --session ID for the actual Local/Remote repository binding.");
+      if (action === "preview") output(await sdk.repositories.preview(values.session));
+      else if (action === "state") output(await sdk.repositories.state(values.session));
+      else if (action === "refresh" && values.digest && values["confirm-review"]) output(await sdk.repositories.refresh(values.session, values.digest, expectedRevision(), true));
+      else if (action === "clear" && values["confirm-review"]) output(await sdk.repositories.clear(values.session, expectedRevision(), true));
+      else if (action === "stop" && args[0]) {
+        const job = snapshot.jobs.find((job) => job.id === args[0] && job.sessionId === values.session && job.kind === "repository.refresh");
+        if (!job) throw new Error("Choose an exact metadata refresh owned by that session.");
+        output(await sdk.jobs.cancel(job.id));
+      } else throw new Error("Use repository preview/state, refresh --digest BINDING --revision N --confirm-review, clear --revision N --confirm-review, or stop JOB_ID, with an explicit --session.");
     } else if (group === "telemetry") {
       if (action === "storage") {
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("Storage is a current profile measurement, not a dated/project/model view. Select --profile ID instead.");

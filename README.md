@@ -132,6 +132,11 @@ explicit known-result failure rate and separate denied/stopped/partial/unknown
 counts. Dashboard, CLI/TUI and SDK also expose current-profile key-backed
 ciphertext sizes, not physical disk usage or reclaimed space. Earlier deleted
 tool history remains unavailable.
+Repository/organization/visibility filters now use explicitly refreshed,
+root-bound GitHub metadata and immutable per-admission snapshots. Every tagged
+step rechecks its actual Local/SSH Git origin. Unknown history is not backfilled,
+and the open-source category is explicitly public plus detected OSI-approved
+license metadata, not a legal review or a synonym for public.
 
 **Reviewed text-context compaction** now uses one explicitly authorized,
 tool-less Local/SSH model call through the same SDK. Previewing does not infer;
@@ -150,8 +155,7 @@ Finite inherited caps, images and per-model tuning block this Single alpha.
 
 Sandbox, complete remote side-panel/extension transport, compound kupo workflows,
 Autopilot Max,
-routed wind-down/authorized checkpoint commits and
-broader repository/visibility dashboard filters are still incomplete.
+routed wind-down/authorized checkpoint commits are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed

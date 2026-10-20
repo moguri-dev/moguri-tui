@@ -16,6 +16,7 @@ import { remoteFixture } from "./fixtures/remote-service.ts";
 import { compactionFixture } from "./fixtures/compaction-service.ts";
 import { remotePlanFixture } from "./fixtures/remote-plan-service.ts";
 import { holdRemoteFrame } from "./fixtures/remote-frame-gate.ts";
+import { generatedRepositoryMetadata } from "./fixtures/repository-info.ts";
 
 test("the actual TUI keeps a pending Remote plan editor and stops only its owned save", { skip: process.platform !== "darwin", timeout: 20_000 }, async (t) => {
   const fixture = await remotePlanFixture(), gate = holdRemoteFrame(t, fixture.controller.remote, "approval");
@@ -125,6 +126,31 @@ test("the actual TUI queries dated aggregate and retained per-call telemetry wit
     await setup.mockInput.typeText("/dashboard storage"); setup.mockInput.pressEnter({ ctrl: true });
     await frameUntil('"telemetry.storage"'); await frameUntil('"measurement": "key-backed-retained-ciphertext"');
     assert.equal(fixture.requests.length, 1);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
+test("the actual TUI reviews and explicitly refreshes repository metadata without running a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  let lookups = 0;
+  const fixture = await setupFixture({ platform: { integrations: { fetch: async () => { lookups++; return Response.json(generatedRepositoryMetadata()); } } } });
+  const client = await new MoguriClient(fixture.service.connection).ready(), git = initializeGeneratedRepository(fixture.project);
+  git(["remote", "add", "origin", "https://github.com/generated/example.git"]);
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI repository metadata did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/repository preview"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"repository.preview"'); await frameUntil("https://github.com/generated/example"); assert.equal(lookups, 0);
+    const preview = (await client.repositories.preview(fixture.sessionId)).preview;
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/repository refresh ${preview.bindingDigest} ${preview.revision} confirm-lookup`); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Metadata refresh"); await waitFor(() => fixture.service.controller.snapshot().repositoryObservations.length === 1);
+    await setup.mockInput.typeText("/repository state"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"repository.state"'); await frameUntil('"status": "active"');
+    assert.equal(lookups, 1); assert.equal(fixture.requests.length, 0);
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
 
