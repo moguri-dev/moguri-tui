@@ -1,6 +1,6 @@
 {
   "name": "moguri",
-  "version": "0.20.0-alpha.1",
+  "version": "0.21.0-alpha.1",
   "private": true,
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
@@ -42,6 +42,7 @@
     "docs/architecture/remote-console-primitives.md",
     "docs/architecture/remote-user-consoles.md",
     "docs/architecture/remote-github-metadata.md",
+    "docs/architecture/remote-repository-memory.md",
     "docs/architecture/budgets.md",
     "docs/architecture/operation-telemetry.md",
     "docs/architecture/repository-telemetry.md",

@@ -72,6 +72,9 @@ build provenance, no provider request and no laptop-account fallback.
 Its exact installed SDK and actual packaged app are independently qualified;
 [setup](docs/setup.md#current-qualified-0200-alpha1-checkpoint) records the
 immutable identities. Remote repository memory remains unavailable.
+The 0.21 development source privately validates bounded SSH memory-source
+capture and freshness checks; it does not yet expose Remote indexing,
+retrieval, context injection or memory MCP tools.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
