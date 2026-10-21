@@ -140,6 +140,12 @@ This is not public compound scheduling, independent-family proof or acceptance.
 source, independently installed SDK and actual native qualification. The
 qualified 0.28 artifacts remain frozen.
 
+The first milestone remains incomplete. The
+[remaining-gap handoff](docs/remaining-milestone-gaps.md) records its open
+acceptance gates, model maximum/half-window choices, file-backed text pastes
+over 50 lines and the user-requested SendBox 0.2.3 integration. Version bumps
+do not establish completion or justify an increased estimate.
+
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
 `/meta` opens a settings chat whose changes require exact human review.

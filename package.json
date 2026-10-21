@@ -31,6 +31,7 @@
     "scripts/prepare-native.mjs",
     "docs/setup.md",
     "docs/sdk.md",
+    "docs/remaining-milestone-gaps.md",
     "docs/architecture/profiles.md",
     "docs/architecture/engagement.md",
     "docs/architecture/decision-primitives.md",
