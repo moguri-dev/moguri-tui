@@ -77,15 +77,17 @@ session-bound Local/SSH lexical indexing, actual-host freshness checks,
 optional model context/direct search and reviewed builtin memory MCP tools.
 SDK, CLI, native TUI and desktop share exact peer/root identity and no-replay
 index jobs. The exact installed SDK and actual packaged app are independently
-qualified; [setup](docs/setup.md#current-qualified-0210-alpha1-checkpoint)
+qualified; [setup](docs/setup.md#preserved-qualified-0210-alpha1-checkpoint)
 records their immutable identities. Old two-tool builtin MCP grants require
 fresh review, never silent widening. Earlier archives remain unchanged.
-The 0.22 development source adds a shared Local candidate workflow: explicitly
+Qualified **0.22.0-alpha.1 / protocol 29** adds a shared Local candidate workflow: explicitly
 stage text proposals in a separate clean owned worktree, review again, then
 apply only exact base-bound bytes. SDK, CLI, native TUI and desktop preserve
 independent history, real user acceptance, raw index/HEAD and partial/restart
-outcomes without a model or automatic commit. It builds on protocol 29; new
-immutable delivery qualification remains separate. Compound model routing,
+outcomes without a model or automatic commit. The exact installed SDK and
+actual packaged app are independently qualified;
+[setup](docs/setup.md#current-qualified-0220-alpha1-checkpoint) records their
+immutable identities. Compound model routing,
 finite kupo wind-down and Max still remain unavailable, not implied by the
 private Cascade/Critique transport proofs.
 
