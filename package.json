@@ -44,6 +44,7 @@
     "docs/architecture/remote-github-metadata.md",
     "docs/architecture/remote-repository-memory.md",
     "docs/architecture/compound-routing-primitives.md",
+    "docs/architecture/owned-role-protocol.md",
     "docs/architecture/candidate-primitives.md",
     "docs/architecture/candidate-workflows.md",
     "docs/architecture/candidate-generations.md",

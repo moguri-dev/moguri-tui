@@ -102,6 +102,9 @@ Current **0.24 development** adds internal complete planned-capacity batch
 calculation, not another public model workflow or new native delivery.
 Recorded and prospective roles share the same cumulative budget; a failed
 whole bound leaves no prefix. The qualified 0.23 archives stay frozen.
+Its private acknowledged-role probe reuses the actual worker and budget
+transactions, not another model loop. Public compound admission and real-model
+quality remain gated.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;

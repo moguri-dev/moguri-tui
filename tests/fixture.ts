@@ -24,6 +24,7 @@ export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
   questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string; replyText?: string; holdAfterTool?: boolean; responseMode?: "text" | "auto"; redirectTo?: string;
+  finishReason?: "stop" | "length";
   stream?: { chunks: string[]; delayMs: number };
   mcpCall?: { serverId: string; tool: string; arguments: Record<string, unknown>; schemaDigest: string };
 }
@@ -55,7 +56,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
       const finish = (tool?: { name: string; args: Record<string, unknown> }, text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
         if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] }); }
         else chunk({ role: "assistant", content: text });
-        chunk({}, tool ? "tool_calls" : "stop");
+        chunk({}, tool ? "tool_calls" : options.finishReason ?? "stop");
         if (!options.omitUsage) response.write(`data: ${JSON.stringify({ choices: [], usage: options.usage ?? { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
         response.end("data: [DONE]\n\n");
       };
