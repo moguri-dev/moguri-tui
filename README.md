@@ -50,9 +50,9 @@ remote workspace. The existing worker runs inference and file/command tools
 there; the local service still owns approvals and history. Disconnect/restart
 reconciliation retains late accounting without replaying effects or turning
 partial work into success. Files, Git changes and read-only plan views now use
-the actual SSH workspace through the same SDK and slash commands. Remote
-embedded consoles and repository-memory retrieval remain blocked rather than
-using a local fallback. Explicit Remote plan saves now bind the
+the actual SSH workspace through the same SDK and slash commands.
+Repository-memory retrieval remains blocked rather than using a local
+fallback. Explicit Remote plan saves now bind the
 reviewed peer/root/path/digest and run one owned filesystem operation without a
 model, preserving independent Remote-boundary snapshots. Stops, lost receipts,
 changed scopes and recovery keep partial outcomes honest and never replay writes.
@@ -61,6 +61,10 @@ model/external SSH calls and no-replay retained-result recovery, with shared
 CLI/TUI and desktop review/inspection. Forwarding access is separately opt-in;
 refresh credentials never leave their backend. This is still an initial
 macOS alpha, not the completed first milestone.
+Protocol-25 / 0.19 development source also adds explicit Remote user consoles
+with captured SSH host/root, original-owner restart recovery and ephemeral
+Ghostty/CLI/TUI input. Full source/native checks pass; exact new archives
+remain pending. No terminal is silently relabeled Local or Sandbox.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;

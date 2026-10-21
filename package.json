@@ -40,6 +40,7 @@
     "docs/architecture/terminal-reattachment.md",
     "docs/architecture/remote-mcp.md",
     "docs/architecture/remote-console-primitives.md",
+    "docs/architecture/remote-user-consoles.md",
     "docs/architecture/budgets.md",
     "docs/architecture/operation-telemetry.md",
     "docs/architecture/repository-telemetry.md",
