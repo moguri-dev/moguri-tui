@@ -123,6 +123,13 @@ separate staging/application. Its independent copy retains raw model evidence,
 not quality or user acceptance. [Setup](docs/setup.md#development-027-canonical-final-role-proposals)
 records complete source, independently installed SDK and exact native delivery
 qualification and immutable identities. Earlier archives remain frozen.
+Development **0.28 / protocol 34** adds explicit provider-declared Copilot
+metadata inspection through the SDK, CLI, native TUI and existing desktop Model
+menu. Normal login/discovery/inference is unchanged; unknown family stays
+unknown, and declarations never attest independence, quality or approval.
+[The contract](docs/architecture/model-evidence.md) and
+[setup](docs/setup.md#development-028-explicit-model-declarations) separate its
+current qualification from the frozen 0.27 delivery.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;

@@ -36,6 +36,7 @@ moguri profile defaults CONTROLS.json --revision N  Shared global preferences
 moguri session create [--project ID]  Omit project for a project-free chat
 moguri session create --controls FILE  Explicit startup control overrides
 moguri models list|refresh         Copilot and configured local model discovery
+moguri models evidence MODEL_ID   Explicit provider claims, not independence/quality; no inference
 moguri models token ENDPOINT       Piped stdin only, never a shell argument
 moguri models clear-token ENDPOINT Remove the resource-bound endpoint key
 moguri remote status|probe          Pinned SSH worker/runtime readiness
@@ -400,10 +401,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else throw new Error("Use remote status/probe/reconcile RUN_ID, acknowledge RUN_ID --confirm-review only after process inspection, or token/clear-token ENDPOINT.");
     } else if (group === "models") {
       if (action === "list") output({ models: snapshot.provider.models, connections: snapshot.provider.connections });
+      else if (action === "evidence" && args.length === 1) output(await sdk.models.evidence(args[0]!));
       else if (action === "refresh") { await sdk.models.refresh(); output(sdk.getState().snapshot!.provider); }
       else if (action === "token" && args[0]) output(await sdk.models.setToken(args[0], await credential()));
       else if (action === "clear-token" && args[0]) output(await sdk.models.clearToken(args[0]));
-      else throw new Error("Use models list, refresh, token ENDPOINT or clear-token ENDPOINT. Configure explicit endpoint URLs/limits in shared settings.");
+      else throw new Error("Use models list, refresh, evidence MODEL_ID, token ENDPOINT or clear-token ENDPOINT. Evidence is an explicit bounded account-catalogue read, not inference or independence. Configure endpoint URLs/limits in shared settings.");
     } else if (group === "slash") {
       if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
       if (/^\/budget\s+(?:set|profile|global)\b/.test(action)) console.error(BUDGET_WARNING);
