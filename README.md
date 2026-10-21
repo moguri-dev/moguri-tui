@@ -4,6 +4,18 @@ A harness for your AI that works on your terms, both in a CLI (TUI) format and a
 
 Moguri is built from zero with borrowed libraries. The [implementation specification](docs/implementation.md) defines the product and delivery order; [architecture decisions](docs/architecture/decisions.md) records the chosen stack.
 
+## macOS launch troubleshooting
+
+Moguri is currently a documentation-only pre-alpha, with no packaged desktop build provided here yet. These steps apply only to a trusted macOS `.app` build whose source and integrity you have verified, if Gatekeeper blocks its first launch because of download quarantine.
+
+Move the `.app` bundle into `/Applications` first. The command below assumes it is named `Moguri.app`; no packaging configuration currently confirms that name. If your verified build has a different name, substitute its actual bundle name:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Moguri.app"
+```
+
+Then reopen the app from Applications. This removes quarantine recursively from this app only; it does not verify, sign, or notarize it. Never use this for untrusted downloads or to bypass malware warnings, and do not disable Gatekeeper globally.
+
 ## Features
 
 The feature inventory below captures the broader Moguri vision. The implementation specification distinguishes first-release requirements from deferred work.
