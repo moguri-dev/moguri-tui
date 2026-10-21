@@ -18,6 +18,33 @@ import { remotePlanFixture } from "./fixtures/remote-plan-service.ts";
 import { holdRemoteFrame } from "./fixtures/remote-frame-gate.ts";
 import { generatedRepositoryMetadata } from "./fixtures/repository-info.ts";
 
+test("the actual TUI explicitly opens and inspects a captured Remote user console without feeding stdin through the composer", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+  const fixture = await remoteFixture({ exposeModels: false, platform: { terminal: { executable: "/bin/sh", args: ["-c", "printf 'GENERATED_TUI_REMOTE_CONSOLE\\n'; exec cat"] } } });
+  const client = await new MoguriClient(fixture.service.connection).ready();
+  await fixture.probe(); await client.sessions.env(fixture.sessionId, "Remote");
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI Remote console did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (command: string, expected: string) => {
+    await frameUntil("Write a prompt"); await setup.mockInput.typeText(command); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    await slash("/terminals open", '"env": "Remote"');
+    const terminal = fixture.controller.snapshot().terminals[0]!;
+    assert.equal(terminal.env, "Remote"); assert.equal(terminal.binding?.root, fixture.workspace);
+    setup.mockInput.pressEscape();
+    await slash(`/terminals read ${terminal.id}`, '"terminal.read"');
+    setup.mockInput.pressEscape();
+    await slash(`/terminals close ${terminal.id}`, "Exact owned terminal stop observed");
+    assert.equal(fixture.controller.snapshot().terminals[0]?.status, "closed");
+    assert.equal(fixture.session().controls.modelId, null); assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("the actual TUI reviews, explicitly grants and revokes Remote MCP authority without a model or implicit forwarding", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await remoteFixture({ exposeModels: false }), client = await new MoguriClient(fixture.service.connection).ready();
   await fixture.probe(); await client.sessions.env(fixture.sessionId, "Remote");

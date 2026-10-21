@@ -50,7 +50,7 @@ moguri workspace inspect|reconcile ID [--revision N]
 moguri workspace remove ID --revision N --confirm-remove
 moguri workspace session ID        New chat in an explicit owned worktree
 moguri workspace files|file PATH --session ID
-moguri terminal list [--session ID]  Existing profile-owned consoles and actual Local roots
+moguri terminal list [--session ID]  Existing profile-owned consoles and actual Local/SSH roots
 moguri terminal open --session ID   Explicit new user console, not an agent tool
 moguri terminal read|reconcile|close ID
 moguri terminal owner-reconcile OWNER_ID  Inspect even an owner with no terminal intent
@@ -203,7 +203,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "terminal") {
       if (!action || action === "list") {
         const terminals = snapshot.terminals.filter((terminal) => !values.session || terminal.sessionId === values.session);
-        output({ terminals, owners: snapshot.terminalOwners, warning: "Owners are shared only within this profile. Local user consoles, volatile bounded output; no agent context, automatic replacement or input replay." });
+        output({ terminals, owners: snapshot.terminalOwners, warning: "Owners are profile/Local-or-pinned-SSH scoped. Actual env/peer/root remain captured; bounded volatile output, no agent context, automatic replacement or input replay." });
       } else if (action === "open" && values.session) output(await sdk.terminal.open(values.session));
       else if (action === "read" && args[0]) output(await sdk.terminal.read(args[0]));
       else if (action === "reconcile" && args[0]) { await sdk.terminal.reconcile(args[0]); output(sdk.getState().snapshot!.terminals.find((terminal) => terminal.id === args[0])); }
