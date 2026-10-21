@@ -89,6 +89,8 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         finish(undefined, `Generated untrusted echo ${request.headers.authorization?.replace(/^Bearer /i, "") ?? "none"}`);
       } else if (prompt.includes("generated question")) {
         finish(undefined, "Which generated option would you prefer?");
+      } else if (prompt.includes("generated memory search") && toolMessages.length === 0) {
+        finish({ name: "memory_search", args: { query: "generated remote knowledge" } });
       } else if (prompt.includes("generated mcp call") && options.mcpCall && toolMessages.length === 0) {
         finish({ name: "mcp_gateway", args: { action: "call", ...options.mcpCall } });
       } else if (prompt.includes("generated failing command") && toolMessages.length === 0) {

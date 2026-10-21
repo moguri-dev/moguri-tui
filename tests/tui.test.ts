@@ -18,6 +18,32 @@ import { remotePlanFixture } from "./fixtures/remote-plan-service.ts";
 import { holdRemoteFrame } from "./fixtures/remote-frame-gate.ts";
 import { generatedRepositoryMetadata } from "./fixtures/repository-info.ts";
 import { remoteGithubFixture } from "./fixtures/remote-github-service.ts";
+import { remoteMemoryFixture } from "./fixtures/remote-memory-service.ts";
+
+test("the actual TUI explicitly indexes and searches its pinned SSH repository without a provider or Local memory fallback", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+  const f = await remoteMemoryFixture(), client = await new MoguriClient(f.service.connection).ready();
+  const setup = await createTestRenderer({ width: 140, height: 55, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI Remote memory did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/memory state"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"memory.state"'); await frameUntil('"env": "Remote"'); await frameUntil('"index": null');
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/memory index"); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Repository index");
+    await waitFor(() => f.controller.snapshot().jobs.some((job) => job.kind === "memory.index" && job.status === "completed"));
+    await setup.mockInput.typeText("/memory search generated source"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"memory.search"'); await frameUntil("generated actual remote source");
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/memory remember Generated convention: prefer typed fixture functions."); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("User-authored project convention retained");
+    assert.ok(f.controller.snapshot().registry.some((entry) => entry.kind === "memory" && entry.source === "user"));
+    assert.equal(f.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
 
 test("the actual TUI reviews the captured SSH account and explicitly refreshes private repository metadata without a model", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
   const f = await remoteGithubFixture(), client = await new MoguriClient(f.service.connection).ready();

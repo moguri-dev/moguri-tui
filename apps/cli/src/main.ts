@@ -117,6 +117,7 @@ moguri service restart|stop|info   Explicit owned-service lifecycle
 moguri config get|set FILE|reset   Shared, restorable settings
 moguri prompt get|set FILE|reset   Editable system prompt (risk acknowledgement required)
 moguri memory index PROJECT_ID|search PROJECT_ID TEXT|graph PROJECT_ID
+moguri memory index|state|search TEXT|graph [PATH] --session SESSION_ID
 moguri skills import PROJECT_ID SKILL.md
 moguri plugins import PROJECT_ID manifest.json
 moguri mcp --session SESSION_ID    Native stdio MCP gateway
@@ -471,11 +472,20 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         output(await sdk.prompt.set(await readFile(args[0], "utf8"), snapshot.settings.revision, true));
       } else throw new Error("Use prompt get, prompt set FILE or prompt reset.");
     } else if (group === "memory") {
-      if (!projectId) throw new Error("Pass a project ID from the shared SDK snapshot.");
-      if (action === "index") output(await sdk.memory.index(projectId, values.workspace));
-      else if (action === "search") output(await sdk.memory.search(projectId, args.slice(1).join(" "), 6, values.workspace));
-      else if (action === "graph") output(await sdk.memory.graph(projectId, args[1] ?? "", values.workspace));
-      else throw new Error("Use memory index, search or graph.");
+      if (values.session) {
+        if (values.project || values.workspace) throw new Error("Choose --session for its actual bound environment, or an explicit Local project/workspace; do not combine them.");
+        if (action === "index" && !args.length) output(await sdk.memory.indexSession(values.session));
+        else if (action === "state" && !args.length) output(await sdk.memory.state(values.session));
+        else if (action === "search" && args.length) output(await sdk.memory.searchSession(values.session, args.join(" ")));
+        else if (action === "graph") output(await sdk.memory.graphSession(values.session, args.join(" ")));
+        else throw new Error("Use memory index/state/search TEXT/graph [PATH] with --session SESSION_ID.");
+      } else {
+        if (!projectId) throw new Error("Pass an explicit Local project ID, or --session SESSION_ID for its actual environment.");
+        if (action === "index") output(await sdk.memory.index(projectId, values.workspace));
+        else if (action === "search") output(await sdk.memory.search(projectId, args.slice(1).join(" "), 6, values.workspace));
+        else if (action === "graph") output(await sdk.memory.graph(projectId, args[1] ?? "", values.workspace));
+        else throw new Error("Use memory index/search/graph PROJECT_ID for Local data, or --session SESSION_ID.");
+      }
     } else if (group === "skills" || group === "plugins") {
       if (action !== "import" || !args[0] || !args[1]) throw new Error("Use import PROJECT_ID FILE. Imported capabilities start disabled.");
       output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));
