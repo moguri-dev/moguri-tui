@@ -17,7 +17,7 @@ export async function main(argv: string[]): Promise<void> {
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
-    "confirm-write": { type: "boolean" }, "confirm-cost": { type: "boolean" }, generation: { type: "string" }, branch: { type: "string" }, "materialization-id": { type: "string" },
+    "confirm-write": { type: "boolean" }, "confirm-cost": { type: "boolean" }, generation: { type: "string" }, "role-sequence": { type: "string" }, branch: { type: "string" }, "materialization-id": { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
@@ -51,8 +51,9 @@ moguri workspace remove ID --revision N --confirm-remove
 moguri workspace session ID        New chat in an explicit owned worktree
 moguri workspace files|file PATH --session ID
 moguri candidate list|read ID
-moguri candidate preview PATCH.json --session SOURCE --workspace STAGE
-moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PREVIEW_SHA --confirm-write [--generation ID]
+moguri candidate preview PATCH.json --session SOURCE --workspace STAGE [--role-sequence ID]
+moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PREVIEW_SHA --confirm-write [--generation ID | --role-sequence ID]
+moguri candidate role-proposal SEQUENCE_ID  Read final canonical role bytes; no model or write
 moguri candidate generate-preview INPUT.json --session SOURCE --workspace STAGE
 moguri candidate generate INPUT.json --session SOURCE --workspace STAGE --digest REVIEW_SHA --confirm-cost
 moguri candidate generated|generation-wait|generation-stop ID
@@ -313,6 +314,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "candidate") {
       if (action === "list") output(snapshot.candidates);
       else if (action === "read" && args[0]) output(await sdk.candidates.read(args[0]));
+      else if (action === "role-proposal" && args.length === 1) output(await sdk.candidates.roleProposal(args[0]!));
       else if (action === "generated" && args.length === 1) output(await sdk.candidates.generation(args[0]!));
       else if (action === "generation-stop" && args.length === 1) output(await sdk.candidates.stopGeneration(args[0]!));
       else if (action === "generation-wait" && args.length === 1) await waitForGeneration(args[0]!);
@@ -327,15 +329,18 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else { const created = await sdk.candidates.generate(values.session, values.workspace, input, values.digest!, true); await waitForGeneration(created.id!); }
       }
       else if ((action === "preview" || action === "stage") && args.length === 1 && values.session && values.workspace && !values.project) {
+        if (values.generation !== undefined && values["role-sequence"] !== undefined) throw new Error("Choose one exact generation or final-role origin, not both. No model attribution or file write was admitted.");
+        if (values["role-sequence"] !== undefined && !values["role-sequence"].trim()) throw new Error("Pass the exact non-empty retained role sequence ID. No unverified fallback was used.");
         if (action === "stage" && (!values.digest || !values["confirm-write"])) throw new Error("Candidate staging requires the exact --digest preview and --confirm-write after reviewing its roots/bases/bytes.");
         const metadata = await stat(args[0]!);
         if (!metadata.isFile() || metadata.size > 32 * 1024) throw new Error("Choose a regular candidate patch JSON file up to 32 KiB.");
         const text = await readFile(args[0]!, "utf8");
         if (Buffer.byteLength(text) > 32 * 1024) throw new Error("The candidate JSON grew beyond its exact 32-KiB limit.");
         const patch = parse(CandidatePatchSchema, JSON.parse(text));
-        if (action === "preview") output(await sdk.candidates.preview(values.session, values.workspace, patch));
+        const origin = values["role-sequence"] ? { roleSequenceId: values["role-sequence"] } : undefined;
+        if (action === "preview") output(await sdk.candidates.preview(values.session, values.workspace, patch, origin));
         else {
-          const created = await sdk.candidates.stage(values.session, values.workspace, patch, values.digest!, values.generation);
+          const created = await sdk.candidates.stage(values.session, values.workspace, patch, values.digest!, origin ?? values.generation);
           const candidate = await sdk.candidates.read(created.id!);
           await waitForJob(candidate.candidate.stageIntent.jobId, () => sdk.candidates.stop(created.id!), "Candidate stage", () => sdk.candidates.read(created.id!));
         }
@@ -350,7 +355,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "wait" && args.length === 1) {
         const candidate = await sdk.candidates.read(args[0]!), jobId = candidate.candidate.applyIntent?.jobId ?? candidate.candidate.stageIntent.jobId;
         await waitForJob(jobId, () => sdk.candidates.stop(args[0]!), "Candidate", () => sdk.candidates.read(args[0]!));
-      } else throw new Error("Use candidate generate-preview/generate INPUT.json --session SOURCE --workspace STAGE [--digest SHA --confirm-cost], generated/generation-wait/generation-stop ID; or list/read, preview/stage PATCH.json, apply-preview/apply, reject/stop/wait. Staging and application require their separate exact reviews.");
+      } else throw new Error("Use candidate role-proposal SEQUENCE_ID; generate-preview/generate INPUT.json --session SOURCE --workspace STAGE [--digest SHA --confirm-cost], generated/generation-wait/generation-stop ID; or list/read, preview/stage PATCH.json [--role-sequence ID], apply-preview/apply, reject/stop/wait. Staging and application require their separate exact reviews.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
       else if (action === "create" && args[0]) {

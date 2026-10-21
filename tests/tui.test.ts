@@ -23,6 +23,33 @@ import { candidateApiFixture } from "./fixtures/candidate-api.ts";
 import { budgetPlanFixture } from "./fixtures/budget-plan-api.ts";
 import { candidateGenerationFixture } from "./fixtures/candidate-generation-api.ts";
 import { roleSequenceFixture } from "./fixtures/role-sequence-api.ts";
+import { roleProposalFixture } from "./fixtures/role-proposal-api.ts";
+
+test("native TUI keys inspect final-role provenance and keep its origin through separate staging and actual-user application", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
+  const f = await roleProposalFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI final-role proposal did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (text: string, expected: string) => { await frameUntil("Write a prompt"); await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected); };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: f.sdk })));
+    await slash(`/candidate role-proposal ${f.sequence.id}`, '"candidate.role.proposal"'); setup.mockInput.pressEscape();
+    const input = { stageWorkspaceId: f.workspace.id, patch: f.patch, roleSequenceId: f.sequence.id };
+    await slash(`/candidate preview ${JSON.stringify(input)}`, '"candidate.preview"'); setup.mockInput.pressEscape();
+    const preview = (await f.sdk.candidates.preview(f.sessionId, f.workspace.id, f.patch, f.reference)).preview;
+    await slash(`/candidate stage ${JSON.stringify({ ...input, expectedDigest: preview.digest })} confirm-stage`, '"candidate.read"');
+    const candidate = await waitFor(() => f.control.snapshot().candidates.find((candidate) => candidate.status === "staged"));
+    assert.equal(candidate.roleOrigin?.sequenceId, f.sequence.id); assert.equal(candidate.acceptance, null);
+    assert.equal(await readFile(join(f.project, "fixture.txt"), "utf8"), "generated original\n"); setup.mockInput.pressEscape();
+    const application = (await f.sdk.candidates.applyPreview(candidate.id, f.sessionId)).preview;
+    await slash(`/candidate apply ${candidate.id} ${candidate.revision} ${application.digest} confirm-apply`, '"candidate.read"');
+    await waitFor(() => f.control.snapshot().candidates.find((record) => record.id === candidate.id)?.status === "applied");
+    assert.equal(f.control.snapshot().candidates[0]?.acceptance?.actor, "user");
+    assert.equal(await readFile(join(f.project, "fixture.txt"), "utf8"), f.patch.edits[0]!.text); assert.equal(f.requests.length, 3);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
 
 test("native TUI keys inspect independent recorded roles and edit metadata without replacing raw inputs or calling a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const f = await roleSequenceFixture(); f.start(0); f.result(0); f.start(1); f.result(1); f.complete();

@@ -1,0 +1,13 @@
+import { digest } from "../../apps/service/src/store.ts";
+import { ownedSequenceFixture } from "./owned-sequence-api.ts";
+
+export const roleProposalPatch = { kind: "patch" as const, summary: "Generated canonical final-role proposal.", edits: [
+  { path: "fixture.txt", baseDigest: digest("generated original\n"), text: "Generated actual final-role proposed bytes.\n" },
+] };
+export async function roleProposalFixture() {
+  const f = await ownedSequenceFixture({ replyText: JSON.stringify(roleProposalPatch) });
+  try {
+    const created = await f.start(), sequence = await f.settled(created.id);
+    return { ...f, sequence, reference: { roleSequenceId: sequence.id }, patch: roleProposalPatch };
+  } catch (error) { await f.close(); throw error; }
+}

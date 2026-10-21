@@ -117,6 +117,11 @@ The **0.26 source** connects those complete retained role envelopes to the
 actual control-plane worker, with conservative future contexts and no-replay
 ownership. This remains an internal Node primitive, not public compound
 scheduling or a new qualified native delivery.
+Current **0.27 source / protocol 33** links a final retained proposer to its
+canonical candidate origin through shared SDK/CLI/TUI/desktop inspection and
+separate staging/application. Its independent copy retains raw model evidence,
+not quality or user acceptance. [Setup](docs/setup.md#development-027-canonical-final-role-proposals)
+records the still-pending complete source/consumer/native delivery gates.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
