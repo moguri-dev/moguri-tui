@@ -70,14 +70,16 @@ Qualified **0.20.0-alpha.1 / protocol 26** also adds reviewed private repository
 through the selected SSH host's GitHub CLI account, with retained peer/root/
 build provenance, no provider request and no laptop-account fallback.
 Its exact installed SDK and actual packaged app are independently qualified;
-[setup](docs/setup.md#current-qualified-0200-alpha1-checkpoint) records the
+[setup](docs/setup.md#preserved-qualified-0200-alpha1-checkpoint) records the
 immutable identities. At that checkpoint, Remote repository memory remained
-unavailable. The **0.21 / protocol-27 development source** now adds
+unavailable. Qualified **0.21.0-alpha.1 / protocol 27** now adds
 session-bound Local/SSH lexical indexing, actual-host freshness checks,
 optional model context/direct search and reviewed builtin memory MCP tools.
 SDK, CLI, native TUI and desktop share exact peer/root identity and no-replay
-index jobs. Full source/native checks pass; exact new archive acceptance
-remains separate. The qualified 0.20 artifacts are unchanged.
+index jobs. The exact installed SDK and actual packaged app are independently
+qualified; [setup](docs/setup.md#current-qualified-0210-alpha1-checkpoint)
+records their immutable identities. Old two-tool builtin MCP grants require
+fresh review, never silent widening. Earlier archives remain unchanged.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
