@@ -13,7 +13,7 @@ export async function main(argv: string[]): Promise<void> {
     help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" }, workspace: { type: "string" }, profile: { type: "string" }, color: { type: "string" },
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
-    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, digest: { type: "string" }, binding: { type: "string" },
+    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, "forward-access": { type: "boolean" }, digest: { type: "string" }, binding: { type: "string" },
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
@@ -122,6 +122,12 @@ moguri plugins import PROJECT_ID manifest.json
 moguri mcp --session SESSION_ID    Native stdio MCP gateway
 moguri mcp tools SERVER [QUERY]    Bounded tool discovery
 moguri mcp auth SERVER             Credential status (never token values)
+moguri mcp servers --session ID    Configured metadata, not tool authorization
+moguri mcp remote-preview SERVER --session ID
+moguri mcp remote-grant SERVER --session ID --digest SHA256 --revision N --confirm-review [--forward-access]
+moguri mcp remote-revoke SERVER --session ID --revision N --confirm-review
+moguri mcp remote-calls --session ID
+moguri mcp remote-call OPERATION_ID --session ID
 moguri mcp login SERVER [--session ID]  Explicit OAuth; prints the authorization URL
 moguri mcp oauth-status|cancel AUTH_ID
 moguri mcp clear-oauth SERVER [--session ID]
@@ -477,7 +483,17 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (!action) {
         if (!values.session) throw new Error("Bind the gateway to --session SESSION_ID. It cannot approve itself.");
         await serveGatewayMcp(sdk, values.session); keep = true;
-      } else if (action === "tools") output(await sdk.mcp.tools(args[0] ?? "builtin", args.slice(1).join(" "), 0, values.session));
+      } else if (action === "servers") output(await sdk.mcp.servers(values.session));
+      else if (action?.startsWith("remote-")) {
+        if (!values.session) throw new Error("Bind Remote MCP review and inspection to --session SESSION_ID.");
+        if (action === "remote-calls" && !args.length) output(await sdk.mcp.remoteCalls(values.session));
+        else if (action === "remote-call" && args[0] && args.length === 1) output(await sdk.mcp.remoteCall(values.session, args[0]));
+        else if (action === "remote-preview" && args[0] && args.length === 1) output(await sdk.mcp.remotePreview(values.session, args[0]));
+        else if (action === "remote-grant" && args[0] && args.length === 1 && values.digest && values["confirm-review"]) output(await sdk.mcp.grantRemote(values.session, args[0], values.digest, expectedRevision(), values["forward-access"] === true, true));
+        else if (action === "remote-revoke" && args[0] && args.length === 1 && values["confirm-review"]) output(await sdk.mcp.revokeRemote(values.session, args[0], expectedRevision(), true));
+        else throw new Error("Use Remote MCP preview/calls/call, or an exact grant/revoke with --confirm-review and observed --revision. Grant also needs --digest; --forward-access independently allows sending access that may be long-lived. Refresh credentials remain local.");
+      }
+      else if (action === "tools") output(await sdk.mcp.tools(args[0] ?? "builtin", args.slice(1).join(" "), 0, values.session));
       else if (action === "auth" && args[0]) output(await sdk.mcp.auth(args[0], values.session));
       else if (action === "login" && args[0]) { const result = await sdk.mcp.oauthBegin(args[0], values.session); output(await sdk.mcp.oauthStatus(result.id!)); }
       else if (action === "oauth-status" && args[0]) output(await sdk.mcp.oauthStatus(args[0]));
@@ -490,7 +506,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       }
       else if (action === "token" && args[0]) {
         output(await sdk.mcp.setToken(args[0], await credential(), values.session));
-      } else throw new Error("Use mcp --session ID, mcp tools, mcp auth or mcp token.");
+      } else throw new Error("Use mcp --session ID, mcp servers/tools/auth, mcp remote-preview/grant/revoke/calls/call or mcp token.");
     } else if (group === "dictate") {
       if (action === "download") {
         if (!values["accept-license"]) throw new Error("Review OpenMDW-1.1 and the 708 MiB model download, then pass --accept-license.");

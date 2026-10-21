@@ -18,6 +18,37 @@ import { remotePlanFixture } from "./fixtures/remote-plan-service.ts";
 import { holdRemoteFrame } from "./fixtures/remote-frame-gate.ts";
 import { generatedRepositoryMetadata } from "./fixtures/repository-info.ts";
 
+test("the actual TUI reviews, explicitly grants and revokes Remote MCP authority without a model or implicit forwarding", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await remoteFixture({ exposeModels: false }), client = await new MoguriClient(fixture.service.connection).ready();
+  await fixture.probe(); await client.sessions.env(fixture.sessionId, "Remote");
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI Remote MCP did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (command: string, expected: string) => {
+    await frameUntil("Write a prompt"); await setup.mockInput.typeText(command); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    await slash("/mcp-remote preview builtin", '"mcp.remote.preview"');
+    const preview = (await client.mcp.remotePreview(fixture.sessionId, "builtin")).preview;
+    assert.equal(preview.root, fixture.workspace); assert.equal(preview.granted, false);
+    setup.mockInput.pressEscape();
+    await slash(`/mcp-remote grant builtin ${preview.digest} ${preview.settingsRevision} confirm-reviewed`, "Exact peer/resource grant saved");
+    assert.equal(client.settings.get()!.values.remote!.mcpGrants![0]!.forwardAccess, false);
+    await fixture.probe(); await client.refresh();
+    setup.mockInput.pressEscape();
+    await slash("/mcp servers", '"mcp.servers"');
+    setup.mockInput.pressEscape();
+    await slash(`/mcp-remote revoke builtin ${client.settings.get()!.revision} confirm-revoke`, "Remote MCP grant revoked");
+    assert.deepEqual(fixture.controller.snapshot().settings.values.remote!.mcpGrants, []);
+    assert.equal(fixture.controller.snapshot().remoteMcpCalls.length, 0); assert.equal(fixture.requests.length, 0);
+    assert.equal(fixture.session().controls.modelId, null);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("the actual TUI keeps a pending Remote plan editor and stops only its owned save", { skip: process.platform !== "darwin", timeout: 20_000 }, async (t) => {
   const fixture = await remotePlanFixture(), gate = holdRemoteFrame(t, fixture.controller.remote, "approval");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);

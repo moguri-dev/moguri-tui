@@ -349,7 +349,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       }
       case "/mcp": {
         const [operation, id = "builtin", ...rest] = argument.split(" ");
-        if (operation === "servers") show(snapshot?.settings.values.mcpServers.map((server) => ({ id: server.id, name: server.name, enabled: server.enabled, transport: server.transport.type })));
+        if (operation === "servers") show(await client.mcp.servers(session.id));
         else if (operation === "tools") show(await client.mcp.tools(id, rest.join(" "), 0, session.id));
         else if (operation === "auth") show(await client.mcp.auth(id, session.id));
         else if (operation === "login") { const created = await client.mcp.oauthBegin(id, session.id); show(await client.mcp.oauthStatus(created.id!)); }
@@ -686,6 +686,8 @@ Esc composer
 /capabilities | /capability view|enable|disable ID
 /proposal view ID | /proposal approve|reject ID SHA256
 /mcp servers | /mcp tools SERVER QUERY | /mcp auth SERVER
+/mcp-remote preview SERVER | grant SERVER SHA256 REV confirm-reviewed [forward-access]
+/mcp-remote revoke SERVER REV confirm-revoke | calls | inspect OPERATION_ID
 /mcp token SERVER (dedicated masked input, never a draft)
 /mcp call SERVER TOOL SHA256 JSON | /scripts | /result JOB_ID
 /subagent PROMPT (only when explicitly enabled)
