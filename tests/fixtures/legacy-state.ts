@@ -6,15 +6,27 @@ import { PROTOCOL_VERSION } from "../../packages/protocol/src/index.ts";
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29): Promise<void> {
+export function retainedCiphertextRows(db: DatabaseSync) {
+  return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
+    .map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]);
+}
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30): Promise<void> {
+  const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
+  if (events.some((event) => event.event_type === "candidate.generation_recorded" ||
+    event.event_type === "turn.control_started" && event.payload.purpose === "candidate.generate" ||
+    event.event_type === "model.started" && event.payload.role === "draft" ||
+    event.event_type === "budget.recorded" && event.payload.entry.role === "draft" ||
+    event.event_type === "budget.plan_recorded" && event.payload.plan.role === "draft")) throw new Error("Generate pre-generation history for a legacy fixture; do not relabel future model generations/draft roles as an older schema.");
   if (version >= 4) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
-      if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='budget.plan_recorded'").get()?.count)) throw new Error("Generate pre-planning history for a legacy fixture; do not relabel future budget plans as an older schema.");
+      if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.generation_recorded'").get()?.count)) throw new Error("Generate pre-generation history for a legacy fixture; do not relabel future model generations as an older schema.");
+      if (version < 30 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='budget.plan_recorded'").get()?.count)) throw new Error("Generate pre-planning history for a legacy fixture; do not relabel future budget plans as an older schema.");
       if (version < 29 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.saved'").get()?.count)) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
       if (version >= 14) {
-        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='budget_planning_schema';
+        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='candidate_generation_schema';
+          ${version < 30 ? "DELETE FROM retention_metadata WHERE id='budget_planning_schema';" : ""}
           ${version < 29 ? "DELETE FROM retention_metadata WHERE id='candidate_execution_schema';" : ""}
           ${version < 28 ? "DELETE FROM retention_metadata WHERE id='candidate_workflow_schema';" : ""}
           ${version < 27 ? "DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id='remote_memory_schema';" : ""}
@@ -34,7 +46,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
         return;
       }
       if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.profile_id') NOT IN ('default','_global')").get()?.count)) throw new Error("Generate Default-only legacy fixtures without dropping another user profile.");
-      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('remote_memory_schema','candidate_workflow_schema','candidate_execution_schema','budget_planning_schema'); DROP TRIGGER events_no_delete;
+      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('remote_memory_schema','candidate_workflow_schema','candidate_execution_schema','budget_planning_schema','candidate_generation_schema'); DROP TRIGGER events_no_delete;
         DELETE FROM events WHERE json_extract(data,'$.profile_id')='_global';
         CREATE TRIGGER events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;`);
       for (const table of ["blob_payloads", "retention_keys", "retention_forgotten"]) db.prepare(`DELETE FROM ${table} WHERE scope='profile/_global' OR scope GLOB 'profile/_global/*'`).run();
@@ -59,7 +71,6 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
     finally { db.close(); }
     return;
   }
-  const events = service.store.events();
   if (events.some((event) => event.event_type === "budget.plan_recorded")) throw new Error("Generate pre-planning history for a legacy fixture; do not relabel future budget plans as an older schema.");
   if (events.some((event) => event.event_type === "candidate.saved")) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
   const blobs = service.store.db.prepare("SELECT DISTINCT digest FROM blob_payloads").all().map((row) => [String(row.digest), service.store.blob(String(row.digest))] as const);

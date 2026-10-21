@@ -21,6 +21,30 @@ import { remoteGithubFixture } from "./fixtures/remote-github-service.ts";
 import { remoteMemoryFixture } from "./fixtures/remote-memory-service.ts";
 import { candidateApiFixture } from "./fixtures/candidate-api.ts";
 import { budgetPlanFixture } from "./fixtures/budget-plan-api.ts";
+import { candidateGenerationFixture } from "./fixtures/candidate-generation-api.ts";
+
+test("native TUI keys review one owned generated proposal and edit only retained metadata without staging source files", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+  const f = await candidateGenerationFixture(), client = f.sdk;
+  const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI model generation did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    const preview = (await client.candidates.generatePreview(f.sessionId, f.workspace.id, f.input)).preview;
+    await setup.mockInput.typeText(`/candidate generate ${JSON.stringify({ stageWorkspaceId: f.workspace.id, input: f.input, expectedDigest: preview.digest })} confirm-cost`);
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil('"candidate.generation.read"'); await frameUntil('"proposed"');
+    const generation = f.service.controller.snapshot().candidateGenerations[0]!; assert.equal(f.requests.length, 1);
+    assert.equal(await readFile(join(f.project, "fixture.txt"), "utf8"), "generated original\n");
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/artifact edit ${generation.id}`); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Generation metadata only");
+    setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ name: "Generated TUI model-proposal name", status: "active", folderId: null, workItemId: null }));
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Retained independently");
+    assert.equal((await client.artifacts.read(generation.id)).artifact.name, "Generated TUI model-proposal name"); assert.equal(f.requests.length, 1);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
 
 test("the native TUI inspects planned model holds separately from actual call history without dispatching a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const f = await budgetPlanFixture(), plan = f.create();

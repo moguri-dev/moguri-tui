@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
@@ -17,7 +17,7 @@ export async function main(argv: string[]): Promise<void> {
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
-    "confirm-write": { type: "boolean" }, branch: { type: "string" }, "materialization-id": { type: "string" },
+    "confirm-write": { type: "boolean" }, "confirm-cost": { type: "boolean" }, generation: { type: "string" }, branch: { type: "string" }, "materialization-id": { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
@@ -52,7 +52,10 @@ moguri workspace session ID        New chat in an explicit owned worktree
 moguri workspace files|file PATH --session ID
 moguri candidate list|read ID
 moguri candidate preview PATCH.json --session SOURCE --workspace STAGE
-moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PREVIEW_SHA --confirm-write
+moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PREVIEW_SHA --confirm-write [--generation ID]
+moguri candidate generate-preview INPUT.json --session SOURCE --workspace STAGE
+moguri candidate generate INPUT.json --session SOURCE --workspace STAGE --digest REVIEW_SHA --confirm-cost
+moguri candidate generated|generation-wait|generation-stop ID
 moguri candidate apply-preview ID --session SOURCE
 moguri candidate apply ID --session SOURCE --revision N --digest REVIEW_SHA --confirm-write
 moguri candidate reject ID --revision N --confirm-review
@@ -194,6 +197,14 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (result) output(await result()); else { output(job); output(await sdk.mcp.readResult(jobId)); }
     } finally { process.off("SIGINT", cancel); }
   };
+  const waitForGeneration = async (id: string) => {
+    const cancel = () => { void sdk.candidates.stopGeneration(id).catch((error: unknown) => console.error(`Generation stop was not confirmed: ${error instanceof Error ? error.message : "inspect its original operation"}`)); };
+    process.once("SIGINT", cancel);
+    try {
+      const result = await sdk.candidates.waitGeneration(id); output(result);
+      if (result.generation.status !== "proposed") throw new Error(result.generation.diagnostic ?? `Generation ${result.generation.status}; no proposal success was inferred.`);
+    } finally { process.off("SIGINT", cancel); }
+  };
   const expectedRevision = () => {
     if (!values.revision || !/^\d+$/.test(values.revision) || !Number.isSafeInteger(Number(values.revision))) throw new Error("Pass the observed --revision N. Stale local edits are never silently overwritten.");
     return Number(values.revision);
@@ -298,6 +309,19 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "candidate") {
       if (action === "list") output(snapshot.candidates);
       else if (action === "read" && args[0]) output(await sdk.candidates.read(args[0]));
+      else if (action === "generated" && args.length === 1) output(await sdk.candidates.generation(args[0]!));
+      else if (action === "generation-stop" && args.length === 1) output(await sdk.candidates.stopGeneration(args[0]!));
+      else if (action === "generation-wait" && args.length === 1) await waitForGeneration(args[0]!);
+      else if ((action === "generate-preview" || action === "generate") && args.length === 1 && values.session && values.workspace && !values.project) {
+        if (action === "generate" && (!values.digest || !values["confirm-cost"])) throw new Error("Generation requires its exact --digest preview and --confirm-cost. No model was called.");
+        const metadata = await stat(args[0]!);
+        if (!metadata.isFile() || metadata.size > 32 * 1024) throw new Error("Choose a regular generation-selection JSON file up to 32 KiB.");
+        const text = await readFile(args[0]!, "utf8");
+        if (Buffer.byteLength(text) > 32 * 1024) throw new Error("Generation-selection JSON grew beyond 32 KiB. Nothing was truncated.");
+        const input = parse(CandidateGenerationInputSchema, JSON.parse(text));
+        if (action === "generate-preview") output(await sdk.candidates.generatePreview(values.session, values.workspace, input));
+        else { const created = await sdk.candidates.generate(values.session, values.workspace, input, values.digest!, true); await waitForGeneration(created.id!); }
+      }
       else if ((action === "preview" || action === "stage") && args.length === 1 && values.session && values.workspace && !values.project) {
         if (action === "stage" && (!values.digest || !values["confirm-write"])) throw new Error("Candidate staging requires the exact --digest preview and --confirm-write after reviewing its roots/bases/bytes.");
         const metadata = await stat(args[0]!);
@@ -307,7 +331,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         const patch = parse(CandidatePatchSchema, JSON.parse(text));
         if (action === "preview") output(await sdk.candidates.preview(values.session, values.workspace, patch));
         else {
-          const created = await sdk.candidates.stage(values.session, values.workspace, patch, values.digest!);
+          const created = await sdk.candidates.stage(values.session, values.workspace, patch, values.digest!, values.generation);
           const candidate = await sdk.candidates.read(created.id!);
           await waitForJob(candidate.candidate.stageIntent.jobId, () => sdk.candidates.stop(created.id!), "Candidate stage", () => sdk.candidates.read(created.id!));
         }
@@ -322,7 +346,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "wait" && args.length === 1) {
         const candidate = await sdk.candidates.read(args[0]!), jobId = candidate.candidate.applyIntent?.jobId ?? candidate.candidate.stageIntent.jobId;
         await waitForJob(jobId, () => sdk.candidates.stop(args[0]!), "Candidate", () => sdk.candidates.read(args[0]!));
-      } else throw new Error("Use candidate list/read, preview|stage PATCH.json --session SOURCE --workspace STAGE [--digest SHA --confirm-write], apply-preview ID --session SOURCE, apply ID --session SOURCE --revision N --digest SHA --confirm-write, reject ID --revision N --confirm-review, or stop/wait ID.");
+      } else throw new Error("Use candidate generate-preview/generate INPUT.json --session SOURCE --workspace STAGE [--digest SHA --confirm-cost], generated/generation-wait/generation-stop ID; or list/read, preview/stage PATCH.json, apply-preview/apply, reject/stop/wait. Staging and application require their separate exact reviews.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
       else if (action === "create" && args[0]) {

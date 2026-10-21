@@ -90,6 +90,12 @@ actual packaged app are independently qualified;
 immutable identities. Compound model routing,
 finite kupo wind-down and Max still remain unavailable, not implied by the
 private Cascade/Critique transport proofs.
+Current **0.23 development / protocol 31** adds independently retained planned
+budget capacity and one explicitly cost-reviewed, tool-less Local model
+proposal through the same SDK/CLI/TUI/desktop. Generated source/provenance and
+actual charges remain inspectable; staging and application still need their
+two separate reviews. This is not completed compound routing or a newly
+qualified native delivery; see [the generation contract](docs/architecture/candidate-generations.md).
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;

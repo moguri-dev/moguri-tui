@@ -2,11 +2,11 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MoguriSdk, type CandidatePatch } from "../../packages/sdk/src/index.ts";
 import { digest } from "../../apps/service/src/store.ts";
-import { setupFixture } from "../fixture.ts";
+import { setupFixture, type GeneratedProviderOptions } from "../fixture.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
 
-export async function candidateApiFixture() {
-  const f = await setupFixture(), sdk = await new MoguriSdk(f.service.connection).ready();
+export async function candidateApiFixture(options: GeneratedProviderOptions = {}) {
+  const f = await setupFixture(options), sdk = await new MoguriSdk(f.service.connection).ready();
   try {
     await writeFile(join(f.project, "second.txt"), "Generated second base.\n");
     const git = initializeGeneratedRepository(f.project, ["fixture.txt", "second.txt"]);
