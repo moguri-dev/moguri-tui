@@ -113,6 +113,10 @@ qualified; [setup](docs/setup.md#current-qualified-0250-alpha1-checkpoint)
 records immutable identities. This includes the 0.24 prerequisites, not public
 compound scheduling, real-family quality or finite kupo. Earlier archives stay
 unchanged.
+The **0.26 source** connects those complete retained role envelopes to the
+actual control-plane worker, with conservative future contexts and no-replay
+ownership. This remains an internal Node primitive, not public compound
+scheduling or a new qualified native delivery.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
