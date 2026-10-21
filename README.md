@@ -131,6 +131,13 @@ unknown, and declarations never attest independence, quality or approval.
 [setup](docs/setup.md#development-028-explicit-model-declarations) separate its
 source, exact installed SDK and actual native qualification from the frozen
 0.27 delivery. Earlier archives remain unchanged.
+Development **0.29 / protocol 35** adds explicit output/context contracts to the
+existing internal owned executor and shared read-only contract inspection.
+Router explanations cannot enter a contracted solver's selected context;
+rejected or malformed advice stays charged and cannot start the next role.
+This is not public compound scheduling, independent-family proof or acceptance.
+[The development contract](docs/architecture/owned-role-contracts.md) records
+its current gates; the qualified 0.28 artifacts remain frozen.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;

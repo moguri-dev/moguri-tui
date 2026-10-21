@@ -1,6 +1,6 @@
 {
   "name": "moguri",
-  "version": "0.28.0-alpha.1",
+  "version": "0.29.0-alpha.1",
   "private": true,
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
@@ -48,6 +48,7 @@
     "docs/architecture/role-sequences.md",
     "docs/architecture/role-proposals.md",
     "docs/architecture/model-evidence.md",
+    "docs/architecture/owned-role-contracts.md",
     "docs/architecture/candidate-primitives.md",
     "docs/architecture/candidate-workflows.md",
     "docs/architecture/candidate-generations.md",

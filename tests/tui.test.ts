@@ -25,6 +25,23 @@ import { candidateGenerationFixture } from "./fixtures/candidate-generation-api.
 import { roleSequenceFixture } from "./fixtures/role-sequence-api.ts";
 import { roleProposalFixture } from "./fixtures/role-proposal-api.ts";
 import { modelEvidenceFixture } from "./fixtures/model-evidence-api.ts";
+import { roleContractFixture } from "./fixtures/role-contract-api.ts";
+
+test("native TUI keys inspect exact retained role contracts without dispatching, accepting or changing their input", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const f = await roleContractFixture(), created = await f.run(); await f.settled(created.id);
+  const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI role contract did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: f.sdk }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/roles contract ${created.id} 2`); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"role.contract.read"'); await frameUntil('"candidateIndex": 1');
+    assert.equal(f.requests.length, 4); assert.equal(f.preparations(), 4); assert.equal(f.control.snapshot().candidates.length, 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
 
 test("native TUI keys read provider-declared metadata through the shared SDK without calling a model or treating it as approval", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const f = await modelEvidenceFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);

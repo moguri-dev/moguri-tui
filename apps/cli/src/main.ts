@@ -55,6 +55,7 @@ moguri candidate list|read ID
 moguri candidate preview PATCH.json --session SOURCE --workspace STAGE [--role-sequence ID]
 moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PREVIEW_SHA --confirm-write [--generation ID | --role-sequence ID]
 moguri candidate role-proposal SEQUENCE_ID  Read final canonical role bytes; no model or write
+moguri roles contract SEQUENCE_ID ROLE_INDEX  Read bound output/context checks, never code approval
 moguri candidate generate-preview INPUT.json --session SOURCE --workspace STAGE
 moguri candidate generate INPUT.json --session SOURCE --workspace STAGE --digest REVIEW_SHA --confirm-cost
 moguri candidate generated|generation-wait|generation-stop ID
@@ -310,8 +311,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         }
       } else throw new Error("Use budget status SESSION, dashboard/calls/plans [--filters JSON], set SESSION BUDGET.json --confirm-review, or policy/global LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
     } else if (group === "roles") {
-      if (!action || args.length > 1 || args[0] !== undefined && !/^\d+$/.test(args[0])) throw new Error("Use roles SEQUENCE_ID [ROLE_INDEX] to inspect retained data; this command never dispatches a model.");
-      output(await sdk.roleSequences.read(action, args[0] === undefined ? undefined : Number(args[0])));
+      if (action === "contract") {
+        if (args.length !== 2 || !/^\d+$/.test(args[1]!)) throw new Error("Use roles contract SEQUENCE_ID ROLE_INDEX to inspect original declared checks; no model, quality or approval is implied.");
+        output(await sdk.roleSequences.contract(args[0]!, Number(args[1])));
+      } else {
+        if (!action || args.length > 1 || args[0] !== undefined && !/^\d+$/.test(args[0])) throw new Error("Use roles SEQUENCE_ID [ROLE_INDEX] or roles contract SEQUENCE_ID ROLE_INDEX. These reads never dispatch a model.");
+        output(await sdk.roleSequences.read(action, args[0] === undefined ? undefined : Number(args[0])));
+      }
     } else if (group === "candidate") {
       if (action === "list") output(snapshot.candidates);
       else if (action === "read" && args[0]) output(await sdk.candidates.read(args[0]));
