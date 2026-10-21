@@ -19,6 +19,43 @@ import { holdRemoteFrame } from "./fixtures/remote-frame-gate.ts";
 import { generatedRepositoryMetadata } from "./fixtures/repository-info.ts";
 import { remoteGithubFixture } from "./fixtures/remote-github-service.ts";
 import { remoteMemoryFixture } from "./fixtures/remote-memory-service.ts";
+import { candidateApiFixture } from "./fixtures/candidate-api.ts";
+
+test("the native TUI stages and separately applies exact reviewed candidate bytes through the shared SDK without a model", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+  const f = await candidateApiFixture(), client = f.sdk;
+  const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI candidate did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (text: string, expected: string) => { await frameUntil("Write a prompt"); await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected); };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    const input = { stageWorkspaceId: f.workspace.id, patch: f.patch };
+    await slash(`/candidate preview ${JSON.stringify(input)}`, '"candidate.preview"');
+    const preview = (await client.candidates.preview(f.sessionId, f.workspace.id, f.patch)).preview;
+    setup.mockInput.pressEscape();
+    await slash(`/candidate stage ${JSON.stringify({ ...input, expectedDigest: preview.digest })} confirm-stage`, '"candidate.read"');
+    const candidate = await waitFor(() => client.getState().snapshot!.candidates.find((candidate) => candidate.status === "staged"));
+    assert.equal(await readFile(join(f.project, "fixture.txt"), "utf8"), "generated original\n");
+    setup.mockInput.pressEscape();
+    await slash(`/candidate apply-preview ${candidate.id}`, '"candidate.apply.preview"');
+    const review = (await client.candidates.applyPreview(candidate.id, f.sessionId)).preview;
+    setup.mockInput.pressEscape();
+    await slash(`/candidate apply ${candidate.id} ${candidate.revision} ${review.digest} confirm-apply`, '"candidate.read"');
+    await waitFor(() => client.getState().snapshot!.candidates.find((entry) => entry.id === candidate.id)?.status === "applied");
+    assert.equal(await readFile(join(f.project, "fixture.txt"), "utf8"), f.patch.edits[0]!.text);
+    assert.equal(client.getState().snapshot!.candidates[0]?.acceptance?.actor, "user"); assert.equal(f.requests.length, 0);
+    setup.mockInput.pressEscape();
+    await slash(`/artifact edit ${candidate.id}`, "Candidate metadata only");
+    setup.mockInput.pressKey("a", { super: true });
+    await setup.mockInput.typeText(JSON.stringify({ name: "Generated TUI immutable candidate name", status: "active", folderId: null, workItemId: null }));
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Retained independently");
+    assert.equal((await client.artifacts.read(candidate.id)).artifact.name, "Generated TUI immutable candidate name");
+    assert.equal((await client.candidates.read(candidate.id)).candidate.documentDigest, candidate.documentDigest);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
 
 test("the actual TUI explicitly indexes and searches its pinned SSH repository without a provider or Local memory fallback", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
   const f = await remoteMemoryFixture(), client = await new MoguriClient(f.service.connection).ready();

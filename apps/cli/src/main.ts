@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
@@ -50,6 +50,13 @@ moguri workspace inspect|reconcile ID [--revision N]
 moguri workspace remove ID --revision N --confirm-remove
 moguri workspace session ID        New chat in an explicit owned worktree
 moguri workspace files|file PATH --session ID
+moguri candidate list|read ID
+moguri candidate preview PATCH.json --session SOURCE --workspace STAGE
+moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PREVIEW_SHA --confirm-write
+moguri candidate apply-preview ID --session SOURCE
+moguri candidate apply ID --session SOURCE --revision N --digest REVIEW_SHA --confirm-write
+moguri candidate reject ID --revision N --confirm-review
+moguri candidate stop|wait ID       Inspect actual partial/cancelled outcomes; never replay
 moguri terminal list [--session ID]  Existing profile-owned consoles and actual Local/SSH roots
 moguri terminal open --session ID   Explicit new user console, not an agent tool
 moguri terminal read|reconcile|close ID
@@ -288,6 +295,34 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           output(await sdk.budgets.status(session.id));
         }
       } else throw new Error("Use budget status SESSION, dashboard/calls [--filters JSON], set SESSION BUDGET.json --confirm-review, or policy/global LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
+    } else if (group === "candidate") {
+      if (action === "list") output(snapshot.candidates);
+      else if (action === "read" && args[0]) output(await sdk.candidates.read(args[0]));
+      else if ((action === "preview" || action === "stage") && args.length === 1 && values.session && values.workspace && !values.project) {
+        if (action === "stage" && (!values.digest || !values["confirm-write"])) throw new Error("Candidate staging requires the exact --digest preview and --confirm-write after reviewing its roots/bases/bytes.");
+        const metadata = await stat(args[0]!);
+        if (!metadata.isFile() || metadata.size > 32 * 1024) throw new Error("Choose a regular candidate patch JSON file up to 32 KiB.");
+        const text = await readFile(args[0]!, "utf8");
+        if (Buffer.byteLength(text) > 32 * 1024) throw new Error("The candidate JSON grew beyond its exact 32-KiB limit.");
+        const patch = parse(CandidatePatchSchema, JSON.parse(text));
+        if (action === "preview") output(await sdk.candidates.preview(values.session, values.workspace, patch));
+        else {
+          const created = await sdk.candidates.stage(values.session, values.workspace, patch, values.digest!);
+          const candidate = await sdk.candidates.read(created.id!);
+          await waitForJob(candidate.candidate.stageIntent.jobId, () => sdk.candidates.stop(created.id!), "Candidate stage", () => sdk.candidates.read(created.id!));
+        }
+      } else if (action === "apply-preview" && args.length === 1 && values.session) output(await sdk.candidates.applyPreview(args[0]!, values.session));
+      else if (action === "apply" && args.length === 1 && values.session && values.digest && values["confirm-write"]) {
+        await sdk.candidates.apply(args[0]!, values.session, expectedRevision(), values.digest);
+        const candidate = await sdk.candidates.read(args[0]!);
+        if (!candidate.candidate.applyIntent) throw new Error("No original candidate apply job was retained. Inspect its intent; no success was inferred.");
+        await waitForJob(candidate.candidate.applyIntent.jobId, () => sdk.candidates.stop(args[0]!), "Candidate apply", () => sdk.candidates.read(args[0]!));
+      } else if (action === "reject" && args.length === 1 && values["confirm-review"]) output(await sdk.candidates.reject(args[0]!, expectedRevision(), true));
+      else if (action === "stop" && args.length === 1) output(await sdk.candidates.stop(args[0]!));
+      else if (action === "wait" && args.length === 1) {
+        const candidate = await sdk.candidates.read(args[0]!), jobId = candidate.candidate.applyIntent?.jobId ?? candidate.candidate.stageIntent.jobId;
+        await waitForJob(jobId, () => sdk.candidates.stop(args[0]!), "Candidate", () => sdk.candidates.read(args[0]!));
+      } else throw new Error("Use candidate list/read, preview|stage PATCH.json --session SOURCE --workspace STAGE [--digest SHA --confirm-write], apply-preview ID --session SOURCE, apply ID --session SOURCE --revision N --digest SHA --confirm-write, reject ID --revision N --confirm-review, or stop/wait ID.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
       else if (action === "create" && args[0]) {

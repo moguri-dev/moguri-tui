@@ -80,12 +80,14 @@ index jobs. The exact installed SDK and actual packaged app are independently
 qualified; [setup](docs/setup.md#current-qualified-0210-alpha1-checkpoint)
 records their immutable identities. Old two-tool builtin MCP grants require
 fresh review, never silent widening. Earlier archives remain unchanged.
-The 0.22 development source privately exercises bounded Cascade/Critique
-transport and owned-file staging/exact-review mechanics. Public compound
-candidates, accepted application and finite kupo
-wind-down remain unavailable until their owned-workspace/ledger gates pass.
-Protocol 28's candidate event/retention foundation is internal, not a newly
-exposed candidate workflow.
+The 0.22 development source adds a shared Local candidate workflow: explicitly
+stage text proposals in a separate clean owned worktree, review again, then
+apply only exact base-bound bytes. SDK, CLI, native TUI and desktop preserve
+independent history, real user acceptance, raw index/HEAD and partial/restart
+outcomes without a model or automatic commit. It builds on protocol 29; new
+immutable delivery qualification remains separate. Compound model routing,
+finite kupo wind-down and Max still remain unavailable, not implied by the
+private Cascade/Critique transport proofs.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
