@@ -6,13 +6,14 @@ import { PROTOCOL_VERSION } from "../../packages/protocol/src/index.ts";
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23): Promise<void> {
   if (version >= 4) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
       if (version >= 14) {
-        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='terminal_ownership_schema';
+        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='remote_mcp_schema';
+          ${version < 23 ? "DELETE FROM retention_metadata WHERE id='terminal_ownership_schema';" : ""}
           ${version < 22 ? "DELETE FROM retention_metadata WHERE id='repository_attribution_schema';" : ""}
           ${version < 21 ? "DELETE FROM retention_metadata WHERE id='operation_metrics_schema';" : ""}
           ${version < 20 ? "DELETE FROM retention_metadata WHERE id='remote_plan_save_schema';" : ""}
@@ -35,7 +36,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
           INSERT INTO receipts_legacy SELECT id,digest,result FROM receipts WHERE profile_id='default';
           DROP TABLE receipts; ALTER TABLE receipts_legacy RENAME TO receipts;`);
       }
-      db.exec(`DELETE FROM retention_metadata WHERE id IN ('profile_scope_schema','guided_advice_schema','single_routing_schema','remote_workspace_read_schema','stream_telemetry_schema','context_compaction_schema','remote_plan_save_schema','operation_metrics_schema','repository_attribution_schema','terminal_ownership_schema');
+      db.exec(`DELETE FROM retention_metadata WHERE id IN ('profile_scope_schema','guided_advice_schema','single_routing_schema','remote_workspace_read_schema','stream_telemetry_schema','context_compaction_schema','remote_plan_save_schema','operation_metrics_schema','repository_attribution_schema','terminal_ownership_schema','remote_mcp_schema');
         ${version < 13 ? "DELETE FROM retention_metadata WHERE id='budget_ledger_schema';" : ""}
         ${version < 12 ? "DELETE FROM retention_metadata WHERE id='artifact_repository_schema';" : ""}
         ${version < 11 ? "DELETE FROM retention_metadata WHERE id='structured_question_schema';" : ""}
