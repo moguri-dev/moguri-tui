@@ -20,6 +20,25 @@ import { generatedRepositoryMetadata } from "./fixtures/repository-info.ts";
 import { remoteGithubFixture } from "./fixtures/remote-github-service.ts";
 import { remoteMemoryFixture } from "./fixtures/remote-memory-service.ts";
 import { candidateApiFixture } from "./fixtures/candidate-api.ts";
+import { budgetPlanFixture } from "./fixtures/budget-plan-api.ts";
+
+test("the native TUI inspects planned model holds separately from actual call history without dispatching a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const f = await budgetPlanFixture(), plan = f.create();
+  const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI planned accounting did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: f.sdk }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/dashboard plans ${JSON.stringify({ sessionId: f.sessionId })}`); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"budget.plans"'); await frameUntil(plan.id);
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/dashboard calls"); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil('"calls": []');
+    assert.equal((await f.sdk.budgets.status(f.sessionId)).status.totals.plannedHolds, 1); assert.equal(f.requests.length, 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
 
 test("the native TUI stages and separately applies exact reviewed candidate bytes through the shared SDK without a model", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
   const f = await candidateApiFixture(), client = f.sdk;
