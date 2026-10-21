@@ -1,6 +1,6 @@
 {
   "name": "moguri",
-  "version": "0.22.0-alpha.1",
+  "version": "0.23.0-alpha.1",
   "private": true,
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
@@ -46,6 +46,7 @@
     "docs/architecture/compound-routing-primitives.md",
     "docs/architecture/candidate-primitives.md",
     "docs/architecture/candidate-workflows.md",
+    "docs/architecture/winddown-primitives.md",
     "docs/architecture/budgets.md",
     "docs/architecture/operation-telemetry.md",
     "docs/architecture/repository-telemetry.md",
