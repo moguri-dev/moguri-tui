@@ -1,6 +1,6 @@
 {
   "name": "moguri",
-  "version": "0.18.0-alpha.2",
+  "version": "0.19.0-alpha.1",
   "private": true,
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
