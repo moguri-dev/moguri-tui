@@ -6,13 +6,14 @@ import { PROTOCOL_VERSION } from "../../packages/protocol/src/index.ts";
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26): Promise<void> {
   if (version >= 4) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
       if (version >= 14) {
-        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='remote_repository_schema';
+        db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id='remote_memory_schema';
+          ${version < 26 ? "DELETE FROM retention_metadata WHERE id='remote_repository_schema';" : ""}
           ${version < 25 ? "DELETE FROM retention_metadata WHERE id='remote_terminal_schema';" : ""}
           ${version < 24 ? "DELETE FROM retention_metadata WHERE id='remote_mcp_schema';" : ""}
           ${version < 23 ? "DELETE FROM retention_metadata WHERE id='terminal_ownership_schema';" : ""}
@@ -28,7 +29,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
         return;
       }
       if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.profile_id') NOT IN ('default','_global')").get()?.count)) throw new Error("Generate Default-only legacy fixtures without dropping another user profile.");
-      db.exec(`BEGIN IMMEDIATE; DROP TRIGGER events_no_delete;
+      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id='remote_memory_schema'; DROP TRIGGER events_no_delete;
         DELETE FROM events WHERE json_extract(data,'$.profile_id')='_global';
         CREATE TRIGGER events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;`);
       for (const table of ["blob_payloads", "retention_keys", "retention_forgotten"]) db.prepare(`DELETE FROM ${table} WHERE scope='profile/_global' OR scope GLOB 'profile/_global/*'`).run();
@@ -59,7 +60,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
   await service.close();
   const db = new DatabaseSync(path);
   try {
-    db.exec(`BEGIN IMMEDIATE; DROP TABLE events; DROP TABLE blob_payloads; DROP TABLE retention_keys; DROP TABLE retention_forgotten; DROP TABLE retention_metadata;
+    db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DROP TABLE events; DROP TABLE blob_payloads; DROP TABLE retention_keys; DROP TABLE retention_forgotten; DROP TABLE retention_metadata;
       CREATE TABLE events(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,data TEXT NOT NULL,payload TEXT NOT NULL);
       CREATE TABLE blobs(digest TEXT PRIMARY KEY,content TEXT NOT NULL);`);
     for (const event of events) {
