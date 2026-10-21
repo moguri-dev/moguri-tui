@@ -76,8 +76,8 @@ unavailable. The **0.21 / protocol-27 development source** now adds
 session-bound Local/SSH lexical indexing, actual-host freshness checks,
 optional model context/direct search and reviewed builtin memory MCP tools.
 SDK, CLI, native TUI and desktop share exact peer/root identity and no-replay
-index jobs. Full source and exact new archive acceptance remain separate;
-the qualified 0.20 artifacts are unchanged.
+index jobs. Full source/native checks pass; exact new archive acceptance
+remains separate. The qualified 0.20 artifacts are unchanged.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
