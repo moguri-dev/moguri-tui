@@ -105,11 +105,14 @@ whole bound leaves no prefix. The qualified 0.23 archives stay frozen.
 Its private acknowledged-role probe reuses the actual worker and budget
 transactions, not another model loop. Public compound admission and real-model
 quality remain gated.
-Current **0.25 development / protocol 32** adds independently retained exact
+Qualified **0.25.0-alpha.1 / protocol 32** adds independently retained exact
 role observations and shared read-only inspection through source deletion/
 restart. Model data is not a user answer, code approval or normal solver
-context. This is not public compound scheduling; the downloadable qualified
-app/SDK remains 0.23.
+context. Its exact installed SDK and actual packaged app are independently
+qualified; [setup](docs/setup.md#current-qualified-0250-alpha1-checkpoint)
+records immutable identities. This includes the 0.24 prerequisites, not public
+compound scheduling, real-family quality or finite kupo. Earlier archives stay
+unchanged.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
@@ -257,7 +260,7 @@ CI runs only on pushes to `main`, not pull requests or feature branches.
 
 Moguri provides ad-hoc-signed macOS alpha builds, not notarized production
 releases. These steps apply only to a trusted `.app` whose source and
-[integrity](docs/setup.md#current-qualified-0230-alpha1-checkpoint) you have
+[integrity](docs/setup.md#current-qualified-0250-alpha1-checkpoint) you have
 verified, if Gatekeeper blocks its first launch because of download quarantine.
 
 Move that verified `.app` bundle into `/Applications` first. The qualified
