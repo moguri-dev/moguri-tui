@@ -248,6 +248,26 @@ records Local ownership, root consistency and partial-operation reconciliation.
 `release/`. It is not a notarized distribution.
 CI runs only on pushes to `main`, not pull requests or feature branches.
 
+## macOS launch troubleshooting
+
+Moguri provides ad-hoc-signed macOS alpha builds, not notarized production
+releases. These steps apply only to a trusted `.app` whose source and
+[integrity](docs/setup.md#current-qualified-0230-alpha1-checkpoint) you have
+verified, if Gatekeeper blocks its first launch because of download quarantine.
+
+Move that verified `.app` bundle into `/Applications` first. The qualified
+bundle is named `Moguri.app`; if your separately verified build uses a different
+name, substitute its actual bundle name:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Moguri.app"
+```
+
+Then reopen the app yourself from Applications. This removes quarantine
+recursively from this app only; it does not verify, sign or notarize it.
+Never use this for untrusted downloads or to bypass malware warnings, and do
+not disable Gatekeeper globally.
+
 ## Features
 
 The feature inventory below captures the broader Moguri vision, not the list of
