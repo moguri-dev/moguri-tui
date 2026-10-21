@@ -61,10 +61,11 @@ model/external SSH calls and no-replay retained-result recovery, with shared
 CLI/TUI and desktop review/inspection. Forwarding access is separately opt-in;
 refresh credentials never leave their backend. This is still an initial
 macOS alpha, not the completed first milestone.
-Protocol-25 / 0.19 development source also adds explicit Remote user consoles
+Qualified **0.19.0-alpha.1 / protocol 25** also adds explicit Remote user consoles
 with captured SSH host/root, original-owner restart recovery and ephemeral
-Ghostty/CLI/TUI input. Full source/native checks pass; exact new archives
-remain pending. No terminal is silently relabeled Local or Sandbox.
+Ghostty/CLI/TUI input. The exact SDK and macOS app are independently qualified;
+[setup](docs/setup.md#current-qualified-0190-alpha1-checkpoint) records their
+immutable identities. No terminal is silently relabeled Local or Sandbox.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
@@ -85,15 +86,16 @@ Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
 isolated browser previews, linked PRs and Insights. Sessions support pin/group/
 attach/unread/archive/delete actions; project settings and optional archived
 retention share the same SDK. Deleting a session preserves independent project
-artifacts and external PRs. A terminal is an explicit Local user console, not an
-agent permission or a claimed sandbox.
-Local user consoles now retain an authenticated per-profile owner across
+artifacts and external PRs. A terminal is an explicit Local or pinned SSH
+user console, not an agent permission or a claimed sandbox.
+User consoles retain authenticated per-profile/peer owners across
 explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
 inspection reattach the same process, never replay input or automatically
 replace an old console. Ordinary service stop closes known groups; private
 cleanup failures retain explicit retryable intent. Output stays bounded and
 volatile, not conversation/model context. See the
-[ownership boundary](docs/architecture/terminal-reattachment.md).
+[Local ownership](docs/architecture/terminal-reattachment.md) and
+[Remote ownership](docs/architecture/remote-user-consoles.md) boundaries.
 
 **Managed Local worktrees** isolate branch checkouts without moving the attached
 base folder or index. Create, discover, inspect, open and safely remove them
