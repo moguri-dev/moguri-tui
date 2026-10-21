@@ -51,16 +51,16 @@ there; the local service still owns approvals and history. Disconnect/restart
 reconciliation retains late accounting without replaying effects or turning
 partial work into success. Files, Git changes and read-only plan views now use
 the actual SSH workspace through the same SDK and slash commands. Remote
-embedded consoles, MCP execution and repository-memory retrieval remain blocked in
-the qualified 0.17 delivery
-rather than using a local fallback. Explicit Remote plan saves now bind the
+embedded consoles and repository-memory retrieval remain blocked rather than
+using a local fallback. Explicit Remote plan saves now bind the
 reviewed peer/root/path/digest and run one owned filesystem operation without a
 model, preserving independent Remote-boundary snapshots. Stops, lost receipts,
 changed scopes and recovery keep partial outcomes honest and never replay writes.
-Development 0.18 adds reviewed peer/resource Remote MCP grants, actual
+Qualified 0.18.0-alpha.2 adds reviewed peer/resource Remote MCP grants, actual
 model/external SSH calls and no-replay retained-result recovery, with shared
-CLI/TUI and desktop review/inspection. Exact delivery qualification remains
-unfinished.
+CLI/TUI and desktop review/inspection. Forwarding access is separately opt-in;
+refresh credentials never leave their backend. This is still an initial
+macOS alpha, not the completed first milestone.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
