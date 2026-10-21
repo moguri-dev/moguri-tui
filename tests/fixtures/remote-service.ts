@@ -1,17 +1,18 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { envelope } from "../../apps/service/src/controller.ts";
-import { setupFixture } from "../fixture.ts";
+import { setupFixture, type GeneratedProviderOptions } from "../fixture.ts";
 import { createSshTarget } from "./ssh-target.ts";
 import type { PlatformOptions } from "../../apps/service/src/platform.ts";
 
-export async function remoteFixture(options: { exposeModels?: boolean; imageInput?: boolean; platform?: PlatformOptions } = {}) {
+export async function remoteFixture(options: { exposeModels?: boolean; imageInput?: boolean; platform?: PlatformOptions; mcpCall?: GeneratedProviderOptions["mcpCall"]; holdAfterTool?: boolean } = {}) {
   const secrets = new Map<string, string>(), vault = {
     read: async (id: string) => secrets.get(id) ?? null,
     write: async (id: string, token: string, signal?: AbortSignal) => { signal?.throwIfAborted(); secrets.set(id, token); },
     remove: async (id: string) => { secrets.delete(id); },
   };
-  const fixture = await setupFixture({ exposeModels: options.exposeModels ?? true, imageInput: options.imageInput, platform: { ...options.platform, remote: { ...options.platform?.remote, vault, modelsVault: vault } } });
+  const fixture = await setupFixture({ exposeModels: options.exposeModels ?? true, imageInput: options.imageInput, mcpCall: options.mcpCall, holdAfterTool: options.holdAfterTool,
+    platform: { ...options.platform, remote: { ...options.platform?.remote, vault, modelsVault: vault } } });
   const root = await realpath(fixture.directory), sshRoot = join(root, "generated-ssh"), workspace = join(root, "remote-project");
   await mkdir(sshRoot, { mode: 0o700 }); await mkdir(workspace);
   await writeFile(join(workspace, "fixture.txt"), "generated actual remote source\n");
