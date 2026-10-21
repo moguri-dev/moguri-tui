@@ -4,21 +4,315 @@ A harness for your AI that works on your terms, both in a CLI (TUI) format and a
 
 Moguri is built from zero with borrowed libraries. The [implementation specification](docs/implementation.md) defines the product and delivery order; [architecture decisions](docs/architecture/decisions.md) records the chosen stack.
 
+## Initial implementation
+
+The first executable checkpoint includes an **OpenTUI terminal client** and an
+**Electron desktop app** sharing one local service. It supports GitHub Copilot
+device sign-in, account-enabled model selection, streamed conversations, manual
+approval of project file and shell tools, persistent drafts and queues, distinct
+Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
+archival/restoration, and basic per-call accounting.
+
+The **importable Moguri SDK** now powers the CLI, TUI and desktop. It exposes
+shared editable/restorable system instructions and permissions, opt-in local
+vector/graph and coding-style memory, standard skills, reviewed evolution
+proposals, curated/approved scripts, declarative plugins, optional tool-less
+subagents and one native MCP gateway. Desktop starts dark and uses the same
+original face-and-bat-wing mascot as the TUI's ASCII loading mark.
+The mascot now also carries its small red antenna pom-pom.
+
+Explicitly configured **local OpenAI-compatible models** now share the same
+worker, permissions and accounting as Copilot. Endpoint discovery never scans
+hosts or downloads weights. New sessions resolve snapshotted global,
+current-profile and project controls, with explicit session overrides and
+visible provenance; existing sessions are not rewritten.
+
+Isolated **profiles** use immutable SDK clients over the same local authority.
+Desktop's profile selector, TUI **F8** and CLI `--profile ID` preserve separate
+accounts, projects, drafts, memory and artifacts. Creating a profile neither
+copies data nor selects it. Global environment policy, shared startup
+preferences and optional global hard budgets cannot be escaped by switching.
+Old owned work stays in its original profile.
+Remote writers sharing a pinned peer and canonical workspace serialize across
+profile/target aliases and Local mappings; failed-root quarantine survives restart.
+Guided questions can include an explicitly labeled current-solver recommendation
+without another model call. You still choose the actual answer or tool approval;
+advice retains its model provenance and cannot grant permissions.
+
+Context supports project/client text, locally normalized clipboard/file
+images, exact reviewed folders, typed GitHub issue/PR references and authorized
+session-text snapshots. Unsupported image models preserve the draft/queue
+rather than dropping context. Bare attachment prefixes remain literal until
+the user selects their source.
+
+Core **Remote SSH** execution uses an explicitly pinned host and approved
+remote workspace. The existing worker runs inference and file/command tools
+there; the local service still owns approvals and history. Disconnect/restart
+reconciliation retains late accounting without replaying effects or turning
+partial work into success. Files, Git changes and read-only plan views now use
+the actual SSH workspace through the same SDK and slash commands.
+The local service never substitutes an attached Local checkout for a Remote
+workspace or index. Explicit Remote plan saves now bind the
+reviewed peer/root/path/digest and run one owned filesystem operation without a
+model, preserving independent Remote-boundary snapshots. Stops, lost receipts,
+changed scopes and recovery keep partial outcomes honest and never replay writes.
+Qualified 0.18.0-alpha.2 adds reviewed peer/resource Remote MCP grants, actual
+model/external SSH calls and no-replay retained-result recovery, with shared
+CLI/TUI and desktop review/inspection. Forwarding access is separately opt-in;
+refresh credentials never leave their backend. This is still an initial
+macOS alpha, not the completed first milestone.
+Qualified **0.19.0-alpha.1 / protocol 25** also adds explicit Remote user consoles
+with captured SSH host/root, original-owner restart recovery and ephemeral
+Ghostty/CLI/TUI input. The exact SDK and macOS app are independently qualified;
+[setup](docs/setup.md#preserved-qualified-0190-alpha1-checkpoint) records their
+immutable identities. No terminal is silently relabeled Local or Sandbox.
+Qualified **0.20.0-alpha.1 / protocol 26** also adds reviewed private repository metadata
+through the selected SSH host's GitHub CLI account, with retained peer/root/
+build provenance, no provider request and no laptop-account fallback.
+Its exact installed SDK and actual packaged app are independently qualified;
+[setup](docs/setup.md#preserved-qualified-0200-alpha1-checkpoint) records the
+immutable identities. At that checkpoint, Remote repository memory remained
+unavailable. Qualified **0.21.0-alpha.1 / protocol 27** now adds
+session-bound Local/SSH lexical indexing, actual-host freshness checks,
+optional model context/direct search and reviewed builtin memory MCP tools.
+SDK, CLI, native TUI and desktop share exact peer/root identity and no-replay
+index jobs. The exact installed SDK and actual packaged app are independently
+qualified; [setup](docs/setup.md#preserved-qualified-0210-alpha1-checkpoint)
+records their immutable identities. Old two-tool builtin MCP grants require
+fresh review, never silent widening. Earlier archives remain unchanged.
+Qualified **0.22.0-alpha.1 / protocol 29** adds a shared Local candidate workflow: explicitly
+stage text proposals in a separate clean owned worktree, review again, then
+apply only exact base-bound bytes. SDK, CLI, native TUI and desktop preserve
+independent history, real user acceptance, raw index/HEAD and partial/restart
+outcomes without a model or automatic commit. The exact installed SDK and
+actual packaged app are independently qualified;
+[setup](docs/setup.md#current-qualified-0220-alpha1-checkpoint) records their
+immutable identities. Compound model routing,
+finite kupo wind-down and Max still remain unavailable, not implied by the
+private Cascade/Critique transport proofs.
+Qualified **0.23.0-alpha.1 / protocol 31** adds independently retained planned
+budget capacity and one explicitly cost-reviewed, tool-less Local model
+proposal through the same SDK/CLI/TUI/desktop. Generated source/provenance and
+actual charges remain inspectable; staging and application still need their
+two separate reviews. Its exact installed SDK and actual packaged app pass
+independent qualification; [setup](docs/setup.md#current-qualified-0230-alpha1-checkpoint)
+records immutable identities. This is not completed compound routing or the
+first milestone; see [the generation contract](docs/architecture/candidate-generations.md).
+The **0.24 source foundation** adds internal complete planned-capacity batch
+calculation, not another public model workflow or new native delivery.
+Recorded and prospective roles share the same cumulative budget; a failed
+whole bound leaves no prefix. The qualified 0.23 archives stay frozen.
+Its private acknowledged-role probe reuses the actual worker and budget
+transactions, not another model loop. Public compound admission and real-model
+quality remain gated.
+Qualified **0.25.0-alpha.1 / protocol 32** adds independently retained exact
+role observations and shared read-only inspection through source deletion/
+restart. Model data is not a user answer, code approval or normal solver
+context. Its exact installed SDK and actual packaged app are independently
+qualified; [setup](docs/setup.md#current-qualified-0250-alpha1-checkpoint)
+records immutable identities. This includes the 0.24 prerequisites, not public
+compound scheduling, real-family quality or finite kupo. Earlier archives stay
+unchanged.
+The **0.26 source** connects those complete retained role envelopes to the
+actual control-plane worker, with conservative future contexts and no-replay
+ownership. This remains an internal Node primitive, not public compound
+scheduling or a new qualified native delivery.
+Qualified **0.27.0-alpha.1 / protocol 33** links a final retained proposer to its
+canonical candidate origin through shared SDK/CLI/TUI/desktop inspection and
+separate staging/application. Its independent copy retains raw model evidence,
+not quality or user acceptance. [Setup](docs/setup.md#development-027-canonical-final-role-proposals)
+records complete source, independently installed SDK and exact native delivery
+qualification and immutable identities. Earlier archives remain frozen.
+Qualified **0.28.0-alpha.1 / protocol 34** adds explicit provider-declared Copilot
+metadata inspection through the SDK, CLI, native TUI and existing desktop Model
+menu. Normal login/discovery/inference is unchanged; unknown family stays
+unknown, and declarations never attest independence, quality or approval.
+[The contract](docs/architecture/model-evidence.md) and
+[setup](docs/setup.md#development-028-explicit-model-declarations) separate its
+source, exact installed SDK and actual native qualification from the frozen
+0.27 delivery. Earlier archives remain unchanged.
+Qualified **0.29.0-alpha.1 / protocol 35** adds explicit output/context contracts to the
+existing internal owned executor and shared read-only contract inspection.
+Router explanations cannot enter a contracted solver's selected context;
+rejected or malformed advice stays charged and cannot start the next role.
+This is not public compound scheduling, independent-family proof or acceptance.
+[The contract](docs/architecture/owned-role-contracts.md) records complete
+source, independently installed SDK and actual native qualification. The
+qualified 0.28 artifacts remain frozen.
+
+The first milestone remains incomplete. The
+[remaining-gap handoff](docs/remaining-milestone-gaps.md) records its open
+acceptance gates, model maximum/half-window choices, file-backed text pastes
+over 50 lines and the user-requested SendBox 0.2.3 integration. Version bumps
+do not establish completion or justify an increased estimate.
+
+Chats can have **no project**, without inheriting any workspace root or coding
+tools. `/suggestions` previews scoped prior prompts before model analysis;
+`/meta` opens a settings chat whose changes require exact human review.
+MCP HTTP servers support explicit **OAuth with PKCE**, resource-bound keychain
+credentials and refresh. Shared question, approval and done indicators appear
+in both clients. Desktop OS banners are off by default and use generic content
+unless the user opts into previews.
+
+The desktop composer is an icon toolbar: attach, environment, model name,
+autonomy, unlimited-budget/usage, microphone and paper-plane Send. Holding
+Cmd/Ctrl turns Send into a queue clock. Model context and supported thinking
+effort are configured together through shared, durable SDK controls.
+
+The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
+commands, enforced read-only sessions and parallel question-only side chats.
+Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
+isolated browser previews, linked PRs and Insights. Sessions support pin/group/
+attach/unread/archive/delete actions; project settings and optional archived
+retention share the same SDK. Deleting a session preserves independent project
+artifacts and external PRs. A terminal is an explicit Local or pinned SSH
+user console, not an agent permission or a claimed sandbox.
+User consoles retain authenticated per-profile/peer owners across
+explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
+inspection reattach the same process, never replay input or automatically
+replace an old console. Ordinary service stop closes known groups; private
+cleanup failures retain explicit retryable intent. Output stays bounded and
+volatile, not conversation/model context. See the
+[Local ownership](docs/architecture/terminal-reattachment.md) and
+[Remote ownership](docs/architecture/remote-user-consoles.md) boundaries.
+
+**Managed Local worktrees** isolate branch checkouts without moving the attached
+base folder or index. Create, discover, inspect, open and safely remove them
+through the shared SDK, CLI/TUI or project settings. Worker tools, Files,
+Changes, Plan, terminals, memory and dependency installs resolve the same bound
+root. Writers serialize within a root; different worktrees can run concurrently.
+Removal requires a clean, idle, unbound owned checkout and preserves its branch.
+Discovery does not adopt or grant access to unmanaged worktrees.
+
+**Independent artifacts** retain plans, decisions, answers, research notes and
+reports with revisions and actual source provenance. Create them without a
+conversation, or explicitly retain a completed user/model/tool result. Each has
+its own encrypted retention grant. Project removal previews the exact set and
+requires retain, export-then-delete or delete; session retention never erases it.
+Real structured clarifications record actual user answers and retain them by
+default, with an explicit opt-out. Answers never grant tool/Git permissions.
+Documents can associate with profile folders and project work items. Explicit
+reviewed repository copies preserve complete history under `artifacts/`, with an
+optional new local Git branch. No checkout, push or unrelated staging changes;
+project deletion re-verifies the actual copy and any requested commit.
+
+Dictation uses local NVIDIA Nemotron 3.5 through a pinned native runtime. The
+user explicitly accepts and downloads the model once. NVIDIA documents
+**40 locales: 19 ready, 13 broad coverage, 8 adaptation-only**, not 22 verified
+ready languages. No cloud ASR fallback or automatic model-weight download occurs.
+
+Projects also have a **local Kanban** for feature, bug and misc tickets, with
+custom phases, connected PRs and read-only merge observation. A verified merge
+moves a ticket to the chosen phase. Optional Linear imports start off, use a
+user-supplied keychain credential and never upload local tickets.
+
+The **shared dependency cache** reuses SHA-512-verified archives across projects
+and branches, with npm and pnpm adapters. Exact lock/manifest plans and fresh
+OSV advisory checks gate downloads and reuse. Managed installs block lifecycle
+scripts and hooks, use private staging and keep mutable trees worktree-local.
+This is not a malware-free guarantee; script execution stays unavailable until
+a real SendBox boundary is qualified.
+
+This is a **macOS development alpha**, not the completed first milestone.
+Explicit **estimate-based token/USD caps** and separate profile/global hard
+policies now share cumulative role-aware reservations. Unknown completion holds
+capacity; deletion, defaults and restart do not refund it. USD needs dated
+user-approved model rates, never a guessed Copilot price. These are admission
+limits, not exact provider-billing guarantees. CLI/TUI, desktop composer,
+settings and the profile usage dashboard share the SDK.
+Dashboard views now add UTC presets/year/custom ranges, calendar buckets,
+captured price history and retained per-call/owning-turn records. Observed
+stream delivery metrics disclose missing coverage and are not GPU-throughput
+or productivity claims; cache subsets never inflate reported totals.
+Tool/MCP outcomes now have a sanitized, session-independent ledger with an
+explicit known-result failure rate and separate denied/stopped/partial/unknown
+counts. Dashboard, CLI/TUI and SDK also expose current-profile key-backed
+ciphertext sizes, not physical disk usage or reclaimed space. Earlier deleted
+tool history remains unavailable.
+Repository/organization/visibility filters now use explicitly refreshed,
+root-bound GitHub metadata and immutable per-admission snapshots. Every tagged
+step rechecks its actual Local/SSH Git origin. Unknown history is not backfilled,
+and the open-source category is explicitly public plus detected OSI-approved
+license metadata, not a legal review or a synonym for public.
+
+**Reviewed text-context compaction** now uses one explicitly authorized,
+tool-less Local/SSH model call through the same SDK. Previewing does not infer;
+generation, actual history/content review, apply/discard and original-context
+restore are separate actions. Complete recent turns, original encrypted history
+and drafts remain retained; rejected/unknown calls still count. Desktop exposes
+review under Model, and CLI/TUI share `/compact`. Images, automatic compaction
+and implicit kupo compactor selection are not supported.
+
+[Experimental **kupo Single**](docs/architecture/routing.md) is opt-in with an
+explicit approved classifier/solver pool and separate hosted/network-data consent.
+The same owned worker records actual per-call roles/models and keeps normal
+approvals. Desktop settings, TUI and shared slash/SDK controls expose the policy
+and provenance. Invalid, stale or unmetered advice pauses without a fallback.
+Finite inherited caps, images and per-model tuning block this Single alpha.
+
+Sandbox, complete remote side-panel/extension transport, compound kupo workflows,
+Autopilot Max,
+routed wind-down/authorized checkpoint commits are still incomplete.
+Unknown usage and Copilot billing are not presented as zero cost.
+Manual remains the default. Guided still needs human confirmation; Autopilot
+can use only explicit bounded user grants. SendBox has a visible fail-closed
+configuration/readiness surface. The verified 0.2.1 release passes native worker
+primitives, but cold networking and the SDK lifecycle remain unqualified;
+installing it alone does not enable Sandbox execution.
+
+```bash
+npm ci
+npm run build
+npm start -- --project /absolute/path/to/project
+```
+
+Run `npm run desktop` in another terminal to open the same sessions in desktop.
+In the TUI, **Ctrl+L** starts Copilot sign-in, **Ctrl+M** selects a model, and
+**Ctrl+K** shows commands. Desktop exposes the same setup in **GitHub Copilot**.
+Complete GitHub's device authorization yourself; Moguri does not read IDE login
+files or require another provider's API key.
+
+See [setup and usage](docs/setup.md), the [SDK API and CLI](docs/sdk.md),
+the [initial architecture](docs/architecture/overview.md),
+and [Phase 0 evidence and remaining release blockers](docs/architecture/phase-zero.md).
+The [session workspace contract](docs/architecture/session-workspace.md) records
+Ghostty qualification, deletion/recovery and project-policy boundaries.
+The [engagement contract](docs/architecture/engagement.md) records OAuth,
+project-free isolation, suggestions, reviewed configuration and notifications.
+The [runtime foundation](docs/architecture/runtime-foundation.md) records local
+models/defaults and the genuine SendBox qualification blocker; [typed inputs](docs/architecture/context-inputs.md)
+records snapshot consent and image/source boundaries.
+The [managed workspace contract](docs/architecture/managed-workspaces.md)
+records Local ownership, root consistency and partial-operation reconciliation.
+`npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
+`release/`. It is not a notarized distribution.
+CI runs only on pushes to `main`, not pull requests or feature branches.
+
 ## macOS launch troubleshooting
 
-Moguri is currently a documentation-only pre-alpha, with no packaged desktop build provided here yet. These steps apply only to a trusted macOS `.app` build whose source and integrity you have verified, if Gatekeeper blocks its first launch because of download quarantine.
+Moguri provides ad-hoc-signed macOS alpha builds, not notarized production
+releases. These steps apply only to a trusted `.app` whose source and
+[integrity](docs/setup.md#current-qualified-0270-alpha1-checkpoint) you have
+verified, if Gatekeeper blocks its first launch because of download quarantine.
 
-Move the `.app` bundle into `/Applications` first. The command below assumes it is named `Moguri.app`; no packaging configuration currently confirms that name. If your verified build has a different name, substitute its actual bundle name:
+Move that verified `.app` bundle into `/Applications` first. The qualified
+bundle is named `Moguri.app`; if your separately verified build uses a different
+name, substitute its actual bundle name:
 
 ```sh
 xattr -dr com.apple.quarantine "/Applications/Moguri.app"
 ```
 
-Then reopen the app from Applications. This removes quarantine recursively from this app only; it does not verify, sign, or notarize it. Never use this for untrusted downloads or to bypass malware warnings, and do not disable Gatekeeper globally.
+Then reopen the app yourself from Applications. This removes quarantine
+recursively from this app only; it does not verify, sign or notarize it.
+Never use this for untrusted downloads or to bypass malware warnings, and do
+not disable Gatekeeper globally.
 
 ## Features
 
-The feature inventory below captures the broader Moguri vision. The implementation specification distinguishes first-release requirements from deferred work.
+The feature inventory below captures the broader Moguri vision, not the list of
+implemented features. The implementation specification distinguishes first-release
+requirements from deferred work.
 
 - Always choose either a fixed model or **kupo**, Moguri's HydraFusion-inspired synthetic/auto model. kupo routes across a configured mix of local and hosted models and selects single-model, cascade, or draft/critique/revision workflows.
 - Optional System One decision providers, including [TypeSafe AI's Jev](https://docs.typesafe.ai/introduction), work with kupo and fixed models for delegated decisions, tool approvals, and steering.
