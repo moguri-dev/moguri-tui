@@ -81,7 +81,8 @@ qualified; [setup](docs/setup.md#current-qualified-0210-alpha1-checkpoint)
 records their immutable identities. Old two-tool builtin MCP grants require
 fresh review, never silent widening. Earlier archives remain unchanged.
 The 0.22 development source privately exercises bounded Cascade/Critique
-transport. Public compound candidates, accepted application and finite kupo
+transport and owned-file staging/exact-review mechanics. Public compound
+candidates, accepted application and finite kupo
 wind-down remain unavailable until their owned-workspace/ledger gates pass.
 
 Chats can have **no project**, without inheriting any workspace root or coding

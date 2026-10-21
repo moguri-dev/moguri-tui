@@ -44,6 +44,7 @@
     "docs/architecture/remote-github-metadata.md",
     "docs/architecture/remote-repository-memory.md",
     "docs/architecture/compound-routing-primitives.md",
+    "docs/architecture/candidate-primitives.md",
     "docs/architecture/budgets.md",
     "docs/architecture/operation-telemetry.md",
     "docs/architecture/repository-telemetry.md",
