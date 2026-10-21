@@ -17,6 +17,29 @@ import { compactionFixture } from "./fixtures/compaction-service.ts";
 import { remotePlanFixture } from "./fixtures/remote-plan-service.ts";
 import { holdRemoteFrame } from "./fixtures/remote-frame-gate.ts";
 import { generatedRepositoryMetadata } from "./fixtures/repository-info.ts";
+import { remoteGithubFixture } from "./fixtures/remote-github-service.ts";
+
+test("the actual TUI reviews the captured SSH account and explicitly refreshes private repository metadata without a model", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+  const f = await remoteGithubFixture(), client = await new MoguriClient(f.service.connection).ready();
+  const setup = await createTestRenderer({ width: 140, height: 55, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI Remote repository metadata did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/repository preview"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"remote-gh-cli"'); await frameUntil('"hostFingerprint"');
+    const preview = (await client.repositories.preview(f.sessionId)).preview;
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/repository refresh ${preview.bindingDigest} ${preview.revision} confirm-lookup`); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Metadata refresh"); await waitFor(() => f.controller.snapshot().repositoryObservations.length === 1);
+    await setup.mockInput.typeText("/repository state"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"repository.state"'); await frameUntil('"visibility": "private"');
+    assert.equal((await f.github.records()).length, 1); assert.equal(f.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
 
 test("the actual TUI explicitly opens and inspects a captured Remote user console without feeding stdin through the composer", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
   const fixture = await remoteFixture({ exposeModels: false, platform: { terminal: { executable: "/bin/sh", args: ["-c", "printf 'GENERATED_TUI_REMOTE_CONSOLE\\n'; exec cat"] } } });

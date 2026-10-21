@@ -66,6 +66,10 @@ with captured SSH host/root, original-owner restart recovery and ephemeral
 Ghostty/CLI/TUI input. The exact SDK and macOS app are independently qualified;
 [setup](docs/setup.md#current-qualified-0190-alpha1-checkpoint) records their
 immutable identities. No terminal is silently relabeled Local or Sandbox.
+Protocol-26 / 0.20 development also adds reviewed private repository metadata
+through the selected SSH host's GitHub CLI account, with retained peer/root/
+build provenance, no provider request and no laptop-account fallback.
+Source client/crash checks pass; exact new archives remain pending.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
