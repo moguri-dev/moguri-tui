@@ -84,6 +84,8 @@ The 0.22 development source privately exercises bounded Cascade/Critique
 transport and owned-file staging/exact-review mechanics. Public compound
 candidates, accepted application and finite kupo
 wind-down remain unavailable until their owned-workspace/ledger gates pass.
+Protocol 28's candidate event/retention foundation is internal, not a newly
+exposed candidate workflow.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;

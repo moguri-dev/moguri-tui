@@ -6,13 +6,15 @@ import { PROTOCOL_VERSION } from "../../packages/protocol/src/index.ts";
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27): Promise<void> {
   if (version >= 4) {
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
+      if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.saved'").get()?.count)) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
       if (version >= 14) {
-        db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id='remote_memory_schema';
+        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='candidate_workflow_schema';
+          ${version < 27 ? "DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id='remote_memory_schema';" : ""}
           ${version < 26 ? "DELETE FROM retention_metadata WHERE id='remote_repository_schema';" : ""}
           ${version < 25 ? "DELETE FROM retention_metadata WHERE id='remote_terminal_schema';" : ""}
           ${version < 24 ? "DELETE FROM retention_metadata WHERE id='remote_mcp_schema';" : ""}
@@ -29,7 +31,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
         return;
       }
       if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.profile_id') NOT IN ('default','_global')").get()?.count)) throw new Error("Generate Default-only legacy fixtures without dropping another user profile.");
-      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id='remote_memory_schema'; DROP TRIGGER events_no_delete;
+      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('remote_memory_schema','candidate_workflow_schema'); DROP TRIGGER events_no_delete;
         DELETE FROM events WHERE json_extract(data,'$.profile_id')='_global';
         CREATE TRIGGER events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;`);
       for (const table of ["blob_payloads", "retention_keys", "retention_forgotten"]) db.prepare(`DELETE FROM ${table} WHERE scope='profile/_global' OR scope GLOB 'profile/_global/*'`).run();
@@ -55,6 +57,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
     return;
   }
   const events = service.store.events();
+  if (events.some((event) => event.event_type === "candidate.saved")) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
   const blobs = service.store.db.prepare("SELECT DISTINCT digest FROM blob_payloads").all().map((row) => [String(row.digest), service.store.blob(String(row.digest))] as const);
   const path = service.store.path;
   await service.close();
