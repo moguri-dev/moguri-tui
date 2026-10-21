@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { digest } from "../../apps/service/src/store.ts";
 import type { OwnedRoleInput } from "../../apps/service/src/owned-roles.ts";
 import type { WorkspaceFinish } from "../../apps/service/src/session-workspace.ts";
@@ -8,7 +9,8 @@ import { candidateApiFixture } from "./candidate-api.ts";
 
 export const ownedRoleMarker = "GENERATED_OWNED_ROLE_RESULT_NOT_ACCEPTANCE";
 export async function ownedSequenceFixture(options: GeneratedProviderOptions = {}) {
-  const providerOptions: GeneratedProviderOptions = { replyText: ownedRoleMarker, responseMode: "text", maxOutputTokens: 256, ...options };
+  const providerOptions: GeneratedProviderOptions & { workerPath: string } = { replyText: ownedRoleMarker, responseMode: "text", maxOutputTokens: 256,
+    workerPath: fileURLToPath(new URL("../../apps/service/src/worker.ts", import.meta.url)), ...options };
   const f = await candidateApiFixture(providerOptions);
   try {
     await f.configure();

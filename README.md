@@ -117,11 +117,12 @@ The **0.26 source** connects those complete retained role envelopes to the
 actual control-plane worker, with conservative future contexts and no-replay
 ownership. This remains an internal Node primitive, not public compound
 scheduling or a new qualified native delivery.
-Current **0.27 source / protocol 33** links a final retained proposer to its
+Qualified **0.27.0-alpha.1 / protocol 33** links a final retained proposer to its
 canonical candidate origin through shared SDK/CLI/TUI/desktop inspection and
 separate staging/application. Its independent copy retains raw model evidence,
 not quality or user acceptance. [Setup](docs/setup.md#development-027-canonical-final-role-proposals)
-records the still-pending complete source/consumer/native delivery gates.
+records complete source, independently installed SDK and exact native delivery
+qualification and immutable identities. Earlier archives remain frozen.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
@@ -269,7 +270,7 @@ CI runs only on pushes to `main`, not pull requests or feature branches.
 
 Moguri provides ad-hoc-signed macOS alpha builds, not notarized production
 releases. These steps apply only to a trusted `.app` whose source and
-[integrity](docs/setup.md#current-qualified-0250-alpha1-checkpoint) you have
+[integrity](docs/setup.md#current-qualified-0270-alpha1-checkpoint) you have
 verified, if Gatekeeper blocks its first launch because of download quarantine.
 
 Move that verified `.app` bundle into `/Applications` first. The qualified
