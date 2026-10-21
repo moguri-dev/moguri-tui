@@ -98,13 +98,18 @@ two separate reviews. Its exact installed SDK and actual packaged app pass
 independent qualification; [setup](docs/setup.md#current-qualified-0230-alpha1-checkpoint)
 records immutable identities. This is not completed compound routing or the
 first milestone; see [the generation contract](docs/architecture/candidate-generations.md).
-Current **0.24 development** adds internal complete planned-capacity batch
+The **0.24 source foundation** adds internal complete planned-capacity batch
 calculation, not another public model workflow or new native delivery.
 Recorded and prospective roles share the same cumulative budget; a failed
 whole bound leaves no prefix. The qualified 0.23 archives stay frozen.
 Its private acknowledged-role probe reuses the actual worker and budget
 transactions, not another model loop. Public compound admission and real-model
 quality remain gated.
+Current **0.25 development / protocol 32** adds independently retained exact
+role observations and shared read-only inspection through source deletion/
+restart. Model data is not a user answer, code approval or normal solver
+context. This is not public compound scheduling; the downloadable qualified
+app/SDK remains 0.23.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;

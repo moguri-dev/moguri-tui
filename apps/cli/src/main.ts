@@ -56,6 +56,7 @@ moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PR
 moguri candidate generate-preview INPUT.json --session SOURCE --workspace STAGE
 moguri candidate generate INPUT.json --session SOURCE --workspace STAGE --digest REVIEW_SHA --confirm-cost
 moguri candidate generated|generation-wait|generation-stop ID
+moguri roles SEQUENCE_ID [ROLE_INDEX]   Read retained role data; never dispatch
 moguri candidate apply-preview ID --session SOURCE
 moguri candidate apply ID --session SOURCE --revision N --digest REVIEW_SHA --confirm-write
 moguri candidate reject ID --revision N --confirm-review
@@ -306,6 +307,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           output(await sdk.budgets.status(session.id));
         }
       } else throw new Error("Use budget status SESSION, dashboard/calls/plans [--filters JSON], set SESSION BUDGET.json --confirm-review, or policy/global LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
+    } else if (group === "roles") {
+      if (!action || args.length > 1 || args[0] !== undefined && !/^\d+$/.test(args[0])) throw new Error("Use roles SEQUENCE_ID [ROLE_INDEX] to inspect retained data; this command never dispatches a model.");
+      output(await sdk.roleSequences.read(action, args[0] === undefined ? undefined : Number(args[0])));
     } else if (group === "candidate") {
       if (action === "list") output(snapshot.candidates);
       else if (action === "read" && args[0]) output(await sdk.candidates.read(args[0]));

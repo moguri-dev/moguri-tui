@@ -13,7 +13,7 @@ export async function budgetPlanFixture() {
     const append = (events: EventInput[]) => {
       control.store.commit(events, undefined, undefined, (primary) => {
         const next = { ...control.snapshot(), ...projectEvents([...control.events(0), ...primary], control.profileId) };
-        return budget.derived(next, primary);
+        return [...budget.derived(next, primary), ...control.platform.roles.derived(next, primary)];
       });
       control.refreshProfile();
     };

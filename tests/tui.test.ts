@@ -22,6 +22,26 @@ import { remoteMemoryFixture } from "./fixtures/remote-memory-service.ts";
 import { candidateApiFixture } from "./fixtures/candidate-api.ts";
 import { budgetPlanFixture } from "./fixtures/budget-plan-api.ts";
 import { candidateGenerationFixture } from "./fixtures/candidate-generation-api.ts";
+import { roleSequenceFixture } from "./fixtures/role-sequence-api.ts";
+
+test("native TUI keys inspect independent recorded roles and edit metadata without replacing raw inputs or calling a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const f = await roleSequenceFixture(); f.start(0); f.result(0); f.start(1); f.result(1); f.complete();
+  const original = f.current().inputDigest, setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI retained role did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: f.sdk }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/roles ${f.initial.id} 1`); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil('"role.sequence.read"');
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/artifact edit ${f.initial.id}`); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Role sequence metadata only");
+    setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ name: "Generated native role metadata", status: "active", folderId: null, workItemId: null }));
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Retained independently");
+    assert.equal((await f.sdk.artifacts.read(f.initial.id)).artifact.name, "Generated native role metadata"); assert.equal(f.current().inputDigest, original); assert.equal(f.requests.length, 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
 
 test("native TUI keys review one owned generated proposal and edit only retained metadata without staging source files", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
   const f = await candidateGenerationFixture(), client = f.sdk;
