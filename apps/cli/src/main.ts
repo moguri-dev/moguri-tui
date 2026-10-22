@@ -36,6 +36,7 @@ export async function main(argv: string[]): Promise<void> {
 moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
+moguri progress --session ID       Checked plan items and untrusted task estimate
 moguri COMMAND --profile ID        Immutable scope; never changes another client
 moguri profile list|create NAME [--color '#RRGGBB']
 moguri profile update ID CHANGES.json --revision N
@@ -278,7 +279,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
   try {
     const snapshot = sdk.getState().snapshot!;
     const projectId = args[0] ?? values.project;
-    if (group === "status") {
+    if (group === "progress") {
+      if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
+      output(await sdk.sessions.progress(values.session));
+    } else if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
     } else if (group === "knowledge" || group === "marketplace" || group === "hooks" || group === "capability" || group === "containment") {
       output(await workspaceFeatureCommand(sdk, group, action, args, values));

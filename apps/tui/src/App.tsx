@@ -3,7 +3,8 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@opentui/react";
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
-import { useMoguri } from "../../../packages/sdk/src/react.ts";
+import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
+import { progressBar } from "../../../packages/sdk/src/index.ts";
 import { DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
@@ -43,6 +44,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); for (const client of clients.current) client.disconnect(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
+  const taskProgress = useTaskProgress(client, session, status === "connected");
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
   const recommendation = pendingQuestion?.recommendation;
@@ -738,6 +740,8 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}
         {latestTranscript && <text fg={colors.accent}>Local transcript ready. F4 inserts it into the draft; it is never sent automatically.</text>}
+        {session && <text fg={colors.muted}>{safe(`Plan checklist ${progressBar(taskProgress.progress?.checklist.percent ?? null)} (${taskProgress.progress?.checklist.completed ?? 0}/${taskProgress.progress?.checklist.total ?? 0}). Estimate only; rechecked every 15s.${taskProgress.error ? ` ${taskProgress.error}` : taskProgress.progress?.checklist.diagnostic ? ` ${taskProgress.progress.checklist.diagnostic}` : ""}`)}</text>}
+        {taskProgress.progress?.longRunning && taskProgress.progress.model && <text fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from checklist" : ""}: ${taskProgress.progress.model.summary}`)}</text>}
         {mode === "compose" && session && editor && <TuiComposer key={session.id} editor={editor} session={session} focused={!session.pendingApproval}
           submit={() => void perform(() => submit(editor.getState().text))} run={perform} />}
         <box height={4} flexShrink={0} flexDirection="column">
