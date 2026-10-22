@@ -9,6 +9,7 @@ import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSch
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
+import { decisionCommand } from "./decisions.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -83,6 +84,9 @@ moguri winddown list|read|stop ID  Retained capacity/model/Git observations
 moguri winddown preview INPUT.json --session ID  Exact accepted-work/new-local-branch review
 moguri winddown commit INPUT.json --session ID --revision N --digest SHA --confirm-git
 moguri winddown decline ID --revision N --confirm-review  No Git/model effect
+moguri decisions status --session ID  Actual compatible provider/bound readiness
+moguri decisions list|read|stop ID   Retained actual actor, evidence and charges
+moguri decisions set POLICY.json --confirm-review  Configure only; no inference or grant
 moguri candidate apply-preview ID --session SOURCE
 moguri candidate apply ID --session SOURCE --revision N --digest REVIEW_SHA --confirm-write
 moguri candidate reject ID --revision N --confirm-review
@@ -333,6 +337,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           output(await sdk.budgets.status(session.id));
         }
       } else throw new Error("Use budget status SESSION, dashboard/calls/plans [--filters JSON], set SESSION BUDGET.json --confirm-review, or policy/global LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
+    } else if (group === "decisions") {
+      output(await decisionCommand(sdk, action, args, values));
     } else if (group === "winddown") {
       output(await winddownCommand(sdk, action, args, values));
     } else if (group === "compound") {

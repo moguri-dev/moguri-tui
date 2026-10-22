@@ -131,7 +131,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const openArtifactEditor = (request: ArtifactEditorRequest) => {
     artifactEditor.current = request;
     const associations = { folderId: request.folderId ?? null, workItemId: request.workItemId ?? null };
-    const candidate = request.id && (snapshot?.candidates.some((candidate) => candidate.id === request.id) || snapshot?.candidateGenerations.some((generation) => generation.id === request.id) || snapshot?.roleSequences.some((sequence) => sequence.id === request.id) || snapshot?.compoundWorkflows.some((workflow) => workflow.id === request.id) || snapshot?.winddowns.some((record) => record.id === request.id) ||
+    const candidate = request.id && (snapshot?.decisions.some((record) => record.id === request.id) || snapshot?.candidates.some((candidate) => candidate.id === request.id) || snapshot?.candidateGenerations.some((generation) => generation.id === request.id) || snapshot?.roleSequences.some((sequence) => sequence.id === request.id) || snapshot?.compoundWorkflows.some((workflow) => workflow.id === request.id) || snapshot?.winddowns.some((record) => record.id === request.id) ||
       snapshot?.sandboxExecutions?.some((value) => value.id === request.id) || snapshot?.sandboxPublications?.some((value) => value.id === request.id));
     setSettingsText(JSON.stringify(request.id ? { name: request.name, ...(!candidate ? { text: request.text } : {}), status: request.status, ...associations } : { kind: request.kind, name: request.name, text: request.text, ...associations }, null, 2));
     setMode("artifact-editor");
@@ -400,7 +400,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (!["Local", "Sandbox", "Remote"].includes(argument)) throw new Error("Use /env Local, Sandbox, or Remote. Unready backends are rejected.");
         await client.sessions.env(session.id, argument as Controls["env"]); break;
       case "/autonomy":
-        if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose a documented autonomy level. Only Manual is available.");
+        if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose Manual, Guided, Autopilot or Autopilot Max. Max requires an explicitly configured compatible bounded provider and exact delegated policy.");
         await configure({ ...session.controls, autonomy: argument as Controls["autonomy"] }); break;
       case "/attach":
         if (!argument) throw new Error("Use /attach path/to/project-file. Only explicit project UTF-8 snapshots are supported.");
@@ -614,7 +614,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.muted}>Prompt edits can break functionality. Hard permissions remain final.</text>
         </box> :
         editorModes.includes(mode) ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
-          {mode === "artifact-editor" && snapshot?.winddowns.some((record) => record.id === artifactEditor.current?.id) ?
+          {mode === "artifact-editor" && snapshot?.decisions.some((record) => record.id === artifactEditor.current?.id) ?
+            <text fg={colors.accent} height={4} flexShrink={0}>Decision metadata only. Original typed request, actual model input/result, actor and applied/rejected observations are immutable. Ctrl+Enter saves metadata; Esc discards. /decisions inspects data, never answers, approves or infers user facts.</text> :
+            mode === "artifact-editor" && snapshot?.winddowns.some((record) => record.id === artifactEditor.current?.id) ?
             <text fg={colors.accent} height={4} flexShrink={0}>Wind-down metadata only. Reserved capacity, actual model input/result and separate actual-user Git approval/publication are immutable. Ctrl+Enter saves metadata; Esc discards. /winddown inspects data, not permission or source acceptance.</text> :
             mode === "artifact-editor" && snapshot?.compoundWorkflows.some((workflow) => workflow.id === artifactEditor.current?.id) ?
             <text fg={colors.accent} height={4} flexShrink={0}>Compound workflow metadata only. Exact source/cost intent, actual role results, user staging/test decisions and command evidence are immutable. Ctrl+Enter saves metadata; Esc discards. /compound reads data, not permission or source acceptance.</text> :
@@ -710,10 +712,13 @@ Native Sandbox needs explicit reviewed configuration, /sandbox probe confirm-nat
 and /sandbox preview followed by confirmed private staging. Source publication is
 separate actual-user acceptance. /compound owns reviewed Local Cascade/Critique
 and separately approved project tests. /winddown reviews reserved Local finishing
-and separate accepted-work Git checkpoints. Autopilot Max remains unqualified.
+and separate accepted-work Git checkpoints. Local Max needs an explicitly
+configured bounded decision provider; /decisions status/set/read exposes only
+shared policy and actual evidence, never a fake user answer or new permission.
+Jev and Remote/native Max remain unqualified.
 kupo Single is experimental and off by default. Configure /kupo set POLICY_JSON
-before explicitly selecting /model kupo. Finite caps, images and model tuning
-remain blocked for Single. Guided needs a human; Autopilot requires explicit
+before explicitly selecting /model kupo. Finite Local caps need explicit reserved
+wind-down; images and model tuning remain blocked for Single. Guided needs a human; Autopilot requires explicit
 bounded delegations. Bare attachment prefixes stay literal.
 
 Protected policy blocks all new Local turns in this checkpoint.

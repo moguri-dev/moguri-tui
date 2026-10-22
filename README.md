@@ -284,9 +284,18 @@ policy claims, not proof of independent training or calibrated quality.
 Finite Local routing now reserves one actual metadata-only finishing role and
 has separately reviewed actual-user accepted-work checkpoint branches that
 preserve the source index/HEAD. A summary never accepts code or approves Git.
-Sandbox qualification, complete remote side-panel/extension transport,
-public compound/wind-down final hardening, Autopilot Max and remote/native
-wind-down remain incomplete.
+[Local **Autopilot Max**](docs/architecture/owned-decisions.md) now uses an
+explicitly configured bounded-model System One-compatible alternative with
+fixed or Single-routed solvers. Exact existing tool delegation, user-declared
+technical choices and bounded safe-boundary steering share the real model
+ledger and cancellation owner. The actual actor remains `decision-provider`,
+not the user; human intervention and hard policy win. Jev itself remains
+blocked where its documented API cannot enforce the required output bound.
+No generative substitution or calibrated reliability is claimed.
+
+Final native/source qualification, complete remote side-panel/extension
+transport, public compound/wind-down hardening, Remote/native Max and
+remote/native wind-down remain incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed
