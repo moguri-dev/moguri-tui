@@ -293,8 +293,10 @@ not the user; human intervention and hard policy win. Jev itself remains
 blocked where its documented API cannot enforce the required output bound.
 No generative substitution or calibrated reliability is claimed.
 
-Final native/source qualification, complete remote side-panel/extension
-transport, public compound/wind-down hardening, Remote/native Max and
+The current generated source, packed SDK and exact native image pass the
+[full acceptance sweep](docs/setup.md#final-protocol-40-source-acceptance).
+Live-provider/calibrated-quality gates, complete remote/native
+side-panel/extension transport, Remote/native compound/Max and
 remote/native wind-down remain incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
