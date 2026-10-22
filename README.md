@@ -45,6 +45,16 @@ session-text snapshots. Unsupported image models preserve the draft/queue
 rather than dropping context. Bare attachment prefixes remain literal until
 the user selects their source.
 
+Current source work for [#17](https://github.com/mbianchidev/moguri/issues/17)
+offers the model maximum and half maximum, or actual provider-declared working
+windows, through the same service contract. Unsupported saved values block
+inference without clamping history. Pastes over 50 lines become exact scoped
+text files, not whole-paste prompt expansions. Desktop, TUI and the SDK preserve
+failed/conflicting unsent pastes; approved bounded file reads work through Local
+and pinned SSH workers without modifying a source checkout. See
+[usage](docs/setup.md) and the [context boundary](docs/architecture/context-inputs.md).
+This does not complete the remaining compound, wind-down, Max or Sandbox gates.
+
 Core **Remote SSH** execution uses an explicitly pinned host and approved
 remote workspace. The existing worker runs inference and file/command tools
 there; the local service still owns approvals and history. Disconnect/restart

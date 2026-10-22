@@ -27,6 +27,32 @@ import { roleProposalFixture } from "./fixtures/role-proposal-api.ts";
 import { modelEvidenceFixture } from "./fixtures/model-evidence-api.ts";
 import { roleContractFixture } from "./fixtures/role-contract-api.ts";
 
+test("native bracketed paste preserves exact long text in a scoped file after a Unicode cursor and keeps queue-only semantics", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 140, height: 45, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`Generated paste composer did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client })));
+    await frameUntil("Write a prompt");
+    await setup.mockInput.pasteBracketedText("Before \u754c \u{1f34a} ");
+    const text = Array.from({ length: 51 }, (_, index) => `Generated terminal clipboard ${index} \u{1f34a}`).join("\r\n");
+    await setup.mockInput.pasteBracketedText(text);
+    await waitFor(() => fixture.session().draft.attachments[0]?.kind === "paste_file");
+    assert.equal(fixture.session().draft.text, "Before \u754c \u{1f34a} ");
+    const attachment = fixture.session().draft.attachments[0]!;
+    assert.deepEqual((await client.attachments.read(fixture.sessionId, attachment.id)).content, { kind: "text", text });
+    await frameUntil("moguri-attachment/");
+    setup.mockInput.pressEnter({ ctrl: true });
+    await waitFor(() => fixture.session().queue[0]?.held);
+    assert.equal(fixture.session().queue[0]?.text, "Before \u754c \u{1f34a} ");
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("native TUI keys inspect exact retained role contracts without dispatching, accepting or changing their input", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const f = await roleContractFixture(), created = await f.run(); await f.settled(created.id);
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
