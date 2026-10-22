@@ -156,6 +156,15 @@ acceptance gates, model maximum/half-window choices, file-backed text pastes
 over 50 lines and the user-requested SendBox 0.2.3 integration. Version bumps
 do not establish completion or justify an increased estimate.
 
+Current issue-17 source uses **protocol 37** for shared model windows, scoped
+long-paste files and reviewed SendBox **0.2.3** execution. SDK, CLI/TUI and hidden
+desktop run the same qualified private-stage worker, Manual decisions, budget
+ledger, exact-owner stop/recovery and separate actual-user source publication.
+Actual guest/control-loss checks retain partial work and unknown usage without
+replay. [Setup](docs/setup.md#native-servicesdk-development-checkpoint) records
+the generated provider evidence and remaining gates; this is not a replacement
+for frozen archives, live-model quality or full first-milestone acceptance.
+
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
 `/meta` opens a settings chat whose changes require exact human review.
@@ -266,9 +275,11 @@ routed wind-down/authorized checkpoint commits are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed
-configuration/readiness surface. The verified 0.2.1 release passes native worker
-primitives, but cold networking and the SDK lifecycle remain unqualified;
-installing it alone does not enable Sandbox execution.
+configuration/readiness surface. The development 0.2.3 SDK/client lifecycle
+now passes actual native generated-provider checks, but readiness still needs
+explicit reviewed release/image/network pins and private staging. Endpoint-only
+cold networking remains blocked; no alias or Local fallback is added
+automatically. Installing SendBox alone does not enable native execution.
 
 ```bash
 npm ci

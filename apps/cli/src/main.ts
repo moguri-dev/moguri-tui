@@ -43,6 +43,15 @@ moguri remote status|probe          Pinned SSH worker/runtime readiness
 moguri remote reconcile RUN_ID      Existing receipts/late usage, never replay
 moguri remote acknowledge RUN_ID --confirm-review  After actual process inspection
 moguri remote token|clear-token ENDPOINT  Piped remote endpoint credential
+moguri sandbox status|runs         Read native readiness/original owners
+moguri sandbox probe --confirm-review  Verify exact reviewed model-free native guest
+moguri sandbox preview PATHS.json --session ID
+moguri sandbox prepare PATHS.json --session ID --digest SHA --revision N --confirm-review
+moguri sandbox execution|result|stop RUN_ID
+moguri sandbox reconcile RUN_ID --confirm-review  Original signed guest only, no replay
+moguri sandbox publish-preview RUN_ID PATHS.json
+moguri sandbox publish RUN_ID PATHS.json --digest SHA --revision N --confirm-write
+moguri sandbox publication|publication-stop|publication-wait PUBLICATION_ID
 moguri worker --stdio              Installed versioned SSH worker bridge
 moguri workspace list PROJECT_ID
 moguri workspace discover PROJECT_ID  Read registrations, never adopt roots
@@ -397,6 +406,36 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "files" && values.session) output(await sdk.workspaces.files(values.session, args[0] ?? "."));
       else if (action === "file" && values.session && args[0]) output(await sdk.workspaces.file(values.session, args[0]));
       else throw new Error("Use workspace list/discover/create/inspect/reconcile/remove/session/files/file. File reads need PATH and --session ID; removal needs the observed revision and --confirm-remove. Branches are preserved.");
+    } else if (group === "sandbox") {
+      const paths = async (filename: string): Promise<string[]> => {
+        const info = await stat(filename);
+        if (!info.isFile() || info.size > 1024 * 1024) throw new Error("Native path selections require an explicit regular JSON file up to 1 MiB.");
+        const text = await readFile(filename, "utf8");
+        if (Buffer.byteLength(text) > 1024 * 1024) throw new Error("Native path selection grew beyond 1 MiB. Nothing was staged or published.");
+        const value: unknown = JSON.parse(text);
+        if (!Array.isArray(value) || !value.every((path) => typeof path === "string")) throw new Error("Native path selection must be an exact JSON array of relative file paths. Root and actor are not client input.");
+        return value;
+      };
+      if (action === "status" && !args.length) output(await sdk.sandbox.status());
+      else if (action === "runs" && !args.length) output({ executions: snapshot.sandboxExecutions ?? [], publications: snapshot.sandboxPublications ?? [] });
+      else if (action === "probe" && !args.length && values["confirm-review"]) { await sdk.sandbox.probe(); output(await sdk.sandbox.status()); }
+      else if (action === "preview" && args.length === 1 && values.session) output(await sdk.sandbox.preview(values.session, await paths(args[0]!)));
+      else if (action === "prepare" && args.length === 1 && values.session && values.digest && values["confirm-review"]) output(await sdk.sandbox.prepare(values.session, await paths(args[0]!), values.digest, expectedRevision()));
+      else if (action === "execution" && args.length === 1) output(await sdk.sandbox.execution(args[0]!));
+      else if (action === "result" && args.length === 1) output(await sdk.sandbox.result(args[0]!));
+      else if (action === "stop" && args.length === 1) output(await sdk.sandbox.stop(args[0]!));
+      else if (action === "reconcile" && args.length === 1 && values["confirm-review"]) { await sdk.sandbox.reconcile(args[0]!); output(await sdk.sandbox.execution(args[0]!)); }
+      else if (action === "publish-preview" && args.length === 2) output(await sdk.sandbox.publicationPreview(args[0]!, await paths(args[1]!)));
+      else if (action === "publish" && args.length === 2 && values.digest && values["confirm-write"]) {
+        const created = await sdk.sandbox.publish(args[0]!, await paths(args[1]!), values.digest, expectedRevision());
+        const record = (await sdk.sandbox.publication(created.id!)).publication;
+        await waitForJob(record.jobId, () => sdk.jobs.cancel(record.jobId), "Native source publication", () => sdk.sandbox.publication(record.id));
+      } else if (action === "publication" && args.length === 1) output(await sdk.sandbox.publication(args[0]!));
+      else if (action === "publication-stop" && args.length === 1) { const record = (await sdk.sandbox.publication(args[0]!)).publication; output(await sdk.jobs.cancel(record.jobId)); }
+      else if (action === "publication-wait" && args.length === 1) {
+        const record = (await sdk.sandbox.publication(args[0]!)).publication;
+        await waitForJob(record.jobId, () => sdk.jobs.cancel(record.jobId), "Native source publication", () => sdk.sandbox.publication(record.id));
+      } else throw new Error("Use sandbox status/runs; probe --confirm-review; preview/prepare PATHS.json --session ID; execution/result/stop RUN_ID; reconcile RUN_ID --confirm-review; publish-preview/publish RUN_ID PATHS.json with exact --digest/--revision/--confirm-write; or publication/publication-stop/publication-wait ID. Native preparation never starts a model turn.");
     } else if (group === "remote") {
       if (action === "status") output(await sdk.remote.status());
       else if (action === "probe") { await sdk.remote.probe(); output(await sdk.remote.status()); }

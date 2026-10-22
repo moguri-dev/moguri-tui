@@ -26,6 +26,85 @@ import { roleSequenceFixture } from "./fixtures/role-sequence-api.ts";
 import { roleProposalFixture } from "./fixtures/role-proposal-api.ts";
 import { modelEvidenceFixture } from "./fixtures/model-evidence-api.ts";
 import { roleContractFixture } from "./fixtures/role-contract-api.ts";
+import { nativePublicationFixture } from "./fixtures/native-publication.ts";
+import { nativeConfiguration } from "./fixtures/native-target.ts";
+import { nativeApiFixture } from "./fixtures/native-api.ts";
+
+const nativeSandbox = await nativeConfiguration();
+test("native TUI keys review retained Sandbox outputs and confirm separate source publication without a model call", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+  const fixture = await nativePublicationFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`Native publication review did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/sandbox publish-preview ${fixture.execution.id} ["fixture.txt"]`); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil('"sandbox.publication.preview"');
+    assert.equal(await readFile(join(fixture.root, "fixture.txt"), "utf8"), "generated original\n");
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    const preview = (await fixture.sdk.sandbox.publicationPreview(fixture.execution.id, ["fixture.txt"])).preview;
+    await setup.mockInput.typeText(`/sandbox publish ${JSON.stringify({ executionId: fixture.execution.id, paths: ["fixture.txt"], expectedDigest: preview.digest, expectedRevision: 0 })} confirm-publish`);
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil('"sandbox.publication"');
+    assert.equal(fixture.service.controller.snapshot().sandboxPublications?.[0]?.acceptance.actor, "user");
+    assert.equal(await readFile(join(fixture.root, "fixture.txt"), "utf8"), fixture.result.files[0]!.text);
+    const publication = fixture.service.controller.snapshot().sandboxPublications![0]!;
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText(`/artifact edit ${publication.id}`); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Native report metadata only");
+    setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ name: "Generated TUI native metadata", status: "active", folderId: null, workItemId: null }));
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Retained independently");
+    assert.equal((await fixture.sdk.artifacts.read(publication.id)).artifact.name, "Generated TUI native metadata");
+    assert.equal((await fixture.sdk.sandbox.publication(publication.id)).publication.documentDigest, publication.documentDigest);
+    assert.equal(fixture.requests.length, 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
+test("actual native TUI qualifies the guest, prepares reviewed source, holds a queued prompt and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: 90_000 }, async () => {
+  assert.ok(nativeSandbox);
+  const fixture = await nativeApiFixture(nativeSandbox), { sdk, provider, project, service } = fixture;
+  const bound = await sdk.command({ type: "project.add", path: project }), created = await sdk.sessions.create(bound.id!);
+  const session = () => service.controller.snapshot().sessions.find((value) => value.id === created.id)!;
+  await sdk.sessions.configure(created.id!, { ...session().controls, modelId: provider.modelId });
+  const settings = structuredClone(sdk.settings.get()!);
+  await sdk.settings.update({ ...settings.values, sandbox: fixture.reviewedConfiguration }, settings.revision);
+  const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 15_000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`Actual native TUI did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (text: string, expected: string) => { await frameUntil("Write a prompt"); await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected); };
+  let passed = false;
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk })));
+    await slash("/sandbox probe confirm-native", '"ready": true'); setup.mockInput.pressEscape();
+    await frameUntil("Write a prompt"); await setup.mockInput.typeText("/env Sandbox"); setup.mockInput.pressEnter({ ctrl: true });
+    await waitFor(() => session().controls.env === "Sandbox");
+    await slash('/sandbox preview ["fixture.txt"]', '"sandbox.preview"'); setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    const preview = (await sdk.sandbox.preview(created.id!, ["fixture.txt"])).preview;
+    await slash(`/sandbox prepare ${JSON.stringify({ paths: ["fixture.txt"], expectedDigest: preview.digest, expectedRevision: session().revision })} confirm-stage`, "private native stage prepared");
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("generated native write"); setup.mockInput.pressEnter({ ctrl: true });
+    const held = await waitFor(() => session().queue.find((item) => item.held));
+    assert.equal(session().turnId, null); assert.equal(service.controller.snapshot().budgetEntries.length, 0);
+    await slash(`/run ${held.id}`, "Write a prompt");
+    await waitFor(() => session().pendingApproval?.call.name === "read_file", 20_000);
+    await frameUntil("read_file"); await frameUntil("Ctrl+Y approve");
+    setup.mockInput.pressKey("y", { ctrl: true });
+    await waitFor(() => session().pendingApproval?.call.name === "write_file", 20_000);
+    await frameUntil("write_file");
+    setup.mockInput.pressKey("y", { ctrl: true });
+    await waitFor(() => !session().turnId && session().status === "completed", 20_000);
+    assert.equal(await readFile(join(project, "fixture.txt"), "utf8"), "generated source original\n");
+    const execution = service.controller.snapshot().sandboxExecutions!.find((value) => value.sessionId === created.id)!;
+    const review = (await sdk.sandbox.publicationPreview(execution.id, ["fixture.txt"])).preview;
+    await slash(`/sandbox publish ${JSON.stringify({ executionId: execution.id, paths: ["fixture.txt"], expectedDigest: review.digest, expectedRevision: execution.revision })} confirm-publish`, '"sandbox.publication"');
+    assert.equal(service.controller.snapshot().sandboxPublications?.[0]?.status, "completed");
+    assert.equal(await readFile(join(project, "fixture.txt"), "utf8"), "generated native replacement\n");
+    assert.equal(session().usage.length, 3); assert.equal(provider.requests.length, 0); passed = true;
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(passed); }
+});
 
 test("native bracketed paste preserves exact long text in a scoped file after a Unicode cursor and keeps queue-only semantics", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
