@@ -269,8 +269,17 @@ approvals. Desktop settings, TUI and shared slash/SDK controls expose the policy
 and provenance. Invalid, stale or unmetered advice pauses without a fallback.
 Finite inherited caps, images and per-model tuning block this Single alpha.
 
-Sandbox, complete remote side-panel/extension transport, compound kupo workflows,
-Autopilot Max,
+[Reviewed **Local Cascade/Critique**](docs/architecture/compound-workflows.md)
+now has a shared development service/SDK, CLI, actual TUI and desktop path.
+An actual classifier binds a declared concrete route; tool-less proposals retain
+the task plan, architecture and implementation. Actual-user review separately
+authorizes staging and exact project tests in distinct owned worktrees.
+Failed drafts remain isolated, and a recommended candidate still needs its
+separate source-application review. Reviewed lineage sources are limited user
+policy claims, not proof of independent training or calibrated quality.
+
+Sandbox qualification, complete remote side-panel/extension transport,
+public compound final hardening, Autopilot Max,
 routed wind-down/authorized checkpoint commits are still incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot

@@ -29,8 +29,45 @@ import { roleContractFixture } from "./fixtures/role-contract-api.ts";
 import { nativePublicationFixture } from "./fixtures/native-publication.ts";
 import { nativeConfiguration } from "./fixtures/native-target.ts";
 import { nativeApiFixture } from "./fixtures/native-api.ts";
+import { compoundApiFixture } from "./fixtures/compound-api.ts";
 
 const nativeSandbox = await nativeConfiguration();
+test("actual TUI keys review public compound cost and exact host tests, inspect the recommendation and edit only independent report metadata", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
+  const f = await compoundApiFixture(); await f.configure();
+  const setup = await createTestRenderer({ width: 180, height: 90, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 10000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI public compound did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (text: string, expected: string) => { await frameUntil("Write a prompt"); await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected); };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: f.sdk })));
+    const selection = Object.fromEntries(Object.entries(f.input).filter(([key]) => key !== "sessionId"));
+    await slash(`/compound preview ${JSON.stringify(selection)}`, '"compound.preview"'); setup.mockInput.pressEscape();
+    const preview = await f.sdk.compound.preview(f.input);
+    await slash(`/compound start ${preview.preview.digest} confirm-cost ${JSON.stringify(selection)}`, '"revision": 0');
+    const pending = await waitFor(() => {
+      const value = f.service.controller.snapshot().compoundWorkflows[0];
+      return value?.status === "waiting_validation" ? value : null;
+    });
+    assert.equal(await f.source(), "generated original\n"); setup.mockInput.pressEscape();
+    await slash(`/compound validation ${pending.id}`, '"compound.validation.preview"');
+    await frameUntil("Generated plan: replace only the reviewed fixture.");
+    const review = await f.sdk.compound.validationPreview(pending.id);
+    setup.mockInput.pressEscape();
+    await slash(`/compound review ${pending.id} ${review.review.validationId} ${review.revision} ${review.review.digest} confirm-stage-and-test`, "Actual-user staging and exact project tests authorized");
+    await waitFor(() => f.service.controller.snapshot().compoundWorkflows[0]?.status === "proposed" && !f.session().turnId);
+    assert.equal(await f.source(), "generated original\n"); setup.mockInput.pressEscape();
+    await slash(`/artifact edit ${pending.id}`, "Compound workflow metadata only");
+    setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ name: "Generated TUI compound report", status: "active", folderId: null, workItemId: null }));
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Retained independently");
+    assert.equal((await f.sdk.artifacts.read(pending.id)).artifact.name, "Generated TUI compound report");
+    assert.equal((await f.sdk.compound.read(pending.id)).workflow.validations[0]?.status, "passed");
+    assert.equal(f.requests.length, 1); assert.equal(f.providers[1]!.requests.length, 1); assert.equal(f.providers[2]!.requests.length, 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
+
 test("native TUI keys review retained Sandbox outputs and confirm separate source publication without a model call", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
   const fixture = await nativePublicationFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
