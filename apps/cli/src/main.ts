@@ -8,6 +8,7 @@ import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 import { compoundCommand } from "./compound.ts";
+import { winddownCommand } from "./winddown.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -20,6 +21,7 @@ export async function main(argv: string[]): Promise<void> {
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
     "confirm-write": { type: "boolean" }, "confirm-cost": { type: "boolean" }, generation: { type: "string" }, "role-sequence": { type: "string" }, branch: { type: "string" }, "materialization-id": { type: "string" },
     "confirm-stage-and-test": { type: "boolean" },
+    "confirm-git": { type: "boolean" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
@@ -76,6 +78,11 @@ moguri compound start INPUT.json --session ID --digest SHA --confirm-cost
 moguri compound list|read|validation|stop ID  Inspect actual owned roles and exact pending reviews
 moguri compound review ID VALIDATION --revision N --digest SHA --confirm-stage-and-test
 moguri compound deny ID VALIDATION --revision N --digest SHA --confirm-review
+moguri winddown status --session ID  Actual reserved-finishing readiness; no inference
+moguri winddown list|read|stop ID  Retained capacity/model/Git observations
+moguri winddown preview INPUT.json --session ID  Exact accepted-work/new-local-branch review
+moguri winddown commit INPUT.json --session ID --revision N --digest SHA --confirm-git
+moguri winddown decline ID --revision N --confirm-review  No Git/model effect
 moguri candidate apply-preview ID --session SOURCE
 moguri candidate apply ID --session SOURCE --revision N --digest REVIEW_SHA --confirm-write
 moguri candidate reject ID --revision N --confirm-review
@@ -326,6 +333,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           output(await sdk.budgets.status(session.id));
         }
       } else throw new Error("Use budget status SESSION, dashboard/calls/plans [--filters JSON], set SESSION BUDGET.json --confirm-review, or policy/global LIMIT_OR_NULL.json --revision N --confirm-review. Finite limits require explicit basis: estimate.");
+    } else if (group === "winddown") {
+      output(await winddownCommand(sdk, action, args, values));
     } else if (group === "compound") {
       output(await compoundCommand(sdk, action, args, values));
     } else if (group === "roles") {

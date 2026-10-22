@@ -267,7 +267,10 @@ explicit approved classifier/solver pool and separate hosted/network-data consen
 The same owned worker records actual per-call roles/models and keeps normal
 approvals. Desktop settings, TUI and shared slash/SDK controls expose the policy
 and provenance. Invalid, stale or unmetered advice pauses without a fallback.
-Finite inherited caps, images and per-model tuning block this Single alpha.
+Finite inherited caps require the separately configured qualified Local
+[reserved wind-down](docs/architecture/budget-winddown.md) policy. Without it
+Single remains blocked rather than lifting the cap. Images and per-model
+tuning remain unavailable on synthetic models.
 
 [Reviewed **Local Cascade/Critique**](docs/architecture/compound-workflows.md)
 now has a shared development service/SDK, CLI, actual TUI and desktop path.
@@ -278,9 +281,12 @@ Failed drafts remain isolated, and a recommended candidate still needs its
 separate source-application review. Reviewed lineage sources are limited user
 policy claims, not proof of independent training or calibrated quality.
 
+Finite Local routing now reserves one actual metadata-only finishing role and
+has separately reviewed actual-user accepted-work checkpoint branches that
+preserve the source index/HEAD. A summary never accepts code or approves Git.
 Sandbox qualification, complete remote side-panel/extension transport,
-public compound final hardening, Autopilot Max,
-routed wind-down/authorized checkpoint commits are still incomplete.
+public compound/wind-down final hardening, Autopilot Max and remote/native
+wind-down remain incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed

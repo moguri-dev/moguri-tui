@@ -30,8 +30,35 @@ import { nativePublicationFixture } from "./fixtures/native-publication.ts";
 import { nativeConfiguration } from "./fixtures/native-target.ts";
 import { nativeApiFixture } from "./fixtures/native-api.ts";
 import { compoundApiFixture } from "./fixtures/compound-api.ts";
+import { winddownApiFixture } from "./fixtures/winddown-api.ts";
 
 const nativeSandbox = await nativeConfiguration();
+test("actual TUI keys review reserved budget data and separately create an accepted-work checkpoint branch without another model or source index/HEAD change", { skip: process.platform !== "darwin", timeout: 25000 }, async () => {
+  const f = await winddownApiFixture({ git: true }), accepted = await f.accept(), checkpoint = await f.run(); assert.ok(f.git);
+  const index = await readFile(join(f.project, ".git/index")), head = f.git(["rev-parse", "HEAD"]);
+  const setup = await createTestRenderer({ width: 180, height: 90, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI wind-down did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (text: string, expected: string) => { await frameUntil("Write a prompt"); await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected); };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: f.sdk })));
+    const input = { winddownId: checkpoint.winddown.id, candidateIds: [accepted.candidate.id], branch: "moguri/generated-tui-budget-checkpoint", message: "chore: retain accepted TUI checkpoint" };
+    await slash("/winddown commit-preview " + JSON.stringify(input), '"winddown.commit.preview"'); setup.mockInput.pressEscape();
+    const review = await f.sdk.winddown.commitPreview({ ...input, sessionId: f.sessionId });
+    await slash(`/winddown commit ${review.preview.revision} ${review.preview.digest} confirm-git ${JSON.stringify(input)}`, '"winddown.read"');
+    assert.equal((await f.sdk.winddown.read(checkpoint.winddown.id)).winddown.status, "completed"); setup.mockInput.pressEscape();
+    await slash(`/artifact edit ${checkpoint.winddown.id}`, "Wind-down metadata only");
+    setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ name: "Generated TUI budget checkpoint", status: "active", folderId: null, workItemId: null }));
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil("Retained independently");
+    assert.equal((await f.sdk.artifacts.read(checkpoint.winddown.id)).artifact.name, "Generated TUI budget checkpoint");
+    assert.equal(f.git(["rev-parse", "HEAD"]), head); assert.deepEqual(await readFile(join(f.project, ".git/index")), index);
+    assert.equal(f.requests.length, 1); assert.equal(f.checkpoint.requests.length, 1);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await f.close(); }
+});
+
 test("actual TUI keys review public compound cost and exact host tests, inspect the recommendation and edit only independent report metadata", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
   const f = await compoundApiFixture(); await f.configure();
   const setup = await createTestRenderer({ width: 180, height: 90, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
