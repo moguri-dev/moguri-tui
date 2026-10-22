@@ -13,6 +13,7 @@ import { decisionCommand } from "./decisions.ts";
 import { workspaceFeatureCommand } from "./workspace-features.ts";
 import { integrationCommand } from "./integrations.ts";
 import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../packages/sdk/src/index.ts";
+import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -27,6 +28,7 @@ export async function main(argv: string[]): Promise<void> {
     "confirm-stage-and-test": { type: "boolean" },
     "confirm-git": { type: "boolean" },
     confirmations: { type: "string" }, registry: { type: "string" },
+    "capture-id": { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
@@ -36,6 +38,7 @@ export async function main(argv: string[]): Promise<void> {
 moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
+moguri progress --session ID       Checked plan items and untrusted task estimate
 moguri COMMAND --profile ID        Immutable scope; never changes another client
 moguri profile list|create NAME [--color '#RRGGBB']
 moguri profile update ID CHANGES.json --revision N
@@ -135,7 +138,11 @@ moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA2
 moguri configuration propose FILE --session ID
 moguri configuration review|apply|reject ID --digest SHA256 [--acknowledge-config-risk]
 moguri attention list|read ID
-moguri context file|image PATH --session ID
+moguri context file|image|document PATH --session ID [--capture-id ID]
+moguri context documents --session ID [--filters '{"offset":0,"limit":5}']
+moguri context document-read ID --session ID [--filters '{"page":1,"limit":4096}']
+moguri context document-search ID --session ID --filters '{"query":"literal"}'
+moguri context original|cancel ID --session ID  Explicit original or owned capture
 moguri context folder PATH|github URL|session SOURCE_ID --session ID [--digest SHA256 --confirm-review]
 moguri context read ATTACHMENT_ID --session ID
 moguri slash "/read-only" --session ID
@@ -278,7 +285,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
   try {
     const snapshot = sdk.getState().snapshot!;
     const projectId = args[0] ?? values.project;
-    if (group === "status") {
+    if (group === "progress") {
+      if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
+      output(await sdk.sessions.progress(values.session));
+    } else if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
     } else if (group === "knowledge" || group === "marketplace" || group === "hooks" || group === "capability" || group === "containment") {
       output(await workspaceFeatureCommand(sdk, group, action, args, values));
@@ -309,14 +319,24 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "defaults" && args[0]) output(await sdk.profiles.defaults(parse(ControlDefaultsSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
       else throw new Error("Use profile list/create/update/retry/stop/defaults. Updates need an observed revision; retry requires explicit --confirm-review after resource inspection. Use --profile ID to select scope.");
     } else if (group === "context") {
-      if (!values.session || !args[0]) throw new Error("Choose --session ID and an explicit source path/reference.");
-      if (action === "file" || action === "image") output(await sdk.attachments.file(values.session, args[0], action === "image" ? "image" : "text"));
-      else if (action === "read") { const result = await sdk.attachments.read(values.session, args[0]); output(result.content.kind === "text" ? result.content.text : { attachment: result.attachment, diagnostic: "Use SDK/desktop for private image bytes; no clipboard capability is assumed." }); }
+      if (!values.session) throw new Error("Choose --session ID for this exact attachment scope.");
+      if (action === "documents") { output(await sdk.attachments.listDocuments(values.session, parse(DocumentListOptionsSchema, JSON.parse(values.filters ?? "{}")))); return; }
+      if (!args[0]) throw new Error("Choose an explicit source path/reference.");
+      if (action === "document") {
+        const captureId = values["capture-id"] ?? crypto.randomUUID();
+        console.error(`Local document extraction / capture ${captureId}. No model call.`);
+        output(await sdk.attachments.document(values.session, args[0], { captureId }));
+      } else if (action === "file" || action === "image") output(await sdk.attachments.file(values.session, args[0], action === "image" ? "image" : "auto"));
+      else if (action === "document-read") output(await sdk.attachments.readDocument(values.session, args[0], parse(DocumentReadOptionsSchema, JSON.parse(values.filters ?? "{}"))));
+      else if (action === "document-search") output(await sdk.attachments.searchDocument(values.session, args[0], parse(DocumentSearchOptionsSchema, JSON.parse(values.filters ?? "{}"))));
+      else if (action === "cancel") output(await sdk.attachments.cancelDocument(values.session, args[0]));
+      else if (action === "original") output(await sdk.attachments.original(values.session, args[0]));
+      else if (action === "read") { const result = await sdk.attachments.read(values.session, args[0]); output(result.content.kind === "text" ? result.content.text : { attachment: result.attachment, diagnostic: result.content.kind === "document" ? "Use context document-read/document-search for bounded extracted content. Formulas are inert and OCR is unavailable." : "Use SDK/desktop for private image bytes; no clipboard capability is assumed." }); }
       else if (action === "folder" || action === "github" || action === "session") {
         if (values.digest && values["confirm-review"]) output(action === "folder" ? await sdk.attachments.folder(values.session, args[0], values.digest, true) : action === "github" ? await sdk.attachments.github(values.session, args[0], "public", values.digest, true) : await sdk.attachments.session(values.session, args[0], values.digest, true));
         else if (values.digest || values["confirm-review"]) throw new Error("Use both --digest SHA256 and --confirm-review after inspecting the source snapshot.");
         else output(action === "folder" ? await sdk.attachments.folderPreview(values.session, args[0]) : action === "github" ? await sdk.attachments.githubPreview(values.session, args[0]) : await sdk.attachments.sessionPreview(values.session, args[0]));
-      } else throw new Error("Use context file/image/folder/github/session/read. No source is attached implicitly.");
+      } else throw new Error("Use context file/image/document/document-read/document-search/original/cancel/folder/github/session/read. No source is attached implicitly.");
     } else if (group === "question") {
       if (action === "list") output(snapshot.questions.filter((question) => !values.session || question.sessionId === values.session));
       else if (action === "read" && args[0]) { const question = snapshot.questions.find((question) => question.id === args[0]); if (!question) throw new Error("Choose an actual question ID from this profile."); output(question); }

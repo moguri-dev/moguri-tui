@@ -3,7 +3,8 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@opentui/react";
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
-import { useMoguri } from "../../../packages/sdk/src/react.ts";
+import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
+import { attachmentStatus, progressBar } from "../../../packages/sdk/src/index.ts";
 import { DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
@@ -36,6 +37,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
   const planEditor = useRef<PlanEditorRequest | null>(null), planSaving = useRef(false);
   const [planPending, setPlanPending] = useState(false);
+  const documentCapture = useRef<{ sessionId: string; id: string } | null>(null);
   const [profiles, setProfiles] = useState<ProfileCatalog | null>(null);
   const profileEditor = useRef<Profile | null>(null);
   const switchingProfile = useRef(false);
@@ -43,6 +45,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); for (const client of clients.current) client.disconnect(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
+  const taskProgress = useTaskProgress(client, session, status === "connected");
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
   const recommendation = pendingQuestion?.recommendation;
@@ -232,12 +235,27 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const name = (firstSpace < 0 ? text : text.slice(0, firstSpace)).trim();
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
+      if (documentCapture.current?.sessionId === session.id) throw new Error("Document extraction is still active. Wait or use Ctrl+C to cancel this capture before sending or holding its prompt.");
       if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision); return; }
       if (name === "/steer" || name === "/interrupt") editor.edit(argument);
       await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
       return;
     }
     const shared = parseSlash(text);
+    if (shared && (shared.name === "attach-document" || shared.name === "attach-file" && /\.(pdf|docx|xlsx)$/i.test(shared.argument))) {
+      if (documentCapture.current) throw new Error("One document is already extracting in this TUI. Ctrl+C requests its exact stop.");
+      await editor.flush();
+      const id = crypto.randomUUID(); documentCapture.current = { sessionId: session.id, id };
+      setNotice(`Extracting ${shared.argument.split(/[\\/]/).at(-1)} locally / ${id}. Ctrl+C cancels this capture; no model call.`);
+      try {
+        const result = await client.attachments.document(session.id, shared.argument, { captureId: id });
+        const saved = client.getState().snapshot!.sessions.find((item) => item.id === session.id)!.draft;
+        editor.receive(saved);
+        if (!editor.getState().conflict && editor.getState().text === text) { editor.edit("", saved.attachments); await editor.flush(); }
+        setNotice(`Captured document ${result.id}. /attached ID shows limitations; /document-read and /document-search inspect bounded content.`);
+      } finally { documentCapture.current = null; }
+      return;
+    }
     if (shared && isSharedSlash(shared.name) && name !== "/help" && !(name === "/settings" && argument) &&
       !(name === "/linear" && argument === "token") && !(name === "/cache" && argument.startsWith("token "))) {
       await editor.flush(); editor.edit(""); await editor.flush();
@@ -487,6 +505,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       client.disconnect();
       if (onQuit) onQuit(); else renderer.destroy();
     });
+    else if (key.name === "c" && documentCapture.current?.sessionId === session?.id) {
+      const capture = documentCapture.current;
+      if (capture) void perform(() => client.attachments.cancelDocument(capture.sessionId, capture.id));
+    }
     else if (key.name === "c" && session?.turnId) void command({ type: "session.stop", sessionId: session.id });
     else if (key.name === "o") setMode("project");
     else if (key.name === "n") void perform(newSession);
@@ -715,13 +737,14 @@ account authorization are required. Sign-in may enable account
 model policies. Moguri is not an official Copilot partner.
 Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         mode === "trace" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Recent events (last 200 received)</text>{events.filter((event) => !session || event.session_id === session.id).map((event) => <text key={event.id} fg={colors.muted}>{safe(`#${event.seq} ${event.event_type}\n${JSON.stringify(event.payload)}\n`)}</text>)}</scrollbox> :
-        mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Held prompts do not run. /run ID releases one. /edit, /remove, /reorder and /copy ID manage prompts.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.held ? "held" : item.delivery}]\n${item.text}\n`)}</text>)}</scrollbox> :
+        mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Held prompts do not run. /run ID releases one. /edit, /remove, /reorder and /copy ID manage prompts.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.held ? "held" : item.delivery}]\n${item.text}\n${item.attachments.map((attachment) => `${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`).join("\n")}\n`)}</text>)}</scrollbox> :
           <scrollbox flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom">
             {!session?.messages.length && <box flexDirection="column" paddingTop={1} paddingBottom={1} gap={1}><text fg={colors.accent}>{MOGURI_ASCII}</text><text fg={colors.accent}><strong>What are we working on?</strong></text><text fg={colors.muted}>{session ? "Choose a model with Ctrl+M, then write a prompt below.\nYou approve each tool before it runs." : "Ctrl+O opens a project. Ctrl+L connects GitHub Copilot.\nSessions and drafts are shared with the desktop app."}</text></box>}
             {session?.messages.slice(detailed ? 0 : -150).map((message) => <box key={message.id} flexDirection="column" paddingTop={1} paddingBottom={1}>
               <text fg={message.role === "user" ? colors.accent : message.role === "notice" ? colors.attention : colors.muted}><strong>{message.role === "user" ? "You" : message.role === "assistant" ? "Moguri" : message.role === "tool" ? message.toolCalls?.[0]?.name ?? "Tool" : "Session"}</strong>{message.outcome ? ` / ${message.outcome}` : ""}</text>
               <text fg={colors.foreground}>{safe((detailed ? message.text : message.text.slice(-4000)) || (message.toolCalls?.length ? "Requesting tool access." : "Working..."))}</text>
               {detailed && message.reasoning && <text fg={colors.muted}>{safe(`Provider-exposed reasoning:\n${message.reasoning}`)}</text>}
+              {message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) => <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>)}
             </box>)}
           </scrollbox>}
         {snapshot?.provider.login && <box flexDirection="column" border borderColor={colors.accent} padding={1}>
@@ -740,10 +763,12 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {latestTranscript && <text fg={colors.accent}>Local transcript ready. F4 inserts it into the draft; it is never sent automatically.</text>}
         {mode === "compose" && session && editor && <TuiComposer key={session.id} editor={editor} session={session} focused={!session.pendingApproval}
           submit={() => void perform(() => submit(editor.getState().text))} run={perform} />}
-        <box height={4} flexShrink={0} flexDirection="column">
+        <box height={taskProgress.progress?.longRunning && taskProgress.progress.model ? 5 : 4} flexShrink={0} flexDirection="column">
           <text fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (Ctrl+M)"}` : "Env Local | Model not set"}</text>
           <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
           <text fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls` : "Factory defaults. Ctrl+K commands."}</text>
+          {session && <text fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : taskProgress.progress?.checklist.total ? `${taskProgress.progress.checklist.completed}/${taskProgress.progress.checklist.total}` : "no checklist"} / estimate, 15s`)}</text>}
+          {taskProgress.progress?.longRunning && taskProgress.progress.model && <text fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent, 8)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>
       </box>
     </box>
@@ -787,7 +812,7 @@ function TuiComposer({ editor, session, focused, submit, run }: { editor: DraftE
         mirror.current.text = null;
         if (text !== editor.getState().text) editor.edit(text);
       }} />
-    {draft.attachments.length > 0 && <text fg={colors.accent}>{draft.attachments.map((attachment) => `@${attachment.path}`).join("  ")}</text>}
+    {draft.attachments.length > 0 && <text fg={colors.accent}>{safe(draft.attachments.map((attachment) => `@${attachment.path}${attachment.kind === "document" ? ` [${attachmentStatus(attachment)}] ${attachment.id}` : ""}`).join("  "))}</text>}
     <text fg={draft.error ? colors.error : colors.muted}>{draft.error ?? (draft.saving ? "Saving draft..." : draft.dirty ? "Unsent edits" : "Draft saved")}</text>
     {draft.text.startsWith("/") && !/\s/.test(draft.text) && <text fg={colors.accent}>{slashCommands.filter((entry) => entry.name.startsWith(draft.text.slice(1))).slice(0, 4).map((entry) => `/${entry.name}`).join("  ")}</text>}
   </box>;

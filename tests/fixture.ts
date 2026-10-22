@@ -7,6 +7,7 @@ import type { PreparedModel, ProviderAdapter } from "../apps/service/src/provide
 import { startService } from "../apps/service/src/server.ts";
 import { envelope } from "../apps/service/src/controller.ts";
 import { isRecord, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
+import type { TaskProgressInput } from "../packages/protocol/src/progress.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
 import { supportedThinking } from "../apps/service/src/model-controls.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
@@ -24,6 +25,9 @@ export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   contextWindow?: number; supportedContextWindows?: number[];
   readPaste?: { offset?: number; limit?: number; search?: string };
+  documentTool?: { name: "read_document" | "search_document"; arguments: Record<string, unknown> };
+  toolInput?: boolean;
+  taskProgress?: TaskProgressInput; progressDelayMs?: number;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
   questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string; replyText?: string; holdAfterTool?: boolean; responseMode?: "text" | "auto"; redirectTo?: string;
   finishReason?: "stop" | "length";
@@ -73,6 +77,14 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         chunk({ role: "assistant", content: "Generated work in progress." });
         held.add(response);
         response.on("close", () => held.delete(response));
+      } else if (options.documentTool && /"attachmentId":"[^"]+"/.test(prompt) && toolMessages.length === 0) {
+        finish({ name: options.documentTool.name, args: { attachmentId: prompt.match(/"attachmentId":"([^"]+)"/)![1]!, ...options.documentTool.arguments } });
+      } else if (options.taskProgress && prompt.includes("generated task progress") && toolMessages.length === 0) {
+        if (options.progressDelayMs) await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, options.progressDelayMs);
+          response.once("close", () => { clearTimeout(timer); resolve(); });
+        });
+        if (!response.destroyed) finish({ name: "task_progress", args: { ...options.taskProgress } });
       } else if (options.readPaste && /moguri-attachment\/[a-f0-9-]+\.txt/.test(prompt) && toolMessages.length === 0) {
         finish({ name: "read_file", args: { path: prompt.match(/moguri-attachment\/[a-f0-9-]+\.txt/)![0], ...options.readPaste } });
       } else if (options.responseMode === "text" && !prompt.includes("generated delayed")) {
@@ -120,7 +132,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture bind failed.");
   const model = { ...base, ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}), ...(options.supportedContextWindows ? { supportedContextWindows: options.supportedContextWindows } : {}), ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
-  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, ...(model.supportedContextWindows ? { supportedContextWindows: model.supportedContextWindows } : {}), maxTokens: model.maxTokens, imageInput: options.imageInput ?? false, thinkingLevels: supportedThinking(model) }];
+  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, ...(model.supportedContextWindows ? { supportedContextWindows: model.supportedContextWindows } : {}), maxTokens: model.maxTokens, imageInput: options.imageInput ?? false, ...(options.toolInput !== undefined ? { toolInput: options.toolInput } : {}), thinkingLevels: supportedThinking(model) }];
   class FixtureProvider implements ProviderAdapter {
     state: ProviderState = { status: "connected", models: catalog, login: null, diagnostic: null };
     onChange = () => {};

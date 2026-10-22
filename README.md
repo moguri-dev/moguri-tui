@@ -21,6 +21,10 @@ subagents and one native MCP gateway. Desktop starts dark and uses the same
 original face-and-bat-wing mascot as the TUI's ASCII loading mark.
 The mascot now also carries its small red antenna pom-pom.
 
+The [task completion bar](docs/architecture/task-progress.md) periodically
+checks the bound plan's Markdown checklist. Long tasks can also show an
+owning-model estimate, separately labeled as advice, never proof of completion.
+
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
 repository-backed marketplace bundles. Imports/updates/rollbacks stay disabled;
@@ -66,6 +70,12 @@ images, exact reviewed folders, typed GitHub issue/PR references and authorized
 session-text snapshots. Unsupported image models preserve the draft/queue
 rather than dropping context. Bare attachment prefixes remain literal until
 the user selects their source.
+
+**PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
+document snapshots with bounded, approved page/section/cell inspection.
+Originals stay retained; formulas never execute and scanned PDF pages explicitly
+report unavailable OCR. Source/text files, including Java, and images remain
+supported. See [document limits and usage](docs/architecture/document-attachments.md).
 
 Current source work for [#17](https://github.com/mbianchidev/moguri/issues/17)
 offers the model maximum and half maximum, or actual provider-declared working
