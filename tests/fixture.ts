@@ -181,6 +181,6 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
       return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));
     },
     terminal: async () => waitFor<Session>(() => { const current = session(); return !current.turnId && ["completed", "stopped", "partial", "failed"].includes(current.status) ? current : false; }),
-    close: async () => { await service.close(); await fixture.close(); await rm(directory, { recursive: true, force: true }); },
+    close: async () => { await service.close(); await fixture.close(); await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); },
   };
 }

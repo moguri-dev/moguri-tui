@@ -25,8 +25,8 @@ jobs:
       - run: npm ci --no-fund --no-progress
       - run: npm audit --audit-level=moderate
       - run: npm run typecheck
-      - run: npm test
       - run: npm run build
+      - run: npm test
       - run: npm run verify:sdk
       - if: runner.os == 'macOS'
         run: npm run test:e2e

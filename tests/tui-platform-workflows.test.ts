@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createElement } from "react";
+import { createTestRenderer } from "@opentui/core/testing";
+import { createRoot, flushSync } from "@opentui/react";
+import { TuiApp } from "../apps/tui/src/App.tsx";
+import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { setupFixture, waitFor } from "./fixture.ts";
+import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
+
+test("actual TUI keys share knowledge promotion, disabled hooks and exact reviewed Git actions without inference", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const git = initializeGeneratedRepository(fixture.project);
+  for (const [name, value] of [["core.hooksPath", "/dev/null"], ["tag.gpgSign", "false"], ["commit.gpgSign", "false"]]) git(["config", name!, value!]);
+  const setup = await createTestRenderer({ width: 170, height: 85, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`Native workflow UI did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const slash = async (text: string, expected: string) => {
+    await frameUntil("Write a prompt"); await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk })));
+    await slash('/knowledge save {"tier":"Sky","lifetime":"session","title":"Generated native Sky","text":"Generated temporary reviewed project knowledge."}', '"revision": 0');
+    const note = fixture.service.controller.snapshot().knowledge[0]!;
+    setup.mockInput.pressEscape();
+    await slash(`/knowledge read ${note.id}`, '"knowledge.read"');
+    await frameUntil("Generated temporary reviewed project knowledge."); setup.mockInput.pressEscape();
+    await slash(`/knowledge promote ${note.id} ${note.revision} ${note.contentDigest} confirm-promote {"tier":"Glacier","title":"Generated native Glacier","text":"Generated reviewed knowledge."}`, '"revision": 0');
+    assert.equal(fixture.service.controller.snapshot().knowledge.find((record) => record.tier === "Glacier")?.origin?.actor, "user");
+    setup.mockInput.pressEscape();
+    await slash('/hooks import {"schemaVersion":1,"name":"generated-native-hook","description":"Generated native disabled hook","trigger":"turn.start","command":"printf native-fixture","timeoutMs":1000}', '"revision": 0');
+    assert.equal(fixture.service.controller.snapshot().registry.find((entry) => entry.kind === "hook")?.enabled, false);
+    setup.mockInput.pressEscape();
+    const action = { kind: "git.tag.create" as const, tag: "generated-native-reviewed-tag", target: git(["rev-parse", "HEAD"]), annotated: false, message: "" };
+    await slash(`/github preview ${JSON.stringify(action)}`, '"github.preview"'); setup.mockInput.pressEscape();
+    const review = (await sdk.github.preview({ env: "Local", projectId: fixture.session().projectId!, sessionId: fixture.sessionId }, action)).preview;
+    await slash(`/github execute confirm-write ${JSON.stringify({ action, expectedDigest: review.digest, confirmations: review.document.confirmations })}`, '"id":');
+    await waitFor(() => fixture.service.controller.snapshot().githubOperations[0]?.status === "completed");
+    await frameUntil(fixture.service.controller.snapshot().githubOperations[0]!.id);
+    assert.equal(git(["rev-parse", "refs/tags/generated-native-reviewed-tag"]), git(["rev-parse", "HEAD"]));
+    assert.equal(fixture.service.controller.snapshot().githubOperations[0]?.actor, "user");
+    setup.mockInput.pressEscape();
+    await slash("/containment status", "native-process-groups-only");
+    assert.equal(fixture.requests.length, 0);
+    assert.equal(fixture.session().queue.length, 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); sdk.disconnect(); await fixture.close(); }
+});

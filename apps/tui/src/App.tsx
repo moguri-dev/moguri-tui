@@ -31,7 +31,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [capabilityOutput, setCapabilityOutput] = useState("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
-  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model">("mcp");
+  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
   const planEditor = useRef<PlanEditorRequest | null>(null), planSaving = useRef(false);
@@ -238,7 +238,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       return;
     }
     const shared = parseSlash(text);
-    if (shared && isSharedSlash(shared.name) && name !== "/help" && !(name === "/settings" && argument)) {
+    if (shared && isSharedSlash(shared.name) && name !== "/help" && !(name === "/settings" && argument) &&
+      !(name === "/linear" && argument === "token") && !(name === "/cache" && argument.startsWith("token "))) {
       await editor.flush(); editor.edit(""); await editor.flush();
       try { await slashResult(await client.slash(session.id, text, "tui")); }
       catch (error) { if (client.getState().snapshot?.sessions.some((item) => item.id === session.id && item.status !== "archived")) editor.edit(text); throw error; }
@@ -281,22 +282,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         else show(await client.issues.board(requiredProject()));
         break;
       case "/cache": {
-        const [operation, manager, hash, consent, replacement] = argument.split(" ");
-        if (manager !== "npm" && manager !== "pnpm") throw new Error("Choose npm or pnpm. Inspect first, then approve its exact plan.");
-        if (operation === "inspect") show(await client.cache.inspect(requiredProject(), manager, session.workspaceId ?? undefined));
-        else {
-          if (!hash || consent !== "accept-metadata") throw new Error("Use /cache prepare MANAGER SHA256 accept-metadata after reviewing the plan and OSV metadata disclosure.");
-          if (operation === "prepare") show(await client.cache.prepare(requiredProject(), manager, hash, true, session.workspaceId ?? undefined));
-          else if (operation === "install" && replacement === "replace-node-modules") show(await client.cache.install(requiredProject(), manager, hash, true, false, session.workspaceId ?? undefined));
-          else throw new Error("Managed install also requires replace-node-modules. Scripts stay blocked; no unqualified SendBox fallback.");
+        if (argument.startsWith("token ")) {
+          const registryId = argument.slice(6);
+          if (!snapshot?.dependencyRegistries.some((registry) => registry.id === registryId)) throw new Error("Choose an exact registry ID from /cache registries.");
+          setTokenKind("cache"); setTokenServer(registryId); setTokenValue(""); setMode("mcp-token"); break;
         }
-        break;
+        throw new Error("Use the shared /cache commands. Registry credentials use /cache token ID's dedicated masked dialog.");
       }
       case "/linear":
         if (argument === "token") { setTokenKind("linear"); setTokenValue(""); setMode("mcp-token"); }
-        else if (argument === "clear-token") show(await client.linear.clearToken());
-        else if (argument === "import" || argument.startsWith("import ")) show(await client.linear.import(requiredProject(), argument.split(" ")[1]));
-        else show(await client.linear.status(requiredProject()));
+        else throw new Error("Use the shared /linear workflow commands; token opens the dedicated masked dialog.");
         break;
       case "/settings":
         if (argument === "edit") openSettingsEditor(false);
@@ -332,15 +327,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         show(name === "/skills" ? await client.capabilities.importSkill(requiredProject(), argument.slice(7)) : await client.capabilities.importPlugin(requiredProject(), argument.slice(7)));
         break;
       case "/capabilities": show({ registry: snapshot?.registry.filter((entry) => entry.projectId === session.projectId), proposals: snapshot?.proposals.filter((entry) => entry.projectId === session.projectId) }); break;
-      case "/capability": {
-        const [operation, id] = argument.split(" ");
-        const entry = snapshot?.registry.find((entry) => entry.id === id && entry.projectId === session.projectId);
-        if (!entry) throw new Error("Choose a capability ID from /capabilities.");
-        if (operation === "view") show(await client.capabilities.content(entry.id));
-        else if (operation === "enable" || operation === "disable") await client.capabilities.toggle(entry.id, operation === "enable", entry.revision);
-        else throw new Error("Use /capability view, enable or disable ID.");
-        break;
-      }
       case "/proposal": {
         const [operation, id, hash] = argument.split(" ");
         if (!id) throw new Error("Use /proposal view ID, then /proposal approve|reject ID SHA256 after reviewing the exact source.");
@@ -458,7 +444,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
       if (key.name === "backspace") setTokenValue((value) => value.slice(0, -1));
-      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
+      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "cache") await client.cache.registries.setToken(tokenServer, tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
@@ -637,7 +623,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           }))]} onSelect={(_, option) => { if (option) void perform(async () => openIssueEditor(String(option.value) || undefined)); }} />
           <text fg={colors.muted} height={3}>Enter edits JSON. /board edit configures phases and Linear. /issue move ID PHASE moves tickets. /board refresh reads linked PRs. Esc returns.</text></box> :
         mode === "capability-output" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
-        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
+        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>

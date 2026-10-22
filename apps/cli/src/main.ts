@@ -10,6 +10,9 @@ import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
 import { decisionCommand } from "./decisions.ts";
+import { workspaceFeatureCommand } from "./workspace-features.ts";
+import { integrationCommand } from "./integrations.ts";
+import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -23,6 +26,7 @@ export async function main(argv: string[]): Promise<void> {
     "confirm-write": { type: "boolean" }, "confirm-cost": { type: "boolean" }, generation: { type: "string" }, "role-sequence": { type: "string" }, branch: { type: "string" }, "materialization-id": { type: "string" },
     "confirm-stage-and-test": { type: "boolean" },
     "confirm-git": { type: "boolean" },
+    confirmations: { type: "string" }, registry: { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
@@ -159,6 +163,20 @@ moguri config get|set FILE|reset   Shared, restorable settings
 moguri prompt get|set FILE|reset   Editable system prompt (risk acknowledgement required)
 moguri memory index PROJECT_ID|search PROJECT_ID TEXT|graph PROJECT_ID
 moguri memory index|state|search TEXT|graph [PATH] --session SESSION_ID
+moguri knowledge list/search Sky|Terra|Glacier [TEXT] [--session ID|--project ID]
+moguri knowledge save INPUT.json|update ID INPUT.json --revision N
+moguri knowledge read|history ID|version ID --digest SHA
+moguri knowledge promote ID SUMMARY.json --revision N --digest SHA --confirm-review
+moguri knowledge rollback ID --revision N --digest SHA --confirm-review
+moguri knowledge forget ID --revision N --confirm-remove
+moguri marketplace catalog SOURCE.json|preview INPUT.json
+moguri marketplace install INPUT.json --digest SHA --confirm-review  Installs disabled
+moguri hooks list --project ID|import DEFINITION.json --project ID --confirm-review
+moguri capability history ID [OFFSET]|version ID --digest SHA
+moguri capability enable|disable ID --revision N --confirm-review
+moguri capability rollback ID --revision N --digest SHA --confirm-review
+moguri capability use ID --session ID --digest SHA  Inserts a skill into the saved draft
+moguri containment status|require-sandbox --confirm-review  Explicit global new-turn policy
 moguri skills import PROJECT_ID SKILL.md
 moguri plugins import PROJECT_ID manifest.json
 moguri mcp --session SESSION_ID    Native stdio MCP gateway
@@ -185,9 +203,21 @@ moguri issues move ISSUE_ID PHASE --revision N
 moguri issues archive|restore ISSUE_ID --revision N
 moguri issues configure PROJECT_ID board.json --revision N
 moguri cache inspect PROJECT_ID npm|pnpm
+moguri cache inspect PROJECT_ID python|cargo|go
 moguri cache prepare|install PROJECT_ID MANAGER SHA256 --accept-dependency-metadata
+moguri cache registries|registry-save CONFIG.json --revision N [--registry ID]
+moguri cache registry-remove ID --revision N --confirm-remove
+moguri cache token ID|clear-token ID   Credentials only through piped stdin
+moguri github browse REQUEST.json|preview ACTION.json --project ID [--workspace ID --session ID]
+moguri github execute ACTION.json --project ID --digest SHA --confirm-review [--confirmations PHRASES.json]
+moguri github history|read ID|wait ID|stop ID   Actual original operations, no retry
+moguri github acknowledge ID --revision N --digest ORIGINAL_INPUT_SHA --confirm-review
 moguri linear status|import PROJECT_ID [CURSOR]
 moguri linear token|clear-token    Read a personal API key from piped stdin
+moguri linear catalog RESOURCE [CURSOR|-] [ISSUE_UUID] --project ID
+moguri linear issue UUID|preview INPUT.json --project ID
+moguri linear execute INPUT.json --project ID --digest SHA --confirm-review
+moguri linear history|read ID|wait ID|stop ID   Actual retained results and ownership
 
 SDK: import { MoguriSdk } from "moguri"; import { connectMoguri, createRuntime } from "moguri/node".
 Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
@@ -250,6 +280,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     const projectId = args[0] ?? values.project;
     if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
+    } else if (group === "knowledge" || group === "marketplace" || group === "hooks" || group === "capability" || group === "containment") {
+      output(await workspaceFeatureCommand(sdk, group, action, args, values));
     } else if (group === "terminal") {
       if (!action || action === "list") {
         const terminals = snapshot.terminals.filter((terminal) => !values.session || terminal.sessionId === values.session);
@@ -578,9 +610,21 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "move" && args[1]) output(await sdk.issues.move(args[0], args[1], expectedRevision()));
       else if (action === "archive" || action === "restore") output(await sdk.issues.archive(args[0], action === "archive", expectedRevision()));
       else throw new Error("Use issues list/create/update/move/archive/restore/configure/refresh; inspect --help for arguments.");
+    } else if (group === "github" || group === "linear" && action !== undefined && ["catalog", "issue", "preview", "execute", "history", "read", "wait", "stop"].includes(action)) {
+      output(await integrationCommand(sdk, group, action, args, values));
+    } else if (group === "cache" && action === "registries") {
+      output(await sdk.cache.registries.list());
+    } else if (group === "cache" && action === "registry-save" && args[0]) {
+      output(await sdk.cache.registries.save(parse(DependencyRegistryConfigSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision(), values.registry));
+    } else if (group === "cache" && action === "registry-remove" && args[0] && values["confirm-remove"]) {
+      output(await sdk.cache.registries.remove(args[0], expectedRevision()));
+    } else if (group === "cache" && action === "token" && args[0]) {
+      output(await sdk.cache.registries.setToken(args[0], await credential(4096)));
+    } else if (group === "cache" && action === "clear-token" && args[0]) {
+      output(await sdk.cache.registries.clearToken(args[0]));
     } else if (group === "cache") {
-      const manager = args[1];
-      if (!args[0] || manager !== "npm" && manager !== "pnpm") throw new Error("Choose cache inspect PROJECT_ID npm|pnpm first.");
+      const manager = parse(PackageManagerSchema, args[1]);
+      if (!args[0]) throw new Error("Choose an exact Local project and manager: npm/pnpm/python/cargo/go.");
       if (action === "inspect") output(await sdk.cache.inspect(args[0], manager, values.workspace));
       else {
         if (!args[2] || !values["accept-dependency-metadata"]) throw new Error("Review the exact plan, then pass its SHA-256 and --accept-dependency-metadata to authorize OSV name/version disclosure. Scripts stay blocked.");

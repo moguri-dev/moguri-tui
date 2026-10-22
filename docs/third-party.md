@@ -33,12 +33,20 @@ notices remain in installed and packaged dependencies.
 | `cacache` 21.0.1 | ISC | Native npm-compatible content-addressed archive storage with integrity verification |
 | pnpm 12.14.0 | MIT plus included notices | Pinned native script-free installer and shared copy-on-write-capable package store |
 | semver 7.8.5 | ISC | Reject unqualified local/Git/executable dependency specifiers before cache admission |
+| Git CLI | GPL-2.0-only | User-configured reviewed pushes, rebases and tags; read-only exact committed marketplace objects |
+| GitHub CLI (`gh`) | MIT | Explicitly selected controller account for reviewed GitHub workflows; no token scraping or account substitution |
+| Python / pip | PSF-2.0 / MIT, plus included notices | Explicit native locked wheel/cache primitives; no sdist/lifecycle execution on the host |
+| Cargo / Rust tooling | MIT OR Apache-2.0, plus included notices | Explicit native locked registry-cache preparation, not host build-script execution |
+| Go tooling | BSD-3-Clause, plus included notices | Native locked module checksum/cache verification; no implicit toolchain download |
 | Sharp 0.35.5 | Apache-2.0, with bundled libvips LGPL-2.1-or-later notices | Bounded local image validation/normalization for explicit attachments; no remote conversion or real-image test fixtures |
 
 The managed cache's advisory source is the public OSV batch API. Its use
-requires explicit approval to disclose public dependency names/versions; it
-does not receive repository source or credentials. Linear and GitHub APIs are
-accessed only for explicitly enabled read-only integration work.
+requires explicit approval to disclose dependency names/versions; private
+metadata additionally binds the configured reviewed advisory resource and
+disclosure choice. It does not receive repository source or registry
+credentials. Existing board observation/import remains read-only. The separate
+GitHub and Linear workflow APIs permit explicit exact user-reviewed writes
+with retained account/root/revision provenance, never an automatic model grant.
 
 No OpenCode source, branding, provider session store or OAuth implementation was
 copied into Moguri. The pi-ai package owns its upstream authentication flow.
