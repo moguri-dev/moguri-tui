@@ -45,6 +45,16 @@ session-text snapshots. Unsupported image models preserve the draft/queue
 rather than dropping context. Bare attachment prefixes remain literal until
 the user selects their source.
 
+Current source work for [#17](https://github.com/mbianchidev/moguri/issues/17)
+offers the model maximum and half maximum, or actual provider-declared working
+windows, through the same service contract. Unsupported saved values block
+inference without clamping history. Pastes over 50 lines become exact scoped
+text files, not whole-paste prompt expansions. Desktop, TUI and the SDK preserve
+failed/conflicting unsent pastes; approved bounded file reads work through Local
+and pinned SSH workers without modifying a source checkout. See
+[usage](docs/setup.md) and the [context boundary](docs/architecture/context-inputs.md).
+This does not complete the remaining compound, wind-down, Max or Sandbox gates.
+
 Core **Remote SSH** execution uses an explicitly pinned host and approved
 remote workspace. The existing worker runs inference and file/command tools
 there; the local service still owns approvals and history. Disconnect/restart
@@ -145,6 +155,15 @@ The first milestone remains incomplete. The
 acceptance gates, model maximum/half-window choices, file-backed text pastes
 over 50 lines and the user-requested SendBox 0.2.3 integration. Version bumps
 do not establish completion or justify an increased estimate.
+
+Current issue-17 source uses **protocol 37** for shared model windows, scoped
+long-paste files and reviewed SendBox **0.2.3** execution. SDK, CLI/TUI and hidden
+desktop run the same qualified private-stage worker, Manual decisions, budget
+ledger, exact-owner stop/recovery and separate actual-user source publication.
+Actual guest/control-loss checks retain partial work and unknown usage without
+replay. [Setup](docs/setup.md#native-servicesdk-development-checkpoint) records
+the generated provider evidence and remaining gates; this is not a replacement
+for frozen archives, live-model quality or full first-milestone acceptance.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
@@ -248,17 +267,45 @@ explicit approved classifier/solver pool and separate hosted/network-data consen
 The same owned worker records actual per-call roles/models and keeps normal
 approvals. Desktop settings, TUI and shared slash/SDK controls expose the policy
 and provenance. Invalid, stale or unmetered advice pauses without a fallback.
-Finite inherited caps, images and per-model tuning block this Single alpha.
+Finite inherited caps require the separately configured qualified Local
+[reserved wind-down](docs/architecture/budget-winddown.md) policy. Without it
+Single remains blocked rather than lifting the cap. Images and per-model
+tuning remain unavailable on synthetic models.
 
-Sandbox, complete remote side-panel/extension transport, compound kupo workflows,
-Autopilot Max,
-routed wind-down/authorized checkpoint commits are still incomplete.
+[Reviewed **Local Cascade/Critique**](docs/architecture/compound-workflows.md)
+now has a shared development service/SDK, CLI, actual TUI and desktop path.
+An actual classifier binds a declared concrete route; tool-less proposals retain
+the task plan, architecture and implementation. Actual-user review separately
+authorizes staging and exact project tests in distinct owned worktrees.
+Failed drafts remain isolated, and a recommended candidate still needs its
+separate source-application review. Reviewed lineage sources are limited user
+policy claims, not proof of independent training or calibrated quality.
+
+Finite Local routing now reserves one actual metadata-only finishing role and
+has separately reviewed actual-user accepted-work checkpoint branches that
+preserve the source index/HEAD. A summary never accepts code or approves Git.
+[Local **Autopilot Max**](docs/architecture/owned-decisions.md) now uses an
+explicitly configured bounded-model System One-compatible alternative with
+fixed or Single-routed solvers. Exact existing tool delegation, user-declared
+technical choices and bounded safe-boundary steering share the real model
+ledger and cancellation owner. The actual actor remains `decision-provider`,
+not the user; human intervention and hard policy win. Jev itself remains
+blocked where its documented API cannot enforce the required output bound.
+No generative substitution or calibrated reliability is claimed.
+
+The current generated source, packed SDK and exact native image pass the
+[full acceptance sweep](docs/setup.md#final-protocol-40-source-acceptance).
+Live-provider/calibrated-quality gates, complete remote/native
+side-panel/extension transport, Remote/native compound/Max and
+remote/native wind-down remain incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed
-configuration/readiness surface. The verified 0.2.1 release passes native worker
-primitives, but cold networking and the SDK lifecycle remain unqualified;
-installing it alone does not enable Sandbox execution.
+configuration/readiness surface. The development 0.2.3 SDK/client lifecycle
+now passes actual native generated-provider checks, but readiness still needs
+explicit reviewed release/image/network pins and private staging. Endpoint-only
+cold networking remains blocked; no alias or Local fallback is added
+automatically. Installing SendBox alone does not enable native execution.
 
 ```bash
 npm ci

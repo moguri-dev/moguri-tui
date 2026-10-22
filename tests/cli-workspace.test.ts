@@ -9,6 +9,25 @@ import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { MoguriSdk } from "../packages/sdk/src/index.ts";
 import { profileFixture } from "./fixtures/profiles.ts";
 
+test("the CLI exposes shared working-window choices and holds exact long text as a scoped file without inference", async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    await fixture.configure();
+    const settings = JSON.parse((await execute(["slash", "/model-settings", "--session", fixture.sessionId])).stdout);
+    assert.equal(settings.kind, "text");
+    const context = JSON.parse(settings.text).context;
+    assert.deepEqual(context.windows.values, [fixture.contextWindow, Math.floor(fixture.contextWindow / 2)]);
+    const text = Array.from({ length: 51 }, (_, index) => `Generated CLI exact paste ${index}`).join("\r\n");
+    const file = join(fixture.directory, "generated-cli-paste.txt"); await writeFile(file, text);
+    await execute(["queue", "hold", file, "--session", fixture.sessionId]);
+    const item = fixture.session().queue[0]!;
+    assert.equal(item.held, true); assert.equal(item.text, ""); assert.equal(item.attachments[0]?.kind, "paste_file");
+    assert.deepEqual((await sdk.attachments.read(fixture.sessionId, item.attachments[0]!.id)).content, { kind: "text", text });
+    assert.equal(fixture.requests.length, 0);
+  } finally { sdk.disconnect(); await fixture.close(); }
+});
+
 test("the CLI manages profiles and uses explicit or inherited immutable scope without moving another client", async () => {
   const fixture = await profileFixture();
   const execute = (args: string[], profile = "default") => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: fixture.stateDir, MOGURI_PROFILE_ID: profile } });

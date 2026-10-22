@@ -4,7 +4,7 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri } from "../../../packages/sdk/src/react.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, ModelOptionsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
@@ -131,7 +131,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const openArtifactEditor = (request: ArtifactEditorRequest) => {
     artifactEditor.current = request;
     const associations = { folderId: request.folderId ?? null, workItemId: request.workItemId ?? null };
-    const candidate = request.id && (snapshot?.candidates.some((candidate) => candidate.id === request.id) || snapshot?.candidateGenerations.some((generation) => generation.id === request.id) || snapshot?.roleSequences.some((sequence) => sequence.id === request.id));
+    const candidate = request.id && (snapshot?.decisions.some((record) => record.id === request.id) || snapshot?.candidates.some((candidate) => candidate.id === request.id) || snapshot?.candidateGenerations.some((generation) => generation.id === request.id) || snapshot?.roleSequences.some((sequence) => sequence.id === request.id) || snapshot?.compoundWorkflows.some((workflow) => workflow.id === request.id) || snapshot?.winddowns.some((record) => record.id === request.id) ||
+      snapshot?.sandboxExecutions?.some((value) => value.id === request.id) || snapshot?.sandboxPublications?.some((value) => value.id === request.id));
     setSettingsText(JSON.stringify(request.id ? { name: request.name, ...(!candidate ? { text: request.text } : {}), status: request.status, ...associations } : { kind: request.kind, name: request.name, text: request.text, ...associations }, null, 2));
     setMode("artifact-editor");
   };
@@ -395,16 +396,11 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (!argument || argument.includes(" ")) throw new Error("Use /remote-model-token ENDPOINT_ID after probing SSH, then the masked input. Never put a credential in the composer.");
         setTokenKind("remote-model"); setTokenServer(argument); setTokenValue(""); setMode("mcp-token"); break;
       case "/defaults": show({ global: snapshot?.settings.values.startup.global, profile: snapshot?.settings.values.startup.profile, project: session.projectId ? snapshot?.projectConfigurations.find((configuration) => configuration.projectId === session.projectId)?.values.defaults ?? {} : {}, current: session.controls, sources: session.defaults, guidance: "Edit shared startup settings or project overrides. Existing sessions are never rewritten by default changes." }); break;
-      case "/model-settings":
-        if (!argument) show({ options: session.controls.modelOptions ?? {}, model: snapshot?.provider.models.find((model) => model.id === session.controls.modelId), context: (await client.sessions.context(session.id)).context });
-        else if (argument === "reset") { const { modelOptions: _, ...controls } = session.controls; await client.sessions.configure(session.id, controls); }
-        else await client.sessions.modelOptions(session.id, parse(ModelOptionsSchema, JSON.parse(argument)));
-        break;
       case "/env":
         if (!["Local", "Sandbox", "Remote"].includes(argument)) throw new Error("Use /env Local, Sandbox, or Remote. Unready backends are rejected.");
         await client.sessions.env(session.id, argument as Controls["env"]); break;
       case "/autonomy":
-        if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose a documented autonomy level. Only Manual is available.");
+        if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose Manual, Guided, Autopilot or Autopilot Max. Max requires an explicitly configured compatible bounded provider and exact delegated policy.");
         await configure({ ...session.controls, autonomy: argument as Controls["autonomy"] }); break;
       case "/attach":
         if (!argument) throw new Error("Use /attach path/to/project-file. Only explicit project UTF-8 snapshots are supported.");
@@ -618,8 +614,17 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.muted}>Prompt edits can break functionality. Hard permissions remain final.</text>
         </box> :
         editorModes.includes(mode) ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          {mode === "artifact-editor" && snapshot?.decisions.some((record) => record.id === artifactEditor.current?.id) ?
+            <text fg={colors.accent} height={4} flexShrink={0}>Decision metadata only. Original typed request, actual model input/result, actor and applied/rejected observations are immutable. Ctrl+Enter saves metadata; Esc discards. /decisions inspects data, never answers, approves or infers user facts.</text> :
+            mode === "artifact-editor" && snapshot?.winddowns.some((record) => record.id === artifactEditor.current?.id) ?
+            <text fg={colors.accent} height={4} flexShrink={0}>Wind-down metadata only. Reserved capacity, actual model input/result and separate actual-user Git approval/publication are immutable. Ctrl+Enter saves metadata; Esc discards. /winddown inspects data, not permission or source acceptance.</text> :
+            mode === "artifact-editor" && snapshot?.compoundWorkflows.some((workflow) => workflow.id === artifactEditor.current?.id) ?
+            <text fg={colors.accent} height={4} flexShrink={0}>Compound workflow metadata only. Exact source/cost intent, actual role results, user staging/test decisions and command evidence are immutable. Ctrl+Enter saves metadata; Esc discards. /compound reads data, not permission or source acceptance.</text> :
+            mode === "artifact-editor" && (snapshot?.sandboxExecutions?.some((value) => value.id === artifactEditor.current?.id) || snapshot?.sandboxPublications?.some((value) => value.id === artifactEditor.current?.id)) ?
+            <text fg={colors.accent} height={4} flexShrink={0}>Native report metadata only. Original input/results, VM ownership, source-copy acceptance and attempts are immutable. Ctrl+Enter saves metadata; Esc discards. /sandbox inspects data, never implies permission or code quality.</text> : <>
           {mode === "plan-editor" ? <text fg={colors.accent} height={5} flexShrink={0}>Exact {planEditor.current?.env} plan / {safe(planEditor.current?.boundary ? `${planEditor.current.boundary.root}/${planEditor.current.path}` : planEditor.current?.path ?? "")}. Edit text only. Ctrl+Enter writes and retains this reviewed binding; Esc discards before saving. No model call or Local fallback. Partial outcomes preserve the editor.</text> : mode === "profile-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>Profile metadata only. Use a display name and null or #RRGGBB color. No account, project or model context is copied. Ctrl+Enter saves; Esc discards. Creation does not switch scope.</text> : mode === "artifact-editor" ? <text fg={colors.accent} height={4} flexShrink={0}>{snapshot?.roleSequences.some((sequence) => sequence.id === artifactEditor.current?.id) ? "Role sequence metadata only. Original input and actual per-role observations are immutable. Ctrl+Enter saves metadata; Esc discards. /roles inspects data, never calls a model." : snapshot?.candidateGenerations.some((generation) => generation.id === artifactEditor.current?.id) ? "Generation metadata only. Input/result bytes and model provenance are immutable. Ctrl+Enter saves metadata; Esc discards. No file or model action." : snapshot?.candidates.some((candidate) => candidate.id === artifactEditor.current?.id) ? "Candidate metadata only. Exact proposal bytes are immutable; use /candidate for separate review/application. Ctrl+Enter saves metadata; Esc discards." : "Independent retained document. Only text is copied; model provenance is preserved. Ctrl+Enter saves; Esc discards this edit. Editing does not publish a file or grant permissions."}</text> : mode === "project-editor" ? <text fg={colors.attention} height={3} flexShrink={0}>Project policy and bindings. Save never runs scripts or publishes defaults. Ctrl+Enter saves; Esc discards.</text> : mode === "issue-editor" || mode === "board-editor" ? <text fg={colors.accent} height={3} flexShrink={0}>{mode === "issue-editor" ? "Local project issue. No assignee or hosted upload. Ctrl+Enter saves; Esc discards." : "Board phases, merged-PR destination, read-only GitHub access and optional Linear team. Ctrl+Enter saves; Esc discards."}</text> : <>
           <text fg={colors.attention} height={width >= 100 ? 3 : 4} flexShrink={0}>{SYSTEM_PROMPT_WARNING}</text><text fg={colors.muted} height={2} flexShrink={0}>Ctrl+Enter acknowledges risk and saves. Ctrl+R restores defaults. Esc cancels.</text></>}
+          </>}
           {planPending ? <box flexDirection="column" flexGrow={1}><text fg={colors.attention} height={3}>Saving exact owned plan. Ctrl+C requests this save's stop; the editor stays preserved until settlement.</text><scrollbox flexGrow={1}><text fg={colors.foreground}>{safe(settingsText)}</text></scrollbox></box> : <SettingsTextEditor value={settingsText} change={setSettingsText} submit={(text) => void saveSettings(text)} />}
         </box> :
         mode === "artifacts" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Independent retained documents</text><text fg={colors.muted} height={3}>Session retention does not erase these copies. Profile/project scope and actual source actor remain separate from permission or instructions.</text>
@@ -636,10 +641,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
-          {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ? "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
+          {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ? snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
             onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
-          <text fg={colors.muted} height={4} flexShrink={0}>kupo Single is opt-in. /kupo status shows the approved pool and exact availability. Finite caps, images, model tuning and compound workflows remain blocked. /kupo history shows actual provenance.</text></box> :
+          <text fg={colors.muted} height={4} flexShrink={0}>kupo routing is opt-in. /kupo status shows exact policy. /compound reviews Local Cascade/Critique and separate project tests. Finite Local turns need /winddown status and explicit reserved policy. Images/tuning stay blocked; model advice is not source or Git acceptance.</text></box> :
         mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
         mode === "help" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{`Commands
 
@@ -703,10 +708,17 @@ Esc composer
 
 ${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
 
-Native Sandbox, compound kupo workflows and Autopilot Max remain unqualified.
+Native Sandbox needs explicit reviewed configuration, /sandbox probe confirm-native,
+and /sandbox preview followed by confirmed private staging. Source publication is
+separate actual-user acceptance. /compound owns reviewed Local Cascade/Critique
+and separately approved project tests. /winddown reviews reserved Local finishing
+and separate accepted-work Git checkpoints. Local Max needs an explicitly
+configured bounded decision provider; /decisions status/set/read exposes only
+shared policy and actual evidence, never a fake user answer or new permission.
+Jev and Remote/native Max remain unqualified.
 kupo Single is experimental and off by default. Configure /kupo set POLICY_JSON
-before explicitly selecting /model kupo. Finite caps, images and model tuning
-remain blocked for Single. Guided needs a human; Autopilot requires explicit
+before explicitly selecting /model kupo. Finite Local caps need explicit reserved
+wind-down; images and model tuning remain blocked for Single. Guided needs a human; Autopilot requires explicit
 bounded delegations. Bare attachment prefixes stay literal.
 
 Protected policy blocks all new Local turns in this checkpoint.
@@ -741,7 +753,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}
         {latestTranscript && <text fg={colors.accent}>Local transcript ready. F4 inserts it into the draft; it is never sent automatically.</text>}
         {mode === "compose" && session && editor && <TuiComposer key={session.id} editor={editor} session={session} focused={!session.pendingApproval}
-          submit={() => void perform(() => submit(editor.getState().text))} />}
+          submit={() => void perform(() => submit(editor.getState().text))} run={perform} />}
         <box height={4} flexShrink={0} flexDirection="column">
           <text fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (Ctrl+M)"}` : "Env Local | Model not set"}</text>
           <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
@@ -752,18 +764,43 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
     <box height={3} paddingLeft={2} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>Cmd/Ctrl+Enter queue | Shift+Cmd/Ctrl+Enter send | Ctrl+C stop | Ctrl+K commands</text></box>
   </box>;
 }
-function TuiComposer({ editor, session, focused, submit }: { editor: DraftEditor; session: Session; focused: boolean; submit: () => void }) {
+function TuiComposer({ editor, session, focused, submit, run }: { editor: DraftEditor; session: Session; focused: boolean; submit: () => void; run: (operation: () => Promise<void>) => Promise<void> }) {
   const draft = useSyncExternalStore(editor.subscribe, editor.getState, editor.getState);
   const ref = useRef<TextareaRenderable>(null);
+  const mirror = useRef<{ setting: boolean; text: string | null }>({ setting: false, text: null });
   useEffect(() => {
-    if (ref.current && ref.current.plainText !== draft.text) ref.current.setText(draft.text);
+    if (ref.current && ref.current.plainText !== draft.text) {
+      mirror.current.setting = true;
+      try { ref.current.setText(draft.text); mirror.current.text = ref.current.plainText; }
+      finally { mirror.current.setting = false; }
+    }
   }, [draft.text]);
   return <box flexDirection="column" border borderColor={focused ? colors.accent : colors.border} padding={1} marginTop={1} flexShrink={0}>
     {/^\/budget\s+(?:set|profile|global)\b/.test(draft.text) && <text fg={colors.attention} height={3} flexShrink={0}>{BUDGET_WARNING} Input reservations use an explicit estimate-based policy, not a billing guarantee.</text>}
     <textarea ref={ref} focused={focused} initialValue={draft.text} height={4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.background}
       placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Cmd/Ctrl+Enter queues. /help for commands."}
       keyBindings={[{ name: "return", ctrl: true, shift: true, action: "submit" }]} onSubmit={submit}
-      onContentChange={() => { const text = ref.current?.plainText ?? ""; if (text !== editor.getState().text) editor.edit(text); }} />
+      onPaste={(event) => {
+        let text: string;
+        try { text = new TextDecoder("utf-8", { fatal: true }).decode(event.bytes); }
+        catch {
+          event.preventDefault(); event.stopPropagation();
+          void run(async () => { throw new Error("Terminal paste is not valid UTF-8. Nothing was captured, replaced or sent; choose a valid text source."); });
+          return;
+        }
+        const input = ref.current;
+        if (pasteLineCount(text) <= 50 || !input) return;
+        event.preventDefault(); event.stopPropagation();
+        const selected = input.getSelection(), start = selected?.start ?? input.cursorOffset, end = selected?.end ?? start;
+        const before = input.editBuffer.getTextRange(0, Math.min(start, end)).length, after = input.editBuffer.getTextRange(0, Math.max(start, end)).length;
+        void run(() => editor.paste(text, before, after));
+      }}
+      onContentChange={() => {
+        const text = ref.current?.plainText ?? "";
+        if (mirror.current.setting || text === mirror.current.text) return;
+        mirror.current.text = null;
+        if (text !== editor.getState().text) editor.edit(text);
+      }} />
     {draft.attachments.length > 0 && <text fg={colors.accent}>{draft.attachments.map((attachment) => `@${attachment.path}`).join("  ")}</text>}
     <text fg={draft.error ? colors.error : colors.muted}>{draft.error ?? (draft.saving ? "Saving draft..." : draft.dirty ? "Unsent edits" : "Draft saved")}</text>
     {draft.text.startsWith("/") && !/\s/.test(draft.text) && <text fg={colors.accent}>{slashCommands.filter((entry) => entry.name.startsWith(draft.text.slice(1))).slice(0, 4).map((entry) => `/${entry.name}`).join("  ")}</text>}
