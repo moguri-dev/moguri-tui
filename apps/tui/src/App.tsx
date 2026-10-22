@@ -235,6 +235,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const name = (firstSpace < 0 ? text : text.slice(0, firstSpace)).trim();
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
+      if (documentCapture.current?.sessionId === session.id) throw new Error("Document extraction is still active. Wait or use Ctrl+C to cancel this capture before sending or holding its prompt.");
       if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision); return; }
       if (name === "/steer" || name === "/interrupt") editor.edit(argument);
       await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
@@ -760,14 +761,14 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}
         {latestTranscript && <text fg={colors.accent}>Local transcript ready. F4 inserts it into the draft; it is never sent automatically.</text>}
-        {session && <text fg={colors.muted}>{safe(`Plan checklist ${progressBar(taskProgress.progress?.checklist.percent ?? null)} (${taskProgress.progress?.checklist.completed ?? 0}/${taskProgress.progress?.checklist.total ?? 0}). Estimate only; rechecked every 15s.${taskProgress.error ? ` ${taskProgress.error}` : taskProgress.progress?.checklist.diagnostic ? ` ${taskProgress.progress.checklist.diagnostic}` : ""}`)}</text>}
-        {taskProgress.progress?.longRunning && taskProgress.progress.model && <text fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from checklist" : ""}: ${taskProgress.progress.model.summary}`)}</text>}
         {mode === "compose" && session && editor && <TuiComposer key={session.id} editor={editor} session={session} focused={!session.pendingApproval}
           submit={() => void perform(() => submit(editor.getState().text))} run={perform} />}
-        <box height={4} flexShrink={0} flexDirection="column">
+        <box height={taskProgress.progress?.longRunning && taskProgress.progress.model ? 5 : 4} flexShrink={0} flexDirection="column">
           <text fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (Ctrl+M)"}` : "Env Local | Model not set"}</text>
           <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
           <text fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls` : "Factory defaults. Ctrl+K commands."}</text>
+          {session && <text fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : taskProgress.progress?.checklist.total ? `${taskProgress.progress.checklist.completed}/${taskProgress.progress.checklist.total}` : "no checklist"} / estimate, 15s`)}</text>}
+          {taskProgress.progress?.longRunning && taskProgress.progress.model && <text fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent, 8)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>
       </box>
     </box>
