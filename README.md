@@ -71,6 +71,12 @@ session-text snapshots. Unsupported image models preserve the draft/queue
 rather than dropping context. Bare attachment prefixes remain literal until
 the user selects their source.
 
+**PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
+document snapshots with bounded, approved page/section/cell inspection.
+Originals stay retained; formulas never execute and scanned PDF pages explicitly
+report unavailable OCR. Source/text files, including Java, and images remain
+supported. See [document limits and usage](docs/architecture/document-attachments.md).
+
 Current source work for [#17](https://github.com/mbianchidev/moguri/issues/17)
 offers the model maximum and half maximum, or actual provider-declared working
 windows, through the same service contract. Unsupported saved values block
