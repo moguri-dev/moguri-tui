@@ -199,7 +199,7 @@ for frozen archives, live-model quality or full first-milestone acceptance.
 
 Chats can have **no project**, without inheriting any workspace root or coding
 tools. `/suggestions` previews scoped prior prompts before model analysis;
-`/meta` opens a settings chat whose changes require exact human review.
+**ask Moguri** and `/meta` open a settings chat whose changes require exact human review.
 MCP HTTP servers support explicit **OAuth with PKCE**, resource-bound keychain
 credentials and refresh. Shared question, approval and done indicators appear
 in both clients. Desktop OS banners are off by default and use generic content
@@ -207,8 +207,11 @@ unless the user opts into previews.
 
 The desktop composer is an icon toolbar: attach, environment, model name,
 autonomy, unlimited-budget/usage, microphone and paper-plane Send. Holding
-Cmd/Ctrl turns Send into a queue clock. Model context and supported thinking
-effort are configured together through shared, durable SDK controls.
+Cmd/Ctrl turns Send into a queue clock. Enter sends; Shift+Enter adds a line.
+Both sidebars resize, and message copy appears on hover or keyboard focus.
+Toggle/dropdown preferences, model context and supported thinking effort save
+automatically through shared SDK controls; text settings retain explicit saves.
+See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).
 
 The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
 commands, enforced read-only sessions and parallel question-only side chats.
