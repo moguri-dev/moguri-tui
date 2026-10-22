@@ -21,6 +21,28 @@ subagents and one native MCP gateway. Desktop starts dark and uses the same
 original face-and-bat-wing mascot as the TUI's ASCII loading mark.
 The mascot now also carries its small red antenna pom-pom.
 
+The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
+adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
+repository-backed marketplace bundles. Imports/updates/rollbacks stay disabled;
+knowledge injection has a separate default-off consent. Nothing self-approves
+or starts a model merely because it was installed.
+
+**GitHub workflows** expose exact-root reviewed main/force-with-lease pushes,
+rebases, tags, two-way issue/PR/review work, pinned CI watching, releases and
+exact-head PR merges. **Linear workflows** add team-scoped issue/project/comment
+operations and explicit conflict-checked ticket pull/push. Both retain original
+intent/results without replaying ambiguous writes. Dependency caching extends
+to explicit private npm registries, npm/pnpm workspaces, Python, Rust/Cargo and
+Go; mutable installs remain private and executable builds are not implied.
+Desktop exposes the same APIs under Settings; shared `/github`, `/linear`,
+`/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
+
+Whole-descendant containment can be required explicitly through **Guardrails /
+Require qualified SendBox** or `moguri containment require-sandbox
+--confirm-review`. Ordinary Local/SSH still owns known groups only. Missing
+qualification blocks new work; selecting this policy does not silently change
+an existing session's Env, qualify an old workload or choose a model.
+
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
 hosts or downloads weights. New sessions resolve snapshotted global,
