@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
+import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { audioFromBase64, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
@@ -172,6 +172,8 @@ moguri plan read|saves|info SAVE_ID|stop SAVE_ID --session ID
 moguri plan save FILE --session ID --digest SHA256_OR_absent [--binding REMOTE_BINDING_SHA]
 moguri service restart|stop|info   Explicit owned-service lifecycle
 moguri runtime [status|power-retry]  Actual data directory and owned idle-sleep status
+moguri storage status|preview PATH  Review all-profile store and retained resource roots
+moguri storage move PATH --digest SHA --confirm-write  Quiesce, copy and retire; restart clients explicitly
 moguri notification-sounds list|read ID  Profile-owned audio metadata, no playback
 moguri notification-sounds import FILE.wav --confirm-write  Explicit bounded snapshot
 moguri notification-sounds remove ID --digest SHA --confirm-remove
@@ -298,6 +300,16 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (args.length || action && !["status", "power-retry"].includes(action)) throw new Error("Use runtime status or runtime power-retry. No model or execution environment is changed.");
       if (action === "power-retry") await sdk.runtime.retryPower();
       output(await sdk.runtime.status());
+    } else if (group === "storage") {
+      if ((!action || action === "status") && !args.length) output(await sdk.application.storage.status());
+      else if (action === "preview" && args.length === 1) output(await sdk.application.storage.preview(args[0]!));
+      else if (action === "move" && args.length === 1 && values.digest && values["confirm-write"]) {
+        const storage = (await sdk.application.storage.status()).storage;
+        if (!storage.locatorDirectory) throw new Error("The actual runtime has no configured state-location authority.");
+        const accepted = await sdk.application.storage.relocate(args[0]!, values.digest, true);
+        sdk.disconnect();
+        output(await waitForStorageRelocation(storage.locatorDirectory, accepted.id, accepted.keyId));
+      } else throw new Error("Use storage status, preview PATH or move PATH --digest REVIEW_SHA --confirm-write. This explicitly stops all profile writers, preserves authenticated terminals and requires client restart.");
     } else if (group === "notification-sounds") {
       if ((!action || action === "list") && !args.length) output(sdk.notifications.list());
       else if (action === "read" && args.length === 1) output((await sdk.notifications.sound(args[0]!)).sound);
