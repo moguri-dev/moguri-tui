@@ -174,6 +174,9 @@ moguri service restart|stop|info   Explicit owned-service lifecycle
 moguri runtime [status|power-retry]  Actual data directory and owned idle-sleep status
 moguri storage status|preview PATH  Review all-profile store and retained resource roots
 moguri storage move PATH --digest SHA --confirm-write  Quiesce, copy and retire; restart clients explicitly
+moguri updates status|history|read ID|check|cancel ID
+moguri updates token|clear-token     Separate private-release PAT through piped stdin only
+moguri updates install-preview ID  Exact owned app/backup review; native install needs desktop confirmation
 moguri notification-sounds list|read ID  Profile-owned audio metadata, no playback
 moguri notification-sounds import FILE.wav --confirm-write  Explicit bounded snapshot
 moguri notification-sounds remove ID --digest SHA --confirm-remove
@@ -300,6 +303,15 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (args.length || action && !["status", "power-retry"].includes(action)) throw new Error("Use runtime status or runtime power-retry. No model or execution environment is changed.");
       if (action === "power-retry") await sdk.runtime.retryPower();
       output(await sdk.runtime.status());
+    } else if (group === "updates") {
+      if ((!action || action === "status") && !args.length) output(await sdk.application.updates.status());
+      else if (action === "history" && !args.length) output(await sdk.application.updates.history());
+      else if (action === "read" && args.length === 1) output(await sdk.application.updates.read(args[0]!));
+      else if (action === "check" && !args.length) output(await sdk.application.updates.check());
+      else if (action === "cancel" && args.length === 1) output(await sdk.application.updates.cancel(args[0]!));
+      else if (action === "install-preview" && args.length === 1) output(await sdk.application.updates.installPreview(args[0]!));
+      else if ((action === "token" || action === "clear-token") && !args.length) { await sdk.application.updates.setToken(action === "token" ? await credential(512) : null); output({ configured: action === "token" }); }
+      else throw new Error("Use updates status, history, read/check/cancel, token/clear-token or install-preview ID. The separate PAT must use stdin; no token, application replacement or restart is inferred from model output.");
     } else if (group === "storage") {
       if ((!action || action === "status") && !args.length) output(await sdk.application.storage.status());
       else if (action === "preview" && args.length === 1) output(await sdk.application.storage.preview(args[0]!));

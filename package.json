@@ -67,7 +67,8 @@
     "docs/architecture/linear-workflows.md",
     "docs/architecture/dependency-cache-scopes.md",
     "docs/architecture/task-progress.md",
-    "docs/architecture/document-attachments.md"
+    "docs/architecture/document-attachments.md",
+    "docs/architecture/settings-platform.md"
   ],
   "engines": {
     "node": ">=26.4.0 <27"
@@ -79,6 +80,7 @@
     "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:e2e": "playwright test",
     "verify:sdk": "node scripts/verify-sdk.mjs",
+    "verify:update": "node --import tsx scripts/verify-update-package.mjs",
     "spike": "node scripts/prepare-native.mjs && node scripts/spikes.mjs",
     "spike:workspace": "node scripts/workspace-spikes.mjs",
     "spike:sessions": "node scripts/session-spikes.mjs",
