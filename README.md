@@ -21,9 +21,10 @@ subagents and one native MCP gateway. Desktop starts dark and uses the same
 original face-and-bat-wing mascot as the TUI's ASCII loading mark.
 The mascot now also carries its small red antenna pom-pom.
 
-The [task completion bar](docs/architecture/task-progress.md) periodically
-checks the bound plan's Markdown checklist. Long tasks can also show an
-owning-model estimate, separately labeled as advice, never proof of completion.
+The [Plan sidebar](docs/architecture/task-progress.md) shows only an explicit
+multi-step model checklist, with long-task estimates separately labeled as advice,
+never proof of completion. [Session controls](docs/architecture/session-interactions.md)
+include ordered drag/drop, context-menu actions and serial held queues.
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable

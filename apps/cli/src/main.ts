@@ -118,6 +118,7 @@ moguri artifact export ID --output ABSOLUTE_NEW_JSON_PATH
 moguri artifact materialization|stop-materialization JOB_ID
 moguri question list|read ID
 moguri question answer ID ANSWER_FILE --revision N
+moguri question answer-other ID ANSWER_FILE --revision N
 moguri question answer-draft ID --revision N
 moguri budget status SESSION_ID
 moguri budget dashboard|calls|plans [--project ID --folder ID --session ID --provider ID --model ID --role solver]
@@ -388,8 +389,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (action === "list") output(snapshot.questions.filter((question) => !values.session || question.sessionId === values.session));
       else if (action === "read" && args[0]) { const question = snapshot.questions.find((question) => question.id === args[0]); if (!question) throw new Error("Choose an actual question ID from this profile."); output(question); }
       else if (action === "answer" && args[0] && args[1]) output(await sdk.questions.answer(args[0], await readFile(args[1], "utf8"), expectedRevision()));
+      else if (action === "answer-other" && args[0] && args[1]) output(await sdk.questions.answerOther(args[0], await readFile(args[1], "utf8"), expectedRevision()));
       else if (action === "answer-draft" && args[0]) output(await sdk.questions.answerDraft(args[0], expectedRevision()));
-      else throw new Error("Use question list/read, answer ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
+      else throw new Error("Use question list/read, answer or answer-other ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
     } else if (group === "repository") {
       if (!values.session) throw new Error("Choose an explicit --session ID for the actual Local/Remote repository binding.");
       if (action === "preview") output(await sdk.repositories.preview(values.session));

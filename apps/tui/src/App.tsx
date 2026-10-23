@@ -4,7 +4,7 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { attachmentStatus, progressBar } from "../../../packages/sdk/src/index.ts";
+import { attachmentStatus, compareSessions, progressBar } from "../../../packages/sdk/src/index.ts";
 import { DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
@@ -24,6 +24,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null);
   const [mode, setMode] = useState<Mode>("compose");
   const [notice, setNotice] = useState("");
+  const [otherQuestion, setOtherQuestion] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [detailed, setDetailed] = useState(false);
   const [projectPath, setProjectPath] = useState("");
@@ -48,6 +49,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const taskProgress = useTaskProgress(client, session, status === "connected");
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
+  useEffect(() => { setOtherQuestion(null); }, [client.profileId, pendingQuestion?.id, pendingQuestion?.revision]);
   const recommendation = pendingQuestion?.recommendation;
   const questionDetails = pendingQuestion ? `${pendingQuestion.question}${recommendation ? `\n\nModel recommends: ${recommendation.choice}\n${recommendation.reason}\nFrom ${recommendation.modelId}. Untrusted advice; you still decide.` : ""}` : "";
   const approvalAdvice = session?.pendingApproval?.recommendationSource?.stepId === session?.pendingApproval?.stepId && session?.pendingApproval?.recommendationSource?.callId === session?.pendingApproval?.call.id ? session?.pendingApproval?.recommendation : undefined;
@@ -236,7 +238,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
       if (documentCapture.current?.sessionId === session.id) throw new Error("Document extraction is still active. Wait or use Ctrl+C to cancel this capture before sending or holding its prompt.");
-      if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision); return; }
+      if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
       if (name === "/steer" || name === "/interrupt") editor.edit(argument);
       await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
       return;
@@ -525,7 +527,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       type: "approval.respond", sessionId: session.id, approvalId: session.pendingApproval.id, allow: key.name === "y",
     });
   });
-  const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).map((item) => {
+  const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).sort(compareSessions).map((item) => {
     const attention = snapshot.settings.values.notifications.inApp ? snapshot.attention.findLast((entry) => entry.sessionId === item.id && entry.active) : undefined;
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
     return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? "No project"} / ${item.status}`, value: item.id };
@@ -578,9 +580,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
-            <select focused flexGrow={1} options={[...pendingQuestion.choices.map((choice, index) => ({ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` })), ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
+            <select focused flexGrow={1} options={[...pendingQuestion.choices.flatMap((choice, index) => choice === "Other, please specify" ? [] : [{ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` }]), { name: "Other, please specify", description: "Type a custom answer in the saved composer. Shift+Cmd/Ctrl+Enter submits; Cmd/Ctrl+Enter still holds.", value: "other" }, ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
               if (!option) return;
-              if (option.value === "freeform") { setMode("compose"); setNotice("Type your actual answer. Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still queues."); return; }
+              if (option.value === "other" || option.value === "freeform") { setOtherQuestion(option.value === "other" ? pendingQuestion.id : null); setMode("compose"); setNotice("Type your actual answer. Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still queues."); return; }
               const index = Number(String(option.value).slice(7)), choice = pendingQuestion.choices[index];
               if (choice === undefined) { setNotice("This offered answer is no longer available. Review the current question."); return; }
               void perform(async () => { await client.questions.answer(pendingQuestion.id, choice, pendingQuestion.revision); setMode("compose"); });
