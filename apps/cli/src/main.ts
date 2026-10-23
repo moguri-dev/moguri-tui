@@ -3,9 +3,9 @@ import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
+import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { audioFromBase64, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
@@ -172,6 +172,9 @@ moguri plan read|saves|info SAVE_ID|stop SAVE_ID --session ID
 moguri plan save FILE --session ID --digest SHA256_OR_absent [--binding REMOTE_BINDING_SHA]
 moguri service restart|stop|info   Explicit owned-service lifecycle
 moguri runtime [status|power-retry]  Actual data directory and owned idle-sleep status
+moguri notification-sounds list|read ID  Profile-owned audio metadata, no playback
+moguri notification-sounds import FILE.wav --confirm-write  Explicit bounded snapshot
+moguri notification-sounds remove ID --digest SHA --confirm-remove
 moguri config get|set FILE|reset   Shared, restorable settings
 moguri prompt get|set FILE|reset   Editable system prompt (risk acknowledgement required)
 moguri memory index PROJECT_ID|search PROJECT_ID TEXT|graph PROJECT_ID
@@ -295,6 +298,14 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (args.length || action && !["status", "power-retry"].includes(action)) throw new Error("Use runtime status or runtime power-retry. No model or execution environment is changed.");
       if (action === "power-retry") await sdk.runtime.retryPower();
       output(await sdk.runtime.status());
+    } else if (group === "notification-sounds") {
+      if ((!action || action === "list") && !args.length) output(sdk.notifications.list());
+      else if (action === "read" && args.length === 1) output((await sdk.notifications.sound(args[0]!)).sound);
+      else if (action === "import" && args.length === 1 && values["confirm-write"]) {
+        const sound = await loadNotificationSoundFile(args[0]!);
+        output(await sdk.notifications.importSound(sound.name, audioFromBase64(sound.audio)));
+      } else if (action === "remove" && args.length === 1 && values.digest && values["confirm-remove"]) output(await sdk.notifications.removeSound(args[0]!, values.digest, true));
+      else throw new Error("Use notification-sounds list, read ID, import FILE.wav --confirm-write or remove ID --digest SHA --confirm-remove. Sound choices use shared notification settings; playback is desktop-only.");
     } else if (group === "progress") {
       if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
       output(await sdk.sessions.progress(values.session));
