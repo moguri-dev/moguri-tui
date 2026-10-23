@@ -158,7 +158,7 @@ moguri session context --session ID
 moguri session archive|restore|stop|resume --session ID
 moguri session delete --session ID --revision N --confirm-remove
 moguri session from-pr URL|from-issue ID --project ID
-moguri project get|sources|diff|porto ID
+moguri project get|sources|diff|porto|repositories ID
 moguri project add PATH              Register an existing local folder
 moguri project clone URL PATH --confirm-write  Clone into a new folder; partial files are preserved
 moguri project set ID settings.json --revision N
@@ -171,6 +171,7 @@ moguri queue hold FILE|edit ID FILE|reorder ID ID ... --session ID
 moguri plan read|saves|info SAVE_ID|stop SAVE_ID --session ID
 moguri plan save FILE --session ID --digest SHA256_OR_absent [--binding REMOTE_BINDING_SHA]
 moguri service restart|stop|info   Explicit owned-service lifecycle
+moguri runtime [status|power-retry]  Actual data directory and owned idle-sleep status
 moguri config get|set FILE|reset   Shared, restorable settings
 moguri prompt get|set FILE|reset   Editable system prompt (risk acknowledgement required)
 moguri memory index PROJECT_ID|search PROJECT_ID TEXT|graph PROJECT_ID
@@ -290,7 +291,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
   try {
     const snapshot = sdk.getState().snapshot!;
     const projectId = args[0] ?? values.project;
-    if (group === "progress") {
+    if (group === "runtime") {
+      if (args.length || action && !["status", "power-retry"].includes(action)) throw new Error("Use runtime status or runtime power-retry. No model or execution environment is changed.");
+      if (action === "power-retry") await sdk.runtime.retryPower();
+      output(await sdk.runtime.status());
+    } else if (group === "progress") {
       if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
       output(await sdk.sessions.progress(values.session));
     } else if (group === "status") {
@@ -597,6 +602,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         await waitForJob(job.id!, () => sdk.jobs.cancel(job.id!), "Artifact repository copy", () => sdk.artifacts.materialization(job.id!));
       }
       else if (action === "sources") output(await sdk.projects.sources(args[0]));
+      else if (action === "repositories") output(await sdk.projects.repositories(args[0]));
       else if (action === "diff") output(await sdk.projects.git(args[0]));
       else if (action === "porto") output(await sdk.projects.porto(args[0]));
       else if (action === "set" && args[1]) output(await sdk.projects.configure(args[0], parse(ProjectSettingsSchema, JSON.parse(await readFile(args[1], "utf8"))), expectedRevision()));

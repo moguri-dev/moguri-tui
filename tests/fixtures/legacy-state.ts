@@ -10,9 +10,25 @@ export function retainedCiphertextRows(db: DatabaseSync) {
   return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
     .map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]);
 }
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44): Promise<void> {
   const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
-  if (events.some((event) => event.event_type === "terminal.changed" && (event.payload.terminal.sessionId === null || event.payload.terminal.projectId === null) ||
+  if (events.some((event) => {
+    if (event.event_type === "session.created" || event.event_type === "session.configured") return event.payload.controls.verbosity !== undefined;
+    if (event.event_type === "project.configured") return Object.keys(event.payload.configuration.values.guidance ?? {}).length > 0 || event.payload.configuration.values.defaults?.verbosity !== undefined;
+    if (event.event_type !== "settings.updated") return false;
+    const value = event.payload.settings;
+    return Object.keys(value.guidance ?? {}).length > 0 || value.startup.profile.verbosity !== undefined || value.startup.global.verbosity !== undefined ||
+      value.appearance.palette !== undefined && value.appearance.palette !== "moguri" ||
+      Object.keys(value.appearance.custom?.dark ?? {}).length > 0 || Object.keys(value.appearance.custom?.light ?? {}).length > 0 ||
+      value.permissions.defaultDecision === "deny" || value.retention.archiveCompleted ||
+      value.retention.archiveAfterDays !== undefined && value.retention.archiveAfterDays !== 7 ||
+      value.lifecycle?.keepAwake || value.lifecycle && value.lifecycle.tailMinutes !== 5 ||
+      value.voice.inputDeviceId !== undefined && value.voice.inputDeviceId !== "default" || value.voice.pushToTalk ||
+      value.voice.shortcut !== undefined && value.voice.shortcut !== "Control+Space" ||
+      value.shortcuts && (value.shortcuts.commands !== "Primary+KeyK" || value.shortcuts.terminalCopy !== "Primary+Shift+KeyC") ||
+      value.integrations?.sql.enabled || value.integrations && value.integrations.sql.endpoint !== "http://127.0.0.1:9147";
+  })) throw new Error("Generate pre-preference history; never relabel actual new guidance, palettes, controls, automation or native configuration as an older schema.");
+  if (version < 44 && events.some((event) => event.event_type === "terminal.changed" && (event.payload.terminal.sessionId === null || event.payload.terminal.projectId === null) ||
     event.event_type === "job.started" && event.payload.job.projectClone)) throw new Error("Generate pre-entry history; never relabel independent consoles or original clone jobs as older state.");
   if (version < 42 && events.some((event) => event.event_type === "task.progress_reported")) throw new Error("Generate pre-progress history; never relabel actual model reports as older state.");
   if (version < 43 && events.some((event) => {
@@ -55,7 +71,8 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
       if (version < 30 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='budget.plan_recorded'").get()?.count)) throw new Error("Generate pre-planning history for a legacy fixture; do not relabel future budget plans as an older schema.");
       if (version < 29 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.saved'").get()?.count)) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
       if (version >= 14) {
-        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='workspace_entry_schema';
+        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='settings_preferences_schema';
+          ${version < 44 ? "DELETE FROM retention_metadata WHERE id='workspace_entry_schema';" : ""}
           ${version < 43 ? "DELETE FROM retention_metadata WHERE id='document_attachment_schema';" : ""}
           ${version < 42 ? "DELETE FROM retention_metadata WHERE id='task_progress_schema';" : ""}
           ${version < 40 ? "DELETE FROM retention_metadata WHERE id='owned_decision_schema';" : ""}
@@ -88,7 +105,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
         return;
       }
       if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.profile_id') NOT IN ('default','_global')").get()?.count)) throw new Error("Generate Default-only legacy fixtures without dropping another user profile.");
-      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('document_attachment_schema','task_progress_schema','remote_memory_schema','candidate_workflow_schema','candidate_execution_schema','budget_planning_schema','candidate_generation_schema','role_sequence_schema','candidate_role_schema','model_evidence_schema','owned_role_contract_schema','paste_file_schema','native_execution_schema','compound_workflow_schema','budget_winddown_schema','owned_decision_schema'); DROP TRIGGER events_no_delete;
+      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('settings_preferences_schema','document_attachment_schema','task_progress_schema','remote_memory_schema','candidate_workflow_schema','candidate_execution_schema','budget_planning_schema','candidate_generation_schema','role_sequence_schema','candidate_role_schema','model_evidence_schema','owned_role_contract_schema','paste_file_schema','native_execution_schema','compound_workflow_schema','budget_winddown_schema','owned_decision_schema'); DROP TRIGGER events_no_delete;
         DELETE FROM events WHERE json_extract(data,'$.profile_id')='_global';
         CREATE TRIGGER events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;`);
       for (const table of ["blob_payloads", "retention_keys", "retention_forgotten"]) db.prepare(`DELETE FROM ${table} WHERE scope='profile/_global' OR scope GLOB 'profile/_global/*'`).run();
