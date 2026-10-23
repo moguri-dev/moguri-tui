@@ -6,6 +6,11 @@ import { PROTOCOL_VERSION } from "../../packages/protocol/src/index.ts";
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
+export function removePost44FixtureMarkers(db: DatabaseSync): void {
+  const future = db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type') IN ('notification.sound_saved','notification.sound_removed','application.configured','application.storage_recorded','application.update_recorded')").get();
+  if (Number(future?.count)) throw new Error("Generate genuine pre-settings history before relabeling an additive-marker fixture. New native intent or sound grants cannot become old data.");
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
+}
 export function retainedCiphertextRows(db: DatabaseSync) {
   return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
     .map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]);
