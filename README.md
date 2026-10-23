@@ -198,7 +198,9 @@ the generated provider evidence and remaining gates; this is not a replacement
 for frozen archives, live-model quality or full first-milestone acceptance.
 
 Chats can have **no project**, without inheriting any workspace root or coding
-tools. `/suggestions` previews scoped prior prompts before model analysis;
+tools. One desktop **Start** chooser offers a new chat, an existing project,
+local-folder import or explicit repository clone. General conversations live
+under **Chats**. `/suggestions` previews scoped prior prompts before model analysis;
 **ask Moguri** and `/meta` open a settings chat whose changes require exact human review.
 MCP HTTP servers support explicit **OAuth with PKCE**, resource-bound keychain
 credentials and refresh. Shared question, approval and done indicators appear
@@ -207,7 +209,8 @@ unless the user opts into previews.
 
 The desktop composer is an icon toolbar: attach, environment, model name,
 autonomy, unlimited-budget/usage, microphone and paper-plane Send. Holding
-Cmd/Ctrl turns Send into a queue clock. Enter sends; Shift+Enter adds a line.
+Cmd/Ctrl turns idle Send into a queue clock; active turns show a red Stop icon
+in that same slot. Enter sends; Shift+Enter adds a line.
 Both sidebars resize, and message copy appears on hover or keyboard focus.
 Toggle/dropdown preferences, model context and supported thinking effort save
 automatically through shared SDK controls; text settings retain explicit saves.
@@ -221,6 +224,9 @@ attach/unread/archive/delete actions; project settings and optional archived
 retention share the same SDK. Deleting a session preserves independent project
 artifacts and external PRs. A terminal is an explicit Local or pinned SSH
 user console, not an agent permission or a claimed sandbox.
+One profile-owned **Global terminal** also works without a session, separately
+from session consoles. Project-free Autopilot adds no tool grants, and side
+chats expose an explicit concrete-model selector when needed.
 User consoles retain authenticated per-profile/peer owners across
 explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
 inspection reattach the same process, never replay input or automatically
