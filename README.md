@@ -51,7 +51,8 @@ an existing session's Env, qualify an old workload or choose a model.
 The macOS app bundles **SendBox 0.2.4 and a compatible pinned Linux worker,
 Node runtime and native dependencies**. [Managed setup](docs/architecture/managed-sandbox.md)
 replaces developer commands with one explicit in-app review. Private workspaces
-and selected-provider DNS aliases are automatic; public runtime updates stay
+and selected-provider DNS aliases are automatic. Setup review discloses 0.2.4's
+broader GitHub Meta network delegation; public runtime updates stay
 separate from activation and tool permissions.
 
 Explicitly configured **local OpenAI-compatible models** now share the same
