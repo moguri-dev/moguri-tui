@@ -24,7 +24,8 @@ The mascot now also carries its small red antenna pom-pom.
 The [Plan sidebar](docs/architecture/task-progress.md) shows only an explicit
 multi-step model checklist, with long-task estimates separately labeled as advice,
 never proof of completion. [Session controls](docs/architecture/session-interactions.md)
-include ordered drag/drop, context-menu actions and serial held queues.
+include ordered drag/drop, context-menu actions, serial held queues and explicit
+work/question/approval/completion indicators with verified draft/open/merged PR state.
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
