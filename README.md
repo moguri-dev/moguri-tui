@@ -244,7 +244,8 @@ See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).
 The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
 commands, enforced read-only sessions and parallel question-only side chats.
 Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
-isolated browser previews, linked PRs and Insights. Sessions support pin/group/
+isolated browser previews, linked PRs and Insights. Double-click a session to
+rename it. Sessions support pin/group/
 attach/unread/archive/delete actions; project settings and optional archived
 retention share the same SDK. Deleting a session preserves independent project
 artifacts and external PRs. A terminal is an explicit Local or pinned SSH
