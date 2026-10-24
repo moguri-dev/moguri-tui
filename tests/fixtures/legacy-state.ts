@@ -6,22 +6,69 @@ import { PROTOCOL_VERSION } from "../../packages/protocol/src/index.ts";
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
+export function removePost44FixtureMarkers(db: DatabaseSync): void {
+  const future = db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type') IN ('skill.used','sandbox.setup_recorded','task.plan_updated','notification.sound_saved','notification.sound_removed','application.configured','application.storage_recorded','application.update_recorded')").get();
+  if (Number(future?.count)) throw new Error("Generate genuine pre-settings history before relabeling an additive-marker fixture. New native intent or sound grants cannot become old data.");
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
+}
 export function retainedCiphertextRows(db: DatabaseSync) {
   return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
-    .map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]);
+    .map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()] as const);
 }
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52, lineage: "main" | "desktop" = "main"): Promise<void> {
   const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
-  if (version < 45 && events.some((event) => event.event_type === "skill.used")) throw new Error("Generate pre-activity history; do not relabel actual retained skill selections as an older schema.");
-  if (version < 44 && events.some((event) => {
-    if (event.event_type === "terminal.changed") return event.payload.terminal.sessionId === null;
-    if (event.event_type === "session.organized") return event.payload.changes.order !== undefined;
-    if (event.event_type === "settings.updated") return event.payload.settings.interactions &&
-      (!event.payload.settings.interactions.confirmSessionAttachments || !event.payload.settings.interactions.confirmTerminalClose);
+  const desktop = lineage === "desktop";
+  if (desktop && (version < 44 || version > 46)) throw new Error("The divergent desktop lineage used only schemas 44 through 46.");
+  if ((!desktop || version < 45) && events.some((event) => event.event_type === "skill.used")) throw new Error("Generate genuine pre-activity history; retained skill selection cannot become main-line legacy data.");
+  if (!desktop && events.some((event) => {
+    if (event.event_type === "settings.updated" && event.payload.settings.interactions &&
+      (!event.payload.settings.interactions.confirmSessionAttachments || !event.payload.settings.interactions.confirmTerminalClose)) return true;
     const attachments = event.event_type === "draft.saved" ? event.payload.attachments : event.event_type === "queue.edited" ? event.payload.attachments ?? [] :
       event.event_type === "queue.enqueued" || event.event_type === "turn.started" || event.event_type === "steer.applied" ? event.payload.item.attachments : [];
     return attachments.some((attachment) => attachment.kind === "github_file");
-  })) throw new Error("Generate pre-interaction history; never relabel global-console, session-order, confirmation or GitHub-file semantics as older state.");
+  })) throw new Error("Generate genuine main-line legacy history; desktop confirmation and GitHub-file semantics cannot become older data.");
+  if (version < 52 && events.some((event) => event.event_type === "sandbox.setup_recorded" ||
+    event.event_type === "sandbox.workspace_recorded" && event.payload.workspace.preparation ||
+    event.event_type === "sandbox.execution_recorded" && event.payload.execution.networkScope ||
+    event.event_type === "settings.updated" && event.payload.settings.sandboxManagement?.enabled)) {
+    throw new Error("Generate pre-managed-Sandbox history; actual setup approvals, automatic sources and provider scopes cannot become old grants.");
+  }
+  if (version < 51 && events.some((event) => event.event_type === "task.plan_updated" ||
+    event.event_type === "turn.stop_requested" && event.payload.holdQueue ||
+    !desktop && event.event_type === "session.organized" && event.payload.changes.order !== undefined ||
+    event.event_type === "question.answered" && event.payload.answer.other ||
+    event.event_type === "settings.updated" && (event.payload.settings.retention.confirmArchive === false || event.payload.settings.retention.confirmDelete === false))) {
+    throw new Error("Generate pre-interaction history; never relabel actual task plans, session order, Other answers or remembered confirmations as an older schema.");
+  }
+  if (version < 47 && events.some((event) => {
+    if (event.event_type === "notification.sound_saved" || event.event_type === "notification.sound_removed") return true;
+    if (event.event_type !== "settings.updated") return false;
+    const value = event.payload.settings.notifications;
+    return value.soundWhileFocused || [value.needsInputSound, value.completedSound].some((choice) => choice && (!choice.enabled || choice.id !== "default"));
+  })) throw new Error("Generate pre-sound history; never relabel retained audio grants or actual sound choices as an older schema.");
+  if (version < 46 && events.some((event) => {
+    if (event.event_type === "job.started" && event.payload.job.kind === "voice.capture") return true;
+    if (event.event_type !== "settings.updated") return false;
+    const value = event.payload.settings;
+    return value.voice.inputDeviceId !== undefined && value.voice.inputDeviceId !== "default" || value.voice.pushToTalk ||
+      value.voice.shortcut !== undefined && value.voice.shortcut !== "Control+Space" ||
+      value.shortcuts && (value.shortcuts.commands !== "Primary+KeyK" || value.shortcuts.terminalCopy !== "Primary+Shift+KeyC");
+  })) throw new Error("Generate pre-capture history; never relabel actual browser capture or remapped device/shortcut ownership as an older schema.");
+  if (version < 45 && events.some((event) => {
+    if (event.event_type === "session.created" || event.event_type === "session.configured") return event.payload.controls.verbosity !== undefined;
+    if (event.event_type === "project.configured") return Object.keys(event.payload.configuration.values.guidance ?? {}).length > 0 || event.payload.configuration.values.defaults?.verbosity !== undefined;
+    if (event.event_type !== "settings.updated") return false;
+    const value = event.payload.settings;
+    return Object.keys(value.guidance ?? {}).length > 0 || value.startup.profile.verbosity !== undefined || value.startup.global.verbosity !== undefined ||
+      value.appearance.palette !== undefined && value.appearance.palette !== "moguri" ||
+      Object.keys(value.appearance.custom?.dark ?? {}).length > 0 || Object.keys(value.appearance.custom?.light ?? {}).length > 0 ||
+      value.permissions.defaultDecision === "deny" || value.retention.archiveCompleted ||
+      value.retention.archiveAfterDays !== undefined && value.retention.archiveAfterDays !== 7 ||
+      value.lifecycle?.keepAwake || value.lifecycle && value.lifecycle.tailMinutes !== 5 ||
+      value.integrations?.sql.enabled || value.integrations && value.integrations.sql.endpoint !== "http://127.0.0.1:9147";
+  })) throw new Error("Generate pre-preference history; never relabel actual new guidance, palettes, controls, automation or native configuration as an older schema.");
+  if (version < 44 && events.some((event) => event.event_type === "terminal.changed" && (event.payload.terminal.sessionId === null || event.payload.terminal.projectId === null) ||
+    event.event_type === "job.started" && event.payload.job.projectClone)) throw new Error("Generate pre-entry history; never relabel independent consoles or original clone jobs as older state.");
   if (version < 42 && events.some((event) => event.event_type === "task.progress_reported")) throw new Error("Generate pre-progress history; never relabel actual model reports as older state.");
   if (version < 43 && events.some((event) => {
     if (event.event_type === "session.created") return Boolean(event.payload.documents?.length);
@@ -58,13 +105,25 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
+      if (version < 50 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.update_recorded'").get()?.count)) throw new Error("Generate pre-update history; never relabel actual download, installer or retained restart identity as an older schema.");
+      if (version < 49 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.storage_recorded'").get()?.count)) throw new Error("Generate pre-relocation history; never relabel actual whole-store copy/root authority as an older schema.");
+      if (version < 48 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.configured'").get()?.count)) throw new Error("Generate pre-application-preference history; never relabel actual root-owned configuration as an older schema.");
       if (version < 32 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='role.sequence_recorded'").get()?.count)) throw new Error("Generate pre-sequence history for a legacy fixture; do not relabel future role metadata as an older schema.");
       if (version < 31 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.generation_recorded'").get()?.count)) throw new Error("Generate pre-generation history for a legacy fixture; do not relabel future model generations as an older schema.");
       if (version < 30 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='budget.plan_recorded'").get()?.count)) throw new Error("Generate pre-planning history for a legacy fixture; do not relabel future budget plans as an older schema.");
       if (version < 29 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.saved'").get()?.count)) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
       if (version >= 14) {
         db.exec(`BEGIN IMMEDIATE;
-          ${version < 44 ? "DELETE FROM retention_metadata WHERE id='desktop_interaction_schema';" : ""}
+          ${!desktop ? "DELETE FROM retention_metadata WHERE id='desktop_interaction_schema';" : ""}
+          ${desktop || version < 52 ? "DELETE FROM retention_metadata WHERE id='managed_sandbox_schema';" : ""}
+          ${desktop || version < 51 ? "DELETE FROM retention_metadata WHERE id='session_interactions_schema';" : ""}
+          ${desktop || version < 50 ? "DELETE FROM retention_metadata WHERE id='private_update_schema';" : ""}
+          ${desktop || version < 49 ? "DELETE FROM retention_metadata WHERE id='state_location_schema';" : ""}
+          ${desktop || version < 48 ? "DELETE FROM retention_metadata WHERE id='application_preferences_schema';" : ""}
+          ${desktop || version < 47 ? "DELETE FROM retention_metadata WHERE id='notification_sound_schema';" : ""}
+          ${desktop || version < 46 ? "DELETE FROM retention_metadata WHERE id='client_voice_capture_schema';" : ""}
+          ${desktop || version < 45 ? "DELETE FROM retention_metadata WHERE id='settings_preferences_schema';" : ""}
+          ${desktop || version < 44 ? "DELETE FROM retention_metadata WHERE id='workspace_entry_schema';" : ""}
           ${version < 43 ? "DELETE FROM retention_metadata WHERE id='document_attachment_schema';" : ""}
           ${version < 42 ? "DELETE FROM retention_metadata WHERE id='task_progress_schema';" : ""}
           ${version < 40 ? "DELETE FROM retention_metadata WHERE id='owned_decision_schema';" : ""}
@@ -97,7 +156,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
         return;
       }
       if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.profile_id') NOT IN ('default','_global')").get()?.count)) throw new Error("Generate Default-only legacy fixtures without dropping another user profile.");
-      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('desktop_interaction_schema','document_attachment_schema','task_progress_schema','remote_memory_schema','candidate_workflow_schema','candidate_execution_schema','budget_planning_schema','candidate_generation_schema','role_sequence_schema','candidate_role_schema','model_evidence_schema','owned_role_contract_schema','paste_file_schema','native_execution_schema','compound_workflow_schema','budget_winddown_schema','owned_decision_schema'); DROP TRIGGER events_no_delete;
+      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','private_update_schema','state_location_schema','application_preferences_schema','notification_sound_schema','client_voice_capture_schema','settings_preferences_schema','workspace_entry_schema','document_attachment_schema','task_progress_schema','remote_memory_schema','candidate_workflow_schema','candidate_execution_schema','budget_planning_schema','candidate_generation_schema','role_sequence_schema','candidate_role_schema','model_evidence_schema','owned_role_contract_schema','paste_file_schema','native_execution_schema','compound_workflow_schema','budget_winddown_schema','owned_decision_schema'); DROP TRIGGER events_no_delete;
         DELETE FROM events WHERE json_extract(data,'$.profile_id')='_global';
         CREATE TRIGGER events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;`);
       for (const table of ["blob_payloads", "retention_keys", "retention_forgotten"]) db.prepare(`DELETE FROM ${table} WHERE scope='profile/_global' OR scope GLOB 'profile/_global/*'`).run();

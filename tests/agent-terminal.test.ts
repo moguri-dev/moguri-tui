@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { MoguriSdk, isRecord } from "../packages/sdk/src/index.ts";
+import { MoguriSdk, PROTOCOL_VERSION, isRecord } from "../packages/sdk/src/index.ts";
 import { EventStore } from "../apps/service/src/store.ts";
 import { startService } from "../apps/service/src/server.ts";
 import { effectiveTools } from "../apps/service/src/tools.ts";
@@ -129,7 +129,7 @@ test("Agent output can follow a bounded UTF-8 tail without splitting characters 
   } finally { sdk.disconnect(); await fixture.close(); }
 });
 
-test("schema-45 command history upgrades to 46 without changing ciphertext or replaying its command after restart", { skip: process.platform !== "darwin" }, async () => {
+test("desktop schema-45 command history converges without changing ciphertext or replaying its command after restart", { skip: process.platform !== "darwin" }, async () => {
   const fixture = await setupFixture({ toolCall: { name: "run_command", args: { command: "printf 'Generated retained agent output\\n'", timeoutMs: 2000 } } });
   const sdk = await new MoguriSdk(fixture.service.connection).ready();
   let store: EventStore | undefined, restarted: Awaited<ReturnType<typeof startService>> | undefined, peer: MoguriSdk | undefined;
@@ -138,9 +138,9 @@ test("schema-45 command history upgrades to 46 without changing ciphertext or re
     const command = (await sdk.agentTerminals.list(fixture.sessionId)).activity.entries[0]!;
     const original = (await sdk.agentTerminals.read(fixture.sessionId, command.id)).content!.text;
     const rows = retainedCiphertextRows(fixture.service.store.db), path = fixture.service.store.path;
-    sdk.disconnect(); await writeLegacyState(fixture.service, 45);
+    sdk.disconnect(); await writeLegacyState(fixture.service, 45, "desktop");
     store = new EventStore(path, fixture.retentionKey);
-    assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, 46);
+    assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
     assert.deepEqual(retainedCiphertextRows(store.db), rows);
     store.close(); store = undefined;
     restarted = await startService({ stateDir: join(fixture.directory, "state"), provider: fixture.provider, retentionKey: fixture.retentionKey });

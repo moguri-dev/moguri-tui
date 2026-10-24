@@ -1,6 +1,6 @@
 import { crc32, deflateRawSync } from "node:zlib";
 
-export interface GeneratedZipEntry { name: string; text?: string; bytes?: Buffer; flags?: number; size?: number; crc?: number }
+export interface GeneratedZipEntry { name: string; text?: string; bytes?: Buffer; flags?: number; size?: number; crc?: number; mode?: number }
 export function generatedZip(entries: GeneratedZipEntry[]): Buffer {
   const local: Buffer[] = [], central: Buffer[] = []; let offset = 0;
   for (const entry of entries) {
@@ -11,7 +11,8 @@ export function generatedZip(entries: GeneratedZipEntry[]): Buffer {
     header.writeUInt32LE(checksum, 14); header.writeUInt32LE(compressed.length, 18); header.writeUInt32LE(size, 22); header.writeUInt16LE(name.length, 26);
     local.push(header, name, compressed);
     const directory = Buffer.alloc(46);
-    directory.writeUInt32LE(0x02014b50); directory.writeUInt16LE(20, 4); directory.writeUInt16LE(20, 6); directory.writeUInt16LE(flags, 8); directory.writeUInt16LE(8, 10);
+    directory.writeUInt32LE(0x02014b50); directory.writeUInt16LE(entry.mode === undefined ? 20 : 0x314, 4); directory.writeUInt16LE(20, 6); directory.writeUInt16LE(flags, 8); directory.writeUInt16LE(8, 10);
+    if (entry.mode !== undefined) directory.writeUInt32LE((entry.mode << 16) >>> 0, 38);
     directory.writeUInt32LE(checksum, 16); directory.writeUInt32LE(compressed.length, 20); directory.writeUInt32LE(size, 24); directory.writeUInt16LE(name.length, 28); directory.writeUInt32LE(offset, 42);
     central.push(directory, name); offset += header.length + name.length + compressed.length;
   }

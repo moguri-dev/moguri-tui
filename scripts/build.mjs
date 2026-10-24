@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 import { build as viteBuild } from "vite";
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { prepareSpeech } from "./prepare-speech.mjs";
 import { buildIcons } from "./build-icons.mjs";
@@ -9,9 +9,14 @@ await rm("dist", { recursive: true, force: true });
 await mkdir("dist/desktop", { recursive: true });
 const speech = await prepareSpeech();
 await cp(new URL("../.native/speech", import.meta.url), "dist/native/speech", { recursive: true });
-const nodeBuild = { bundle: true, platform: "node", format: "esm", target: "node26", packages: "external" };
+const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
+const define = { __MOGURI_BUILD_VERSION__: JSON.stringify(version) };
+const nodeBuild = { bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", define };
 await Promise.all([
-  build({ entryPoints: ["apps/service/src/main.ts"], outfile: "dist/service.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external" }),
+  build({ ...nodeBuild, entryPoints: ["apps/service/src/main.ts"], outfile: "dist/service.mjs" }),
+  build({ ...nodeBuild, entryPoints: ["apps/service/src/update-installer.ts"], outfile: "dist/update-installer.mjs", packages: "bundle" }),
+  build({ ...nodeBuild, entryPoints: ["apps/service/src/bundle-tree.ts"], outfile: "dist/update-tools.mjs" }),
+  build({ ...nodeBuild, entryPoints: ["apps/service/src/sandbox-distribution.ts"], outfile: "dist/sandbox-tools.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/server.ts"], outfile: "dist/runtime.mjs" }),
   build({ entryPoints: ["apps/service/src/worker.ts"], outfile: "dist/worker.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/mcp-worker.ts"], outfile: "dist/mcp-worker.mjs" }),

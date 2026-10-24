@@ -184,7 +184,9 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
   const terminalSecrets = new Map<string, string>();
   const terminalSlot = (id: string) => { if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/.test(id)) throw new Error("Generated terminal credential must fit the explicit production secret-backend namespace."); return id; };
   const terminalVault = { read: async (id: string) => terminalSecrets.get(terminalSlot(id)) ?? null, write: async (id: string, value: string) => { terminalSecrets.set(terminalSlot(id), value); }, remove: async (id: string) => { terminalSecrets.delete(terminalSlot(id)); } };
-  const platform = { ...options.platform, terminal: { ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
+  const program = options.platform?.terminal?.executable ? {} : { executable: process.execPath,
+    args: ["-e", "process.stdin.resume();process.stdout.write('GENERATED_TERMINAL_READY\\n');"] };
+  const platform = { ...options.platform, terminal: { ...program, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));

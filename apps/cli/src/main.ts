@@ -3,9 +3,9 @@ import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
+import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
@@ -28,7 +28,7 @@ export async function main(argv: string[]): Promise<void> {
     "confirm-stage-and-test": { type: "boolean" },
     "confirm-git": { type: "boolean" },
     confirmations: { type: "string" }, registry: { type: "string" },
-    "capture-id": { type: "string" },
+    "capture-id": { type: "string" }, root: { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
@@ -58,6 +58,11 @@ moguri remote reconcile RUN_ID      Existing receipts/late usage, never replay
 moguri remote acknowledge RUN_ID --confirm-review  After actual process inspection
 moguri remote token|clear-token ENDPOINT  Piped remote endpoint credential
 moguri sandbox status|runs         Read native readiness/original owners
+moguri sandbox setup [VERSION]     Review bundled managed defaults and exact pins
+moguri sandbox enable VERSION --digest SHA --revision N --confirm-review
+moguri sandbox updates             Check public releases; never changes version
+moguri sandbox prepare-version VERSION --confirm-review
+moguri sandbox setup-operation|setup-cancel OPERATION_ID
 moguri sandbox probe --confirm-review  Verify exact reviewed model-free native guest
 moguri sandbox preview PATHS.json --session ID
 moguri sandbox prepare PATHS.json --session ID --digest SHA --revision N --confirm-review
@@ -102,6 +107,9 @@ moguri candidate reject ID --revision N --confirm-review
 moguri candidate stop|wait ID       Inspect actual partial/cancelled outcomes; never replay
 moguri terminal list [--session ID]  Existing profile-owned consoles and actual Local/SSH roots
 moguri terminal open --session ID   Explicit new user console, not an agent tool
+moguri terminal open --session ID --root PATH  Explicit Local root for a project-free chat
+moguri terminal open-global PATH    One independent Local console for this profile
+moguri terminal default-root        Disclose the canonical home root; never starts a shell
 moguri terminal read|reconcile|close ID
 moguri terminal owner-reconcile OWNER_ID  Inspect even an owner with no terminal intent
 moguri terminal owner-acknowledge OWNER_ID --confirm-review  No cleanup proof is inferred
@@ -117,6 +125,7 @@ moguri artifact export ID --output ABSOLUTE_NEW_JSON_PATH
 moguri artifact materialization|stop-materialization JOB_ID
 moguri question list|read ID
 moguri question answer ID ANSWER_FILE --revision N
+moguri question answer-other ID ANSWER_FILE --revision N
 moguri question answer-draft ID --revision N
 moguri budget status SESSION_ID
 moguri budget dashboard|calls|plans [--project ID --folder ID --session ID --provider ID --model ID --role solver]
@@ -157,7 +166,9 @@ moguri session context --session ID
 moguri session archive|restore|stop|resume --session ID
 moguri session delete --session ID --revision N --confirm-remove
 moguri session from-pr URL|from-issue ID --project ID
-moguri project get|sources|diff|porto ID
+moguri project get|sources|diff|porto|repositories ID
+moguri project add PATH              Register an existing local folder
+moguri project clone URL PATH --confirm-write  Clone into a new folder; partial files are preserved
 moguri project set ID settings.json --revision N
 moguri project relocate ID PATH --revision N
 moguri project remove ID --revision N --confirm-remove
@@ -168,6 +179,15 @@ moguri queue hold FILE|edit ID FILE|reorder ID ID ... --session ID
 moguri plan read|saves|info SAVE_ID|stop SAVE_ID --session ID
 moguri plan save FILE --session ID --digest SHA256_OR_absent [--binding REMOTE_BINDING_SHA]
 moguri service restart|stop|info   Explicit owned-service lifecycle
+moguri runtime [status|power-retry]  Actual data directory and owned idle-sleep status
+moguri storage status|preview PATH  Review all-profile store and retained resource roots
+moguri storage move PATH --digest SHA --confirm-write  Quiesce, copy and retire; restart clients explicitly
+moguri updates status|history|read ID|check|cancel ID
+moguri updates token|clear-token     Separate private-release PAT through piped stdin only
+moguri updates install-preview ID  Exact owned app/backup review; native install needs desktop confirmation
+moguri notification-sounds list|read ID  Profile-owned audio metadata, no playback
+moguri notification-sounds import FILE.wav --confirm-write  Explicit bounded snapshot
+moguri notification-sounds remove ID --digest SHA --confirm-remove
 moguri config get|set FILE|reset   Shared, restorable settings
 moguri prompt get|set FILE|reset   Editable system prompt (risk acknowledgement required)
 moguri memory index PROJECT_ID|search PROJECT_ID TEXT|graph PROJECT_ID
@@ -287,7 +307,38 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
   try {
     const snapshot = sdk.getState().snapshot!;
     const projectId = args[0] ?? values.project;
-    if (group === "progress") {
+    if (group === "runtime") {
+      if (args.length || action && !["status", "power-retry"].includes(action)) throw new Error("Use runtime status or runtime power-retry. No model or execution environment is changed.");
+      if (action === "power-retry") await sdk.runtime.retryPower();
+      output(await sdk.runtime.status());
+    } else if (group === "updates") {
+      if ((!action || action === "status") && !args.length) output(await sdk.application.updates.status());
+      else if (action === "history" && !args.length) output(await sdk.application.updates.history());
+      else if (action === "read" && args.length === 1) output(await sdk.application.updates.read(args[0]!));
+      else if (action === "check" && !args.length) output(await sdk.application.updates.check());
+      else if (action === "cancel" && args.length === 1) output(await sdk.application.updates.cancel(args[0]!));
+      else if (action === "install-preview" && args.length === 1) output(await sdk.application.updates.installPreview(args[0]!));
+      else if ((action === "token" || action === "clear-token") && !args.length) { await sdk.application.updates.setToken(action === "token" ? await credential(512) : null); output({ configured: action === "token" }); }
+      else throw new Error("Use updates status, history, read/check/cancel, token/clear-token or install-preview ID. The separate PAT must use stdin; no token, application replacement or restart is inferred from model output.");
+    } else if (group === "storage") {
+      if ((!action || action === "status") && !args.length) output(await sdk.application.storage.status());
+      else if (action === "preview" && args.length === 1) output(await sdk.application.storage.preview(args[0]!));
+      else if (action === "move" && args.length === 1 && values.digest && values["confirm-write"]) {
+        const storage = (await sdk.application.storage.status()).storage;
+        if (!storage.locatorDirectory) throw new Error("The actual runtime has no configured state-location authority.");
+        const accepted = await sdk.application.storage.relocate(args[0]!, values.digest, true);
+        sdk.disconnect();
+        output(await waitForStorageRelocation(storage.locatorDirectory, accepted.id, accepted.keyId));
+      } else throw new Error("Use storage status, preview PATH or move PATH --digest REVIEW_SHA --confirm-write. This explicitly stops all profile writers, preserves authenticated terminals and requires client restart.");
+    } else if (group === "notification-sounds") {
+      if ((!action || action === "list") && !args.length) output(sdk.notifications.list());
+      else if (action === "read" && args.length === 1) output((await sdk.notifications.sound(args[0]!)).sound);
+      else if (action === "import" && args.length === 1 && values["confirm-write"]) {
+        const sound = await loadNotificationSoundFile(args[0]!);
+        output(await sdk.notifications.importSound(sound.name, audioFromBase64(sound.audio)));
+      } else if (action === "remove" && args.length === 1 && values.digest && values["confirm-remove"]) output(await sdk.notifications.removeSound(args[0]!, values.digest, true));
+      else throw new Error("Use notification-sounds list, read ID, import FILE.wav --confirm-write or remove ID --digest SHA --confirm-remove. Sound choices use shared notification settings; playback is desktop-only.");
+    } else if (group === "progress") {
       if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
       output(await sdk.sessions.progress(values.session));
     } else if (group === "agent-terminal") {
@@ -314,8 +365,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (!action || action === "list") {
         const terminals = snapshot.terminals.filter((terminal) => !values.session || terminal.sessionId === values.session);
         output({ terminals, owners: snapshot.terminalOwners, warning: "Owners are profile/Local-or-pinned-SSH scoped. Actual env/peer/root remain captured; bounded volatile output, no agent context, automatic replacement or input replay." });
-      } else if (action === "open" && values.session) output(await sdk.terminal.open(values.session));
+      } else if (action === "open" && values.session) output(await sdk.terminal.open(values.session, 80, 24, undefined, values.root));
       else if (action === "global") output(await sdk.terminal.openGlobal());
+      else if (action === "open-global" && args[0]) output(await sdk.terminal.openGlobal(args[0]));
+      else if (action === "default-root") output(await sdk.terminal.defaultRoot());
       else if (action === "read" && args[0]) output(await sdk.terminal.read(args[0]));
       else if (action === "reconcile" && args[0]) { await sdk.terminal.reconcile(args[0]); output(sdk.getState().snapshot!.terminals.find((terminal) => terminal.id === args[0])); }
       else if (action === "owner-reconcile" && args[0]) { await sdk.terminal.reconcileOwner(args[0]); output(sdk.getState().snapshot!.terminalOwners.find((owner) => owner.id === args[0])); }
@@ -328,7 +381,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         let data = "";
         for await (const chunk of process.stdin) { data += String(chunk); if (Buffer.byteLength(data) > 65536) throw new Error("One terminal input batch is limited to 64 KiB; nothing was submitted."); }
         await sdk.terminal.input(args[0], data); output({ acknowledged: true, warning: "Accepted by the exact owned PTY, not proof a shell command succeeded. No input was persisted or replayed." });
-      } else throw new Error("Use terminal list/open/global/read/reconcile/close/input/acknowledge. Open needs --session ID; global uses the Local Moguri data root. Acknowledgement needs --confirm-review after process inspection.");
+      } else throw new Error("Use terminal list/open/global/open-global/default-root/read/reconcile/close/input/acknowledge. Open needs --session ID; project-free open needs --root PATH. Global uses the Moguri data root; open-global needs an explicit absolute root. Inspection acknowledgements need --confirm-review.");
     } else if (group === "profile" || group === "profiles") {
       if (!action || action === "list") output(await sdk.profiles.list());
       else if (action === "create" && args.length) { const created = await sdk.profiles.create(args.join(" "), values.color ?? null); output(await sdk.profiles.wait(created.id!)); }
@@ -360,8 +413,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (action === "list") output(snapshot.questions.filter((question) => !values.session || question.sessionId === values.session));
       else if (action === "read" && args[0]) { const question = snapshot.questions.find((question) => question.id === args[0]); if (!question) throw new Error("Choose an actual question ID from this profile."); output(question); }
       else if (action === "answer" && args[0] && args[1]) output(await sdk.questions.answer(args[0], await readFile(args[1], "utf8"), expectedRevision()));
+      else if (action === "answer-other" && args[0] && args[1]) output(await sdk.questions.answerOther(args[0], await readFile(args[1], "utf8"), expectedRevision()));
       else if (action === "answer-draft" && args[0]) output(await sdk.questions.answerDraft(args[0], expectedRevision()));
-      else throw new Error("Use question list/read, answer ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
+      else throw new Error("Use question list/read, answer or answer-other ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
     } else if (group === "repository") {
       if (!values.session) throw new Error("Choose an explicit --session ID for the actual Local/Remote repository binding.");
       if (action === "preview") output(await sdk.repositories.preview(values.session));
@@ -511,7 +565,18 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (!Array.isArray(value) || !value.every((path) => typeof path === "string")) throw new Error("Native path selection must be an exact JSON array of relative file paths. Root and actor are not client input.");
         return value;
       };
-      if (action === "status" && !args.length) output(await sdk.sandbox.status());
+      if (action === "setup" && args.length <= 1) {
+        const status = await sdk.sandbox.setup.status();
+        output(status.setup.supported ? await sdk.sandbox.setup.review(args[0]) : status);
+      } else if (action === "enable" && args.length === 1 && values.digest && values["confirm-review"]) {
+        const admitted = await sdk.sandbox.setup.apply({ version: args[0]!, digest: values.digest, settingsRevision: expectedRevision() });
+        output(await sdk.sandbox.setup.wait(admitted.id!));
+      } else if (action === "updates" && !args.length) { const admitted = await sdk.sandbox.setup.check(); output(await sdk.sandbox.setup.wait(admitted.id!)); }
+      else if (action === "prepare-version" && args.length === 1 && values["confirm-review"]) {
+        const admitted = await sdk.sandbox.setup.prepare(args[0]!); output(await sdk.sandbox.setup.wait(admitted.id!));
+      } else if (action === "setup-operation" && args.length === 1) output(await sdk.sandbox.setup.operation(args[0]!));
+      else if (action === "setup-cancel" && args.length === 1) output(await sdk.sandbox.setup.cancel(args[0]!));
+      else if (action === "status" && !args.length) output(await sdk.sandbox.status());
       else if (action === "runs" && !args.length) output({ executions: snapshot.sandboxExecutions ?? [], publications: snapshot.sandboxPublications ?? [] });
       else if (action === "probe" && !args.length && values["confirm-review"]) { await sdk.sandbox.probe(); output(await sdk.sandbox.status()); }
       else if (action === "preview" && args.length === 1 && values.session) output(await sdk.sandbox.preview(values.session, await paths(args[0]!)));
@@ -530,7 +595,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "publication-wait" && args.length === 1) {
         const record = (await sdk.sandbox.publication(args[0]!)).publication;
         await waitForJob(record.jobId, () => sdk.jobs.cancel(record.jobId), "Native source publication", () => sdk.sandbox.publication(record.id));
-      } else throw new Error("Use sandbox status/runs; probe --confirm-review; preview/prepare PATHS.json --session ID; execution/result/stop RUN_ID; reconcile RUN_ID --confirm-review; publish-preview/publish RUN_ID PATHS.json with exact --digest/--revision/--confirm-write; or publication/publication-stop/publication-wait ID. Native preparation never starts a model turn.");
+      } else throw new Error("Use sandbox setup [VERSION], enable VERSION --digest SHA --revision N --confirm-review, updates, prepare-version VERSION --confirm-review, or setup-operation/setup-cancel ID. Advanced source publication requires publish RUN_ID PATHS.json --digest SHA --revision N --confirm-write. No setup command starts a model turn.");
     } else if (group === "remote") {
       if (action === "status") output(await sdk.remote.status());
       else if (action === "probe") { await sdk.remote.probe(); output(await sdk.remote.status()); }
@@ -595,7 +660,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       }
     } else if (group === "project") {
       if (!args[0]) throw new Error("Choose the project ID from moguri status.");
-      if (action === "get") output(await sdk.projects.configuration(args[0]));
+      if (action === "add") output(await sdk.projects.add(args[0]));
+      else if (action === "clone") {
+        if (!args[1] || !values["confirm-write"]) throw new Error("Use project clone URL ABSOLUTE_NEW_PATH --confirm-write. Partial clone files are retained, never automatically removed or retried.");
+        const result = await sdk.projects.clone(args[0], args[1], true);
+        await waitForJob(result.id!, () => sdk.jobs.cancel(result.id!), "Repository clone");
+      }
+      else if (action === "get") output(await sdk.projects.configuration(args[0]));
       else if (action === "removal-preview") output(await sdk.artifacts.projectPreview(args[0]));
       else if (action === "export-artifacts" && values.output) output(await saveArtifactExport(values.output, (await sdk.artifacts.projectExport(args[0])).export));
       else if (action === "materialize-preview") output(await sdk.artifacts.materializePreview(args[0], { ...(values.workspace ? { workspaceId: values.workspace } : {}), ...(values.branch ? { commitBranch: values.branch } : {}) }));
@@ -604,6 +675,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         await waitForJob(job.id!, () => sdk.jobs.cancel(job.id!), "Artifact repository copy", () => sdk.artifacts.materialization(job.id!));
       }
       else if (action === "sources") output(await sdk.projects.sources(args[0]));
+      else if (action === "repositories") output(await sdk.projects.repositories(args[0]));
       else if (action === "diff") output(await sdk.projects.git(args[0]));
       else if (action === "porto") output(await sdk.projects.porto(args[0]));
       else if (action === "set" && args[1]) output(await sdk.projects.configure(args[0], parse(ProjectSettingsSchema, JSON.parse(await readFile(args[1], "utf8"))), expectedRevision()));

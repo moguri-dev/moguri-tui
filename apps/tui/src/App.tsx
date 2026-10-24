@@ -4,8 +4,8 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { attachmentStatus, progressBar } from "../../../packages/sdk/src/index.ts";
-import { compareSessionOrder, DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { attachmentStatus, compareSessions, progressBar } from "../../../packages/sdk/src/index.ts";
+import { DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
@@ -24,6 +24,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null);
   const [mode, setMode] = useState<Mode>("compose");
   const [notice, setNotice] = useState("");
+  const [otherQuestion, setOtherQuestion] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [detailed, setDetailed] = useState(false);
   const [projectPath, setProjectPath] = useState("");
@@ -48,6 +49,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const taskProgress = useTaskProgress(client, session, status === "connected");
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
+  useEffect(() => { setOtherQuestion(null); }, [client.profileId, pendingQuestion?.id, pendingQuestion?.revision]);
   const recommendation = pendingQuestion?.recommendation;
   const questionDetails = pendingQuestion ? `${pendingQuestion.question}${recommendation ? `\n\nModel recommends: ${recommendation.choice}\n${recommendation.reason}\nFrom ${recommendation.modelId}. Untrusted advice; you still decide.` : ""}` : "";
   const approvalAdvice = session?.pendingApproval?.recommendationSource?.stepId === session?.pendingApproval?.stepId && session?.pendingApproval?.recommendationSource?.callId === session?.pendingApproval?.call.id ? session?.pendingApproval?.recommendation : undefined;
@@ -236,7 +238,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
       if (documentCapture.current?.sessionId === session.id) throw new Error("Document extraction is still active. Wait or use Ctrl+C to cancel this capture before sending or holding its prompt.");
-      if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision); return; }
+      if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
       if (name === "/steer" || name === "/interrupt") editor.edit(argument);
       await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
       return;
@@ -525,7 +527,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       type: "approval.respond", sessionId: session.id, approvalId: session.pendingApproval.id, allow: key.name === "y",
     });
   });
-  const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).sort(compareSessionOrder).map((item) => {
+  const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).sort(compareSessions).map((item) => {
     const attention = snapshot.settings.values.notifications.inApp ? snapshot.attention.findLast((entry) => entry.sessionId === item.id && entry.active) : undefined;
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
     return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? "No project"} / ${item.status}`, value: item.id };
@@ -578,9 +580,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
-            <select focused flexGrow={1} options={[...pendingQuestion.choices.map((choice, index) => ({ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` })), ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
+            <select focused flexGrow={1} options={[...pendingQuestion.choices.flatMap((choice, index) => choice === "Other, please specify" ? [] : [{ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` }]), { name: "Other, please specify", description: "Type a custom answer in the saved composer. Shift+Cmd/Ctrl+Enter submits; Cmd/Ctrl+Enter still holds.", value: "other" }, ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
               if (!option) return;
-              if (option.value === "freeform") { setMode("compose"); setNotice("Type your actual answer. Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still queues."); return; }
+              if (option.value === "other" || option.value === "freeform") { setOtherQuestion(option.value === "other" ? pendingQuestion.id : null); setMode("compose"); setNotice("Type your actual answer. Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still queues."); return; }
               const index = Number(String(option.value).slice(7)), choice = pendingQuestion.choices[index];
               if (choice === undefined) { setNotice("This offered answer is no longer available. Review the current question."); return; }
               void perform(async () => { await client.questions.answer(pendingQuestion.id, choice, pendingQuestion.revision); setMode("compose"); });
@@ -716,9 +718,11 @@ Esc composer
 
 ${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
 
-Native Sandbox needs explicit reviewed configuration, /sandbox probe confirm-native,
-and /sandbox preview followed by confirmed private staging. Source publication is
-separate actual-user acceptance. /compound owns reviewed Local Cascade/Critique
+Native Sandbox uses /sandbox setup for bundled runtime/image review, followed
+by its exact /sandbox enable command. Managed workspaces and selected-provider
+DNS aliases are automatic; /sandbox updates never changes the selected version.
+Advanced exact-file staging remains optional. Source publication is separate
+actual-user acceptance. /compound owns reviewed Local Cascade/Critique
 and separately approved project tests. /winddown reviews reserved Local finishing
 and separate accepted-work Git checkpoints. Local Max needs an explicitly
 configured bounded decision provider; /decisions status/set/read exposes only
@@ -754,7 +758,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={10} flexShrink={0}>
           <text fg={colors.attention}><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
           <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>
-          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
+          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
         </box>}
         {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Type in the saved composer; Shift+Cmd/Ctrl+Enter answers. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
