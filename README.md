@@ -30,6 +30,7 @@ multi-step model checklist, with long-task estimates separately labeled as advic
 never proof of completion. [Session controls](docs/architecture/session-interactions.md)
 include ordered drag/drop, context-menu actions, serial held queues and explicit
 work/question/approval/completion indicators with verified draft/open/merged PR state.
+Unread names use subtle font weight rather than extra session-list dots.
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
