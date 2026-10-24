@@ -3,10 +3,11 @@ import { writeFile } from "node:fs/promises";
 const calls = [];
 const save = () => writeFile("/workspace/generated-native-proof.json", JSON.stringify({ pid: process.pid, runId: process.env.MOGURI_TURN_ID ?? null, calls }), { mode: 0o600 });
 globalThis.fetch = async (input, options) => {
-  const request = new Request(input, options), model = globalThis.MOGURI_GENERATED_NATIVE_MODEL;
-  if (request.url === "https://api.githubcopilot.com/models" && request.method === "GET") return Response.json({ data: [{ id: model }] });
-  if (request.url !== "https://api.githubcopilot.com/chat/completions" || request.method !== "POST") throw Error("Generated native fixture denies every actual network destination.");
-  const text = await request.text(), body = JSON.parse(text), prompt = JSON.stringify(body.messages), tools = body.messages.filter((message) => message.role === "tool");
+  const request = new Request(input, options), model = globalThis.MOGURI_GENERATED_NATIVE_MODEL, base = globalThis.MOGURI_GENERATED_NATIVE_BASE;
+  if ([`${base}/models`, "https://api.githubcopilot.com/models"].includes(request.url) && request.method === "GET") return Response.json({ data: [{ id: model }] });
+  if (request.url !== `${base}/chat/completions` || request.method !== "POST") throw Error("Generated native fixture denies every actual network destination.");
+  const text = await request.text(), body = JSON.parse(text), lastUser = body.messages.findLastIndex((message) => message.role === "user"),
+    prompt = JSON.stringify(body.messages[lastUser]?.content), tools = body.messages.slice(lastUser + 1).filter((message) => message.role === "tool");
   if (body.model !== model || request.headers.get("authorization") !== "Bearer generated-test-only") throw Error("Generated native model or request credential changed.");
   calls.push({ model, bytes: text.length, tail: text.includes("GENERATED_PASTE_END_NOT_SENT"), tools: body.tools?.map((tool) => tool.function.name) ?? [] });
   await save();

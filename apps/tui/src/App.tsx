@@ -718,9 +718,11 @@ Esc composer
 
 ${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
 
-Native Sandbox needs explicit reviewed configuration, /sandbox probe confirm-native,
-and /sandbox preview followed by confirmed private staging. Source publication is
-separate actual-user acceptance. /compound owns reviewed Local Cascade/Critique
+Native Sandbox uses /sandbox setup for bundled runtime/image review, followed
+by its exact /sandbox enable command. Managed workspaces and selected-provider
+DNS aliases are automatic; /sandbox updates never changes the selected version.
+Advanced exact-file staging remains optional. Source publication is separate
+actual-user acceptance. /compound owns reviewed Local Cascade/Critique
 and separately approved project tests. /winddown reviews reserved Local finishing
 and separate accepted-work Git checkpoints. Local Max needs an explicitly
 configured bounded decision provider; /decisions status/set/read exposes only
@@ -756,7 +758,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={10} flexShrink={0}>
           <text fg={colors.attention}><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
           <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>
-          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
+          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
         </box>}
         {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Type in the saved composer; Shift+Cmd/Ctrl+Enter answers. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}

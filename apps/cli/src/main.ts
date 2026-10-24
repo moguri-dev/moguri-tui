@@ -56,6 +56,11 @@ moguri remote reconcile RUN_ID      Existing receipts/late usage, never replay
 moguri remote acknowledge RUN_ID --confirm-review  After actual process inspection
 moguri remote token|clear-token ENDPOINT  Piped remote endpoint credential
 moguri sandbox status|runs         Read native readiness/original owners
+moguri sandbox setup [VERSION]     Review bundled managed defaults and exact pins
+moguri sandbox enable VERSION --digest SHA --revision N --confirm-review
+moguri sandbox updates             Check public releases; never changes version
+moguri sandbox prepare-version VERSION --confirm-review
+moguri sandbox setup-operation|setup-cancel OPERATION_ID
 moguri sandbox probe --confirm-review  Verify exact reviewed model-free native guest
 moguri sandbox preview PATHS.json --session ID
 moguri sandbox prepare PATHS.json --session ID --digest SHA --revision N --confirm-review
@@ -541,7 +546,18 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (!Array.isArray(value) || !value.every((path) => typeof path === "string")) throw new Error("Native path selection must be an exact JSON array of relative file paths. Root and actor are not client input.");
         return value;
       };
-      if (action === "status" && !args.length) output(await sdk.sandbox.status());
+      if (action === "setup" && args.length <= 1) {
+        const status = await sdk.sandbox.setup.status();
+        output(status.setup.supported ? await sdk.sandbox.setup.review(args[0]) : status);
+      } else if (action === "enable" && args.length === 1 && values.digest && values["confirm-review"]) {
+        const admitted = await sdk.sandbox.setup.apply({ version: args[0]!, digest: values.digest, settingsRevision: expectedRevision() });
+        output(await sdk.sandbox.setup.wait(admitted.id!));
+      } else if (action === "updates" && !args.length) { const admitted = await sdk.sandbox.setup.check(); output(await sdk.sandbox.setup.wait(admitted.id!)); }
+      else if (action === "prepare-version" && args.length === 1 && values["confirm-review"]) {
+        const admitted = await sdk.sandbox.setup.prepare(args[0]!); output(await sdk.sandbox.setup.wait(admitted.id!));
+      } else if (action === "setup-operation" && args.length === 1) output(await sdk.sandbox.setup.operation(args[0]!));
+      else if (action === "setup-cancel" && args.length === 1) output(await sdk.sandbox.setup.cancel(args[0]!));
+      else if (action === "status" && !args.length) output(await sdk.sandbox.status());
       else if (action === "runs" && !args.length) output({ executions: snapshot.sandboxExecutions ?? [], publications: snapshot.sandboxPublications ?? [] });
       else if (action === "probe" && !args.length && values["confirm-review"]) { await sdk.sandbox.probe(); output(await sdk.sandbox.status()); }
       else if (action === "preview" && args.length === 1 && values.session) output(await sdk.sandbox.preview(values.session, await paths(args[0]!)));
@@ -560,7 +576,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "publication-wait" && args.length === 1) {
         const record = (await sdk.sandbox.publication(args[0]!)).publication;
         await waitForJob(record.jobId, () => sdk.jobs.cancel(record.jobId), "Native source publication", () => sdk.sandbox.publication(record.id));
-      } else throw new Error("Use sandbox status/runs; probe --confirm-review; preview/prepare PATHS.json --session ID; execution/result/stop RUN_ID; reconcile RUN_ID --confirm-review; publish-preview/publish RUN_ID PATHS.json with exact --digest/--revision/--confirm-write; or publication/publication-stop/publication-wait ID. Native preparation never starts a model turn.");
+      } else throw new Error("Use sandbox setup [VERSION], enable VERSION --digest SHA --revision N --confirm-review, updates, prepare-version VERSION --confirm-review, or setup-operation/setup-cancel ID. Advanced exact-file preparation and separate retained source publication remain available. No setup command starts a model turn.");
     } else if (group === "remote") {
       if (action === "status") output(await sdk.remote.status());
       else if (action === "probe") { await sdk.remote.probe(); output(await sdk.remote.status()); }

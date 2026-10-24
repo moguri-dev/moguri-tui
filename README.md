@@ -48,6 +48,12 @@ Require qualified SendBox** or `moguri containment require-sandbox
 qualification blocks new work; selecting this policy does not silently change
 an existing session's Env, qualify an old workload or choose a model.
 
+The macOS app bundles **SendBox 0.2.3 and a compatible pinned Linux worker,
+Node runtime and native dependencies**. [Managed setup](docs/architecture/managed-sandbox.md)
+replaces developer commands with one explicit in-app review. Private workspaces
+and selected-provider DNS aliases are automatic; public runtime updates stay
+separate from activation and tool permissions.
+
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
 hosts or downloads weights. New sessions resolve snapshotted global,
