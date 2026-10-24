@@ -78,6 +78,12 @@ Terminal opens independently in Moguri's Local data directory; project terminals
 keep their own roots. Dictation distinguishes initialization, recording and
 transcript finalization without sending a prompt automatically.
 
+[Chat activity](docs/setup.md#chat-activity-and-usage) uses small operation
+icons, expandable original arguments/results, observed timing/output quantities
+and live timers. Responses have copy/info actions; the compact budget view puts
+estimated USD above tokens/context. Private reasoning and unknown costs are
+never invented.
+
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
 document snapshots with bounded, approved page/section/cell inspection.
 Originals stay retained; formulas never execute and scanned PDF pages explicitly

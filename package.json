@@ -67,7 +67,8 @@
     "docs/architecture/linear-workflows.md",
     "docs/architecture/dependency-cache-scopes.md",
     "docs/architecture/task-progress.md",
-    "docs/architecture/document-attachments.md"
+    "docs/architecture/document-attachments.md",
+    "docs/architecture/chat-activity.md"
   ],
   "engines": {
     "node": ">=26.4.0 <27"

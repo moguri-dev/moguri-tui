@@ -39,6 +39,7 @@ moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
 moguri progress --session ID       Checked plan items and untrusted task estimate
+moguri activity list --session ID  Retained chat operations, without new inference
 moguri COMMAND --profile ID        Immutable scope; never changes another client
 moguri profile list|create NAME [--color '#RRGGBB']
 moguri profile update ID CHANGES.json --revision N
@@ -288,6 +289,15 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     if (group === "progress") {
       if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
       output(await sdk.sessions.progress(values.session));
+    } else if (group === "activity") {
+      if (!values.session) throw new Error("Choose --session ID for exact retained activity.");
+      if ((!action || action === "list") && args.length === 0) output(await sdk.activity.list(values.session));
+      else if (action === "list" && args.length === 2 && /^\d+$/.test(args[0]!) && Number.isSafeInteger(Number(args[0]))) output(await sdk.activity.list(values.session, { before: { sequence: Number(args[0]), id: args[1]! } }));
+      else if (action === "turn" && args[0] && args.length === 1) output(await sdk.activity.turn(values.session, args[0]));
+      else if (action === "read" && args[0] && (args[1] === "arguments" || args[1] === "output") && args.length <= 3) {
+        if (args[2] && (!/^\d+$/.test(args[2]) || !Number.isSafeInteger(Number(args[2])))) throw new Error("Use a returned UTF-8 byte offset.");
+        output(await sdk.activity.read(values.session, args[0], args[1], { offset: Number(args[2] ?? 0) }));
+      } else throw new Error("Use activity list [SEQUENCE ID], activity turn ID or activity read ID arguments|output [UTF8_OFFSET] with --session ID.");
     } else if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.slice().sort(compareSessionOrder).map(({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned }) => ({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned })) });
     } else if (group === "knowledge" || group === "marketplace" || group === "hooks" || group === "capability" || group === "containment") {

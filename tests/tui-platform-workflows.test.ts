@@ -43,6 +43,11 @@ test("actual TUI keys share knowledge promotion, disabled hooks and exact review
     assert.equal(git(["rev-parse", "refs/tags/generated-native-reviewed-tag"]), git(["rev-parse", "HEAD"]));
     assert.equal(fixture.service.controller.snapshot().githubOperations[0]?.actor, "user");
     setup.mockInput.pressEscape();
+    await slash("/activity", '"activity.list"');
+    await frameUntil("GitHub operation"); setup.mockInput.pressEscape();
+    const activity = (await sdk.activity.list(fixture.sessionId)).activity.entries.find((entry) => entry.source === "github")!;
+    await slash(`/activity read ${activity.id} arguments`, '"git.tag.create"');
+    setup.mockInput.pressEscape();
     await slash("/containment status", "native-process-groups-only");
     assert.equal(fixture.requests.length, 0);
     assert.equal(fixture.session().queue.length, 0);

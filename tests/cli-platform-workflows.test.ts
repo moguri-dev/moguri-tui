@@ -48,6 +48,13 @@ test("dedicated CLI binds reviewed knowledge, disabled hooks, exact Git intent a
     const result = JSON.parse((await execute(["github", "wait", started.id])).stdout);
     assert.equal(result.operation.status, "completed");
     assert.equal(result.operation.originSessionId, fixture.sessionId);
+    const activity = JSON.parse((await execute(["activity", "list", "--session", fixture.sessionId])).stdout).activity;
+    const operation = activity.entries.find((entry: { source: string }) => entry.source === "github");
+    assert.equal(operation.turnId, null); assert.equal(operation.status, "completed");
+    const activityArguments = JSON.parse((await execute(["activity", "read", operation.id, "arguments", "--session", fixture.sessionId])).stdout);
+    assert.equal(JSON.parse(activityArguments.content.text).kind, "git.tag.create");
+    await assert.rejects(() => execute(["activity", "list"]), /session/);
+    await assert.rejects(() => execute(["activity", "read", operation.id, "output", "-1", "--session", fixture.sessionId]), /offset|option/i);
     assert.equal(git(["rev-parse", "refs/tags/generated-cli-reviewed-tag"]), head);
     assert.deepEqual(await readFile(join(fixture.project, ".git/index")), index);
 
