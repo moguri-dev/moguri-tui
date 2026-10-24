@@ -87,7 +87,8 @@ the user selects their source.
 The [desktop interaction update](docs/setup.md#desktop-interactions) adds a
 compact five-source attachment menu, retained previews/removal, reviewed session
 drag-to-attach, persisted session order and confirmation preferences. Global
-Terminal opens independently in Moguri's Local data directory; project terminals
+views live on the left; the right rail contains only the seven session tools.
+Global Terminal opens independently in Moguri's Local data directory; project terminals
 keep their own roots. Dictation distinguishes initialization, recording and
 transcript finalization without sending a prompt automatically.
 
