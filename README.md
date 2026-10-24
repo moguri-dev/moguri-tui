@@ -84,6 +84,11 @@ and live timers. Responses have copy/info actions; the compact budget view puts
 estimated USD above tokens/context. Private reasoning and unknown costs are
 never invented.
 
+The [Agent terminal tab](docs/setup.md#separate-agent-terminal) shows Moguri's
+approved commands and output. The agent can reread its own command history;
+the separate User and Global consoles remain private. Commands keep their
+existing approvals and per-command PTY lifecycle, not shared shell state.
+
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
 document snapshots with bounded, approved page/section/cell inspection.
 Originals stay retained; formulas never execute and scanned PDF pages explicitly

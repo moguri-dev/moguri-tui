@@ -40,6 +40,7 @@ moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
 moguri progress --session ID       Checked plan items and untrusted task estimate
 moguri activity list --session ID  Retained chat operations, without new inference
+moguri agent-terminal list --session ID  Approved Agent commands, never private consoles
 moguri COMMAND --profile ID        Immutable scope; never changes another client
 moguri profile list|create NAME [--color '#RRGGBB']
 moguri profile update ID CHANGES.json --revision N
@@ -289,6 +290,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     if (group === "progress") {
       if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
       output(await sdk.sessions.progress(values.session));
+    } else if (group === "agent-terminal") {
+      if (!values.session) throw new Error("Choose --session ID for its exact Agent command output.");
+      if ((!action || action === "list") && args.length === 0) output(await sdk.agentTerminals.list(values.session));
+      else if (action === "list" && args.length === 2 && /^\d+$/.test(args[0]!) && Number.isSafeInteger(Number(args[0]))) output(await sdk.agentTerminals.list(values.session, { before: { sequence: Number(args[0]), id: args[1]! } }));
+      else if (action === "read" && args[0] && args.length <= 2 && (!args[1] || args[1] === "tail" || /^\d+$/.test(args[1]) && Number.isSafeInteger(Number(args[1])))) {
+        output(await sdk.agentTerminals.read(values.session, args[0], args[1] === "tail" ? { tail: true } : { offset: Number(args[1] ?? 0) }));
+      } else throw new Error("Use agent-terminal list [SEQUENCE ID] or agent-terminal read COMMAND_ID [UTF8_OFFSET|tail] with --session ID. No private console was accessed.");
     } else if (group === "activity") {
       if (!values.session) throw new Error("Choose --session ID for exact retained activity.");
       if ((!action || action === "list") && args.length === 0) output(await sdk.activity.list(values.session));

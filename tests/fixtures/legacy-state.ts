@@ -10,7 +10,7 @@ export function retainedCiphertextRows(db: DatabaseSync) {
   return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
     .map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]);
 }
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45): Promise<void> {
   const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
   if (version < 45 && events.some((event) => event.event_type === "skill.used")) throw new Error("Generate pre-activity history; do not relabel actual retained skill selections as an older schema.");
   if (version < 44 && events.some((event) => {

@@ -48,6 +48,8 @@ test("actual TUI keys share knowledge promotion, disabled hooks and exact review
     const activity = (await sdk.activity.list(fixture.sessionId)).activity.entries.find((entry) => entry.source === "github")!;
     await slash(`/activity read ${activity.id} arguments`, '"git.tag.create"');
     setup.mockInput.pressEscape();
+    await slash("/agent-terminal", '"activity.list"');
+    setup.mockInput.pressEscape();
     await slash("/containment status", "native-process-groups-only");
     assert.equal(fixture.requests.length, 0);
     assert.equal(fixture.session().queue.length, 0);
