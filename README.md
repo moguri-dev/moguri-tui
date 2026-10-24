@@ -21,9 +21,10 @@ subagents and one native MCP gateway. Desktop starts dark and uses the same
 original face-and-bat-wing mascot as the TUI's ASCII loading mark.
 The mascot now also carries its small red antenna pom-pom.
 
-The [task completion bar](docs/architecture/task-progress.md) periodically
-checks the bound plan's Markdown checklist. Long tasks can also show an
-owning-model estimate, separately labeled as advice, never proof of completion.
+The [Plan sidebar](docs/architecture/task-progress.md) shows only an explicit
+multi-step model checklist, with long-task estimates separately labeled as advice,
+never proof of completion. [Session controls](docs/architecture/session-interactions.md)
+include ordered drag/drop, context-menu actions and serial held queues.
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
@@ -46,6 +47,12 @@ Require qualified SendBox** or `moguri containment require-sandbox
 --confirm-review`. Ordinary Local/SSH still owns known groups only. Missing
 qualification blocks new work; selecting this policy does not silently change
 an existing session's Env, qualify an old workload or choose a model.
+
+The macOS app bundles **SendBox 0.2.3 and a compatible pinned Linux worker,
+Node runtime and native dependencies**. [Managed setup](docs/architecture/managed-sandbox.md)
+replaces developer commands with one explicit in-app review. Private workspaces
+and selected-provider DNS aliases are automatic; public runtime updates stay
+separate from activation and tool permissions.
 
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
@@ -198,8 +205,10 @@ the generated provider evidence and remaining gates; this is not a replacement
 for frozen archives, live-model quality or full first-milestone acceptance.
 
 Chats can have **no project**, without inheriting any workspace root or coding
-tools. `/suggestions` previews scoped prior prompts before model analysis;
-`/meta` opens a settings chat whose changes require exact human review.
+tools. One desktop **Start** chooser offers a new chat, an existing project,
+local-folder import or explicit repository clone. General conversations live
+under **Chats**. `/suggestions` previews scoped prior prompts before model analysis;
+**ask Moguri** and `/meta` open a settings chat whose changes require exact human review.
 MCP HTTP servers support explicit **OAuth with PKCE**, resource-bound keychain
 credentials and refresh. Shared question, approval and done indicators appear
 in both clients. Desktop OS banners are off by default and use generic content
@@ -207,8 +216,12 @@ unless the user opts into previews.
 
 The desktop composer is an icon toolbar: attach, environment, model name,
 autonomy, unlimited-budget/usage, microphone and paper-plane Send. Holding
-Cmd/Ctrl turns Send into a queue clock. Model context and supported thinking
-effort are configured together through shared, durable SDK controls.
+Cmd/Ctrl turns idle Send into a queue clock; active turns show a red Stop icon
+in that same slot. Enter sends; Shift+Enter adds a line.
+Both sidebars resize, and message copy appears on hover or keyboard focus.
+Toggle/dropdown preferences, model context and supported thinking effort save
+automatically through shared SDK controls; text settings retain explicit saves.
+See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).
 
 The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
 commands, enforced read-only sessions and parallel question-only side chats.
@@ -218,6 +231,9 @@ attach/unread/archive/delete actions; project settings and optional archived
 retention share the same SDK. Deleting a session preserves independent project
 artifacts and external PRs. A terminal is an explicit Local or pinned SSH
 user console, not an agent permission or a claimed sandbox.
+One profile-owned **Global terminal** also works without a session, separately
+from session consoles. Project-free Autopilot adds no tool grants, and side
+chats expose an explicit concrete-model selector when needed.
 User consoles retain authenticated per-profile/peer owners across
 explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
 inspection reattach the same process, never replay input or automatically
