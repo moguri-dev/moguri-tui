@@ -13,6 +13,10 @@ approval of project file and shell tools, persistent drafts and queues, distinct
 Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 
+The TUI uses Enter to send and Shift+Enter for newlines; Cmd/Ctrl+Enter still
+holds. Moguri includes its own verified [source setup instructions](docs/setup.md)
+in normal model context, including project-free chats.
+
 The **importable Moguri SDK** now powers the CLI, TUI and desktop. It exposes
 shared editable/restorable system instructions and permissions, opt-in local
 vector/graph and coding-style memory, standard skills, reviewed evolution

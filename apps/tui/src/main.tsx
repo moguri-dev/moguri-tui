@@ -11,7 +11,7 @@ import { nativeActions } from "./native.ts";
 
 const { values } = parseArgs({ options: { project: { type: "string" }, profile: { type: "string" }, help: { type: "boolean" } } });
 if (values.help) {
-  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nCtrl+L Copilot login, Ctrl+O open project, Ctrl+M models, F8 profiles, Ctrl+K commands.\nThe desktop and TUI share the same private local service.");
+  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nEnter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter holds; Shift+Cmd/Ctrl+Enter sends now.\nCtrl+L Copilot login, Ctrl+O open project, Ctrl+M models, F8 profiles, Ctrl+K commands.\nThe desktop and TUI share the same private local service.");
 } else {
   let client: MoguriSdk | undefined;
   try {
