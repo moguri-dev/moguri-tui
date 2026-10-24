@@ -71,6 +71,13 @@ session-text snapshots. Unsupported image models preserve the draft/queue
 rather than dropping context. Bare attachment prefixes remain literal until
 the user selects their source.
 
+The [desktop interaction update](docs/setup.md#desktop-interactions) adds a
+compact five-source attachment menu, retained previews/removal, reviewed session
+drag-to-attach, persisted session order and confirmation preferences. Global
+Terminal opens independently in Moguri's Local data directory; project terminals
+keep their own roots. Dictation distinguishes initialization, recording and
+transcript finalization without sending a prompt automatically.
+
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
 document snapshots with bounded, approved page/section/cell inspection.
 Originals stay retained; formulas never execute and scanned PDF pages explicitly
@@ -396,7 +403,7 @@ requirements from deferred work.
 - Always choose either a fixed model or **kupo**, Moguri's HydraFusion-inspired synthetic/auto model. kupo routes across a configured mix of local and hosted models and selects single-model, cascade, or draft/critique/revision workflows.
 - Optional System One decision providers, including [TypeSafe AI's Jev](https://docs.typesafe.ai/introduction), work with kupo and fixed models for delegated decisions, tool approvals, and steering.
 - The chat composer, TUI, and CLI expose **Env**, **Model**, **Autonomy level**, and **Budget**. Starting defaults are Local, no model until provider login or local-model configuration, Manual, and Unlimited. Global, profile, and repo/project settings can supply different defaults.
-- Desktop has an Attach button and image paste; shared attachment triggers are `^` for a local file, `:` for a local folder, `#` for a GitHub issue or PR, `!` for a Moguri session, and `@` for a project file. TUI/CLI expose equivalent typed attachments without the desktop button.
+- Desktop has an Attach button and image paste; attachment triggers are `^` for a local file or folder, `:` for an active session, `#` for a GitHub issue or PR, and `@` for a named Local project file/folder or GitHub file. `!` remains a legacy session alias. TUI/CLI expose the same typed snapshots and review boundaries.
 - **Env** offers **Local**, **Sandbox** via SendBox, and **Remote** via SSH. Remote runs the agent and model calls on the configured machine. Global policy may allow only Sandbox or Remote; it blocks new Local turns while existing Local turns may finish. Neither SSH nor a label implies SendBox containment.
 - **Autonomy level** is independent of model choice and env: **Manual** (default), **Guided** (current model recommends; user confirms), **Autopilot** (current model acts within delegated policy and asks sparingly), and **Autopilot Max** (a decision model decides and steers within delegated policy). No level can bypass hard permissions, budgets, or allowed-env policy.
 - **Budget** defaults to unlimited. Users can cap cumulative session tokens, USD, or both when telemetry supports it. The UI warns that caps may interrupt work; kupo tries to checkpoint and commit accepted changes before exhaustion when Git policy and approvals permit it.

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
@@ -289,7 +289,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
       output(await sdk.sessions.progress(values.session));
     } else if (group === "status") {
-      output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
+      output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.slice().sort(compareSessionOrder).map(({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned }) => ({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned })) });
     } else if (group === "knowledge" || group === "marketplace" || group === "hooks" || group === "capability" || group === "containment") {
       output(await workspaceFeatureCommand(sdk, group, action, args, values));
     } else if (group === "terminal") {
@@ -297,6 +297,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         const terminals = snapshot.terminals.filter((terminal) => !values.session || terminal.sessionId === values.session);
         output({ terminals, owners: snapshot.terminalOwners, warning: "Owners are profile/Local-or-pinned-SSH scoped. Actual env/peer/root remain captured; bounded volatile output, no agent context, automatic replacement or input replay." });
       } else if (action === "open" && values.session) output(await sdk.terminal.open(values.session));
+      else if (action === "global") output(await sdk.terminal.openGlobal());
       else if (action === "read" && args[0]) output(await sdk.terminal.read(args[0]));
       else if (action === "reconcile" && args[0]) { await sdk.terminal.reconcile(args[0]); output(sdk.getState().snapshot!.terminals.find((terminal) => terminal.id === args[0])); }
       else if (action === "owner-reconcile" && args[0]) { await sdk.terminal.reconcileOwner(args[0]); output(sdk.getState().snapshot!.terminalOwners.find((owner) => owner.id === args[0])); }
@@ -309,7 +310,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         let data = "";
         for await (const chunk of process.stdin) { data += String(chunk); if (Buffer.byteLength(data) > 65536) throw new Error("One terminal input batch is limited to 64 KiB; nothing was submitted."); }
         await sdk.terminal.input(args[0], data); output({ acknowledged: true, warning: "Accepted by the exact owned PTY, not proof a shell command succeeded. No input was persisted or replayed." });
-      } else throw new Error("Use terminal list/open/read/reconcile/close/input/acknowledge. Open needs --session ID; acknowledgement needs --confirm-review after process inspection.");
+      } else throw new Error("Use terminal list/open/global/read/reconcile/close/input/acknowledge. Open needs --session ID; global uses the Local Moguri data root. Acknowledgement needs --confirm-review after process inspection.");
     } else if (group === "profile" || group === "profiles") {
       if (!action || action === "list") output(await sdk.profiles.list());
       else if (action === "create" && args.length) { const created = await sdk.profiles.create(args.join(" "), values.color ?? null); output(await sdk.profiles.wait(created.id!)); }
@@ -561,6 +562,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         output(await sdk.sessions.create(values.project ?? null, undefined, overrides, values.workspace));
       }
       else if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }, values.workspace));
+      else if (action === "reorder" && args.length) output(await sdk.sessions.reorder(args));
       else {
         if (!values.session) throw new Error("Choose --session ID from moguri status.");
         if (action === "rename") output(await sdk.sessions.rename(values.session, args.join(" ")));
