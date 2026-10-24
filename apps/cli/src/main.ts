@@ -576,7 +576,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "publication-wait" && args.length === 1) {
         const record = (await sdk.sandbox.publication(args[0]!)).publication;
         await waitForJob(record.jobId, () => sdk.jobs.cancel(record.jobId), "Native source publication", () => sdk.sandbox.publication(record.id));
-      } else throw new Error("Use sandbox setup [VERSION], enable VERSION --digest SHA --revision N --confirm-review, updates, prepare-version VERSION --confirm-review, or setup-operation/setup-cancel ID. Advanced exact-file preparation and separate retained source publication remain available. No setup command starts a model turn.");
+      } else throw new Error("Use sandbox setup [VERSION], enable VERSION --digest SHA --revision N --confirm-review, updates, prepare-version VERSION --confirm-review, or setup-operation/setup-cancel ID. Advanced source publication requires publish RUN_ID PATHS.json --digest SHA --revision N --confirm-write. No setup command starts a model turn.");
     } else if (group === "remote") {
       if (action === "status") output(await sdk.remote.status());
       else if (action === "probe") { await sdk.remote.probe(); output(await sdk.remote.status()); }
