@@ -68,7 +68,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
           if (options.reasoningText) chunk({ role: "assistant", reasoning_content: options.reasoningText });
           chunk({ role: "assistant", content: text });
         }
-        chunk({}, tool ? "tool_calls" : options.finishReason ?? "stop");
+        chunk({}, options.finishReason ?? (tool ? "tool_calls" : "stop"));
         if (!options.omitUsage) response.write(`data: ${JSON.stringify({ choices: [], usage: options.usage ?? { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
         response.end("data: [DONE]\n\n");
       };
