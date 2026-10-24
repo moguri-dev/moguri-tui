@@ -7,9 +7,9 @@ export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
 export function removePost44FixtureMarkers(db: DatabaseSync): void {
-  const future = db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type') IN ('task.plan_updated','notification.sound_saved','notification.sound_removed','application.configured','application.storage_recorded','application.update_recorded')").get();
+  const future = db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type') IN ('sandbox.setup_recorded','task.plan_updated','notification.sound_saved','notification.sound_removed','application.configured','application.storage_recorded','application.update_recorded')").get();
   if (Number(future?.count)) throw new Error("Generate genuine pre-settings history before relabeling an additive-marker fixture. New native intent or sound grants cannot become old data.");
-  db.exec("DELETE FROM retention_metadata WHERE id IN ('session_interactions_schema','settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('managed_sandbox_schema','session_interactions_schema','settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
 }
 export function retainedCiphertextRows(db: DatabaseSync) {
   return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
@@ -17,6 +17,12 @@ export function retainedCiphertextRows(db: DatabaseSync) {
 }
 export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50): Promise<void> {
   const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
+  if (events.some((event) => event.event_type === "sandbox.setup_recorded" ||
+    event.event_type === "sandbox.workspace_recorded" && event.payload.workspace.preparation ||
+    event.event_type === "sandbox.execution_recorded" && event.payload.execution.networkScope ||
+    event.event_type === "settings.updated" && event.payload.settings.sandboxManagement?.enabled)) {
+    throw new Error("Generate pre-managed-Sandbox history; actual setup approvals, automatic sources and provider scopes cannot become old grants.");
+  }
   if (events.some((event) => event.event_type === "task.plan_updated" ||
     event.event_type === "turn.stop_requested" && event.payload.holdQueue ||
     event.event_type === "session.organized" && event.payload.changes.order !== undefined ||
@@ -97,7 +103,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
       if (version < 30 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='budget.plan_recorded'").get()?.count)) throw new Error("Generate pre-planning history for a legacy fixture; do not relabel future budget plans as an older schema.");
       if (version < 29 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.saved'").get()?.count)) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
       if (version >= 14) {
-        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id='session_interactions_schema';
+        db.exec(`BEGIN IMMEDIATE; DELETE FROM retention_metadata WHERE id IN ('managed_sandbox_schema','session_interactions_schema');
           ${version < 50 ? "DELETE FROM retention_metadata WHERE id='private_update_schema';" : ""}
           ${version < 49 ? "DELETE FROM retention_metadata WHERE id='state_location_schema';" : ""}
           ${version < 48 ? "DELETE FROM retention_metadata WHERE id='application_preferences_schema';" : ""}
