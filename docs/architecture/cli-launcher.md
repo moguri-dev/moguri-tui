@@ -44,7 +44,7 @@ arbitrary contents or execution. Only the trusted main renderer may call it.
 No domain events, persisted application preferences, protocol changes or store
 migrations are needed. Status comes from the actual filesystem on each review.
 Installation is unavailable in an unpackaged development client, a translocated
-app or a mounted installer. Hidden checks use generated homes and app bundles,
+app or a copy under `/Volumes`. Hidden checks use generated homes and app bundles,
 never the user's launcher or shell configuration.
 
 Filesystem errors are surfaced, not treated as successful installation or
@@ -74,7 +74,41 @@ from this launcher slice and do not revoke or extend later qualification.
 Node's experimental OpenTUI FFI warning remains. No personal authorization or
 live model call was made.
 
-Launcher coverage must execute both generated shell forms, including quoted
-paths/arguments, exit status, process identity and signals; exercise collisions,
+Launcher coverage executes both generated shell forms, including quoted
+paths/arguments, exit status, process identity and signals; exercises collisions,
 concurrent publication, stale removal, moved/missing/incomplete apps and hidden
-native install/remove controls; and verify the executable in the built package.
+native install/remove controls; and verifies the executable in the built package.
+
+### Launcher delivery results
+
+Measured 2026-10-25 on macOS arm64. No personal launcher, shell configuration,
+authorization, microphone or live provider was used.
+
+| Check | Result |
+| --- | --- |
+| Focused Node coverage | PASS: 11 launcher lifecycle checks and two application preference/migration checks in 2.38 s; 12 related compiled CLI checks also passed in the earlier 25-check run |
+| Source hidden Electron | PASS: five launcher/application/settings-navigation checks in 7.7 s; the actual-package-only case was intentionally skipped |
+| Actual packaged Electron | PASS: five checks in 8.2 s, including native installation of the real shipped CLI, execution with no system Node on PATH, and removal; the development-only case was intentionally skipped |
+| Typecheck, build and shell syntax | PASS |
+| Packed external SDK consumer | PASS, including browser-safe imports, actual installed runtime/worker/CLI and generated restart/ownership checks |
+| Dependency audit | PASS: zero findings in the repository and external consumer |
+| Development app, ZIP and DMG | PASS: executable launcher retained in the actual ad-hoc-signed app; no-cache pinned Linux worker image build completed in 35.01 s |
+| Production update consumer | PASS: actual 740,609,730-byte ZIP/manifest verified in 106.55 s |
+| Read-only DMG verification | PASS: actual signed app, Applications shortcut, native Finder geometry/icons and 1x/2x background verified without opening Finder |
+| Broad `verify-package.mjs` | FAIL at an unchanged pre-existing browser-tool assertion: it expects only `fetch_page`, but the current builtin catalog also declares six browser tools. Its preceding signature, pinned Node, TUI, CLI and new executable-launcher checks passed. Unrelated browser behavior was not changed or disabled to bypass this assertion. |
+
+Artifacts remain local development outputs, not a published or notarized
+release. Their exact bytes are:
+
+| Path under `release/` | Bytes | SHA-256 |
+| --- | --- | --- |
+| `Moguri-0.30.0-alpha.1-macos-arm64.dmg` | 754236391 | `9f8be1092d351952cd673dba496608db5900d9e3fa8cb412ee03056bc414fa46` |
+| `Moguri-0.30.0-alpha.1-macos-arm64.zip` | 740609730 | `5b850b4369677db3619481a728b58be8dff67b2f0b80a48cb69645bc47f2b60f` |
+
+Existing warnings remain: OpenTUI experimental FFI, Vite chunks above 500 kB,
+the unavailable optional Apple `.icon` companion (the ordinary `.icns` is
+present), and upstream `whatwg-encoding`/`node-domexception` deprecations.
+The external consumer's Moguri postinstall required its existing explicit npm
+script approval. None of these establishes notarization or broader release
+readiness; the full package verifier failure above remains separate from the
+qualified launcher and installer paths.
