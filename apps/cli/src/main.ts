@@ -84,6 +84,7 @@ moguri candidate preview PATCH.json --session SOURCE --workspace STAGE [--role-s
 moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PREVIEW_SHA --confirm-write [--generation ID | --role-sequence ID]
 moguri candidate role-proposal SEQUENCE_ID  Read final canonical role bytes; no model or write
 moguri roles contract SEQUENCE_ID ROLE_INDEX  Read bound output/context checks, never code approval
+moguri candidate eligibility --session ID  Verify the exact explicit Git-backed project
 moguri candidate generate-preview INPUT.json --session SOURCE --workspace STAGE
 moguri candidate generate INPUT.json --session SOURCE --workspace STAGE --digest REVIEW_SHA --confirm-cost
 moguri candidate generated|generation-wait|generation-stop ID
@@ -165,6 +166,7 @@ moguri session model-settings options.json --session ID --revision N
 moguri session context --session ID
 moguri session archive|restore|stop|resume --session ID
 moguri session delete --session ID --revision N --confirm-remove
+  Permanently deletes originating candidates/proposals too; ordinary artifacts and Git resources survive.
 moguri session from-pr URL|from-issue ID --project ID
 moguri project get|sources|diff|porto|repositories ID
 moguri project add PATH              Register an existing local folder
@@ -478,6 +480,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       }
     } else if (group === "candidate") {
       if (action === "list") output(snapshot.candidates);
+      else if (action === "eligibility" && values.session && !args.length && !values.project) output(await sdk.candidates.eligibility(values.session));
       else if (action === "read" && args[0]) output(await sdk.candidates.read(args[0]));
       else if (action === "role-proposal" && args.length === 1) output(await sdk.candidates.roleProposal(args[0]!));
       else if (action === "generated" && args.length === 1) output(await sdk.candidates.generation(args[0]!));
@@ -520,7 +523,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "wait" && args.length === 1) {
         const candidate = await sdk.candidates.read(args[0]!), jobId = candidate.candidate.applyIntent?.jobId ?? candidate.candidate.stageIntent.jobId;
         await waitForJob(jobId, () => sdk.candidates.stop(args[0]!), "Candidate", () => sdk.candidates.read(args[0]!));
-      } else throw new Error("Use candidate role-proposal SEQUENCE_ID; generate-preview/generate INPUT.json --session SOURCE --workspace STAGE [--digest SHA --confirm-cost], generated/generation-wait/generation-stop ID; or list/read, preview/stage PATCH.json [--role-sequence ID], apply-preview/apply, reject/stop/wait. Staging and application require their separate exact reviews.");
+      } else throw new Error("Use candidate eligibility --session ID; role-proposal SEQUENCE_ID; generate-preview/generate INPUT.json --session SOURCE --workspace STAGE [--digest SHA --confirm-cost], generated/generation-wait/generation-stop ID; or list/read, preview/stage PATCH.json [--role-sequence ID], apply-preview/apply, reject/stop/wait. Creation needs an explicit Git project; staging and application require separate exact reviews.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
       else if (action === "create" && args[0]) {
