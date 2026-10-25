@@ -9,6 +9,7 @@ import { envelope } from "../apps/service/src/controller.ts";
 import { isRecord, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
 import type { TaskProgressInput } from "../packages/protocol/src/progress.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
+import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
 import { supportedThinking } from "../apps/service/src/model-controls.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
 
@@ -22,6 +23,9 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
 export interface GeneratedProviderOptions {
+  issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
+  stateSql?: boolean;
+  coordinationChildId?: string;
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   reasoningText?: string;
   toolCall?: { name: string; args: Record<string, unknown> };
@@ -83,6 +87,27 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         chunk({ role: "assistant", content: "Generated work in progress." });
         held.add(response);
         response.on("close", () => held.delete(response));
+      } else       if (options.coordinationChildId && messages.some((message) => message.role === "user" && String(message.content).includes("generated coordinate parent"))) {
+        const count = messages.filter((message) => message.role === "tool").length;
+        if (!count) finish({ name: "session_control", args: { action: "dispatch", targetSessionId: options.coordinationChildId, text: "Generated delegated child result." } });
+        else if (count === 1) finish({ name: "wait_session", args: { targetSessionId: options.coordinationChildId, timeoutMs: 5000 } });
+        else finish(undefined, "Generated coordinated parent result.");
+      } else if (options.issueCreation && toolMessages.length < 2) {
+        if (!toolMessages.length) finish({ name: "create_issue", args: { ...options.issueCreation, action: "preview" } });
+        else {
+          const review: unknown = JSON.parse(String(toolMessages[0]!.content));
+          if (!isRecord(review) || typeof review.digest !== "string") throw new Error("Generated issue fixture requires an actual successful preview digest.");
+          finish({ name: "create_issue", args: { ...options.issueCreation, action: "create", expectedDigest: review.digest,
+            ...(options.issueCreation.service === "github" ? { confirmations: review.confirmations } : {}) } });
+        }
+      } else if (options.stateSql && prompt.includes("generated state sql") && toolMessages.length === 0) {
+        finish({ name: "query_state", args: { sql: "SELECT * FROM todos" } });
+      } else if (options.stateSql && prompt.includes("generated state sql") && toolMessages.length === 1) {
+        const source = JSON.parse(String(toolMessages[0]!.content));
+        finish({ name: "mutate_state", args: { expectedDigest: source.sourceDigest, planTitle: "Generated SQL task plan", statements: [
+          { sql: "INSERT INTO todos(id,text,status) VALUES (1,'Generated first step','done'),(2,'Generated second step','pending')" },
+          { sql: "INSERT INTO memories(id,title,text) VALUES ('generated-note','Generated note','Generated retained observation.')" },
+        ] } });
       } else if (options.toolCall && toolMessages.length === 0) {
         finish(options.toolCall);
       } else if (options.agentTerminalRead && toolMessages.length === 1) {
