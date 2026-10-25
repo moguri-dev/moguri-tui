@@ -25,6 +25,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
 export interface GeneratedProviderOptions {
   issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
   stateSql?: boolean;
+  stateSqlStatements?: { sql: string; parameters?: (string | number | boolean | null)[] }[];
   coordinationChildId?: string;
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   reasoningText?: string;
@@ -104,7 +105,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         finish({ name: "query_state", args: { sql: "SELECT * FROM todos" } });
       } else if (options.stateSql && prompt.includes("generated state sql") && toolMessages.length === 1) {
         const source = JSON.parse(String(toolMessages[0]!.content));
-        finish({ name: "mutate_state", args: { expectedDigest: source.sourceDigest, planTitle: "Generated SQL task plan", statements: [
+        finish({ name: "mutate_state", args: { expectedDigest: source.sourceDigest, planTitle: "Generated SQL task plan", statements: options.stateSqlStatements ?? [
           { sql: "INSERT INTO todos(id,text,status) VALUES (1,'Generated first step','done'),(2,'Generated second step','pending')" },
           { sql: "INSERT INTO memories(id,title,text) VALUES ('generated-note','Generated note','Generated retained observation.')" },
         ] } });

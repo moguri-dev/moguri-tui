@@ -5,6 +5,23 @@ import { join } from "node:path";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { envelope } from "../apps/service/src/controller.ts";
 import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { promisify } from "node:util";
+import { execFile } from "node:child_process";
+import { resolve } from "node:path";
+
+test("the compiled CLI uses the same typed catalogue and coordination authority without inference", async () => {
+  const f = await setupFixture(), sdk = await new MoguriSdk(f.service.connection).ready();
+  const run = (...args: string[]) => promisify(execFile)(process.execPath, [resolve("dist/cli.mjs"), ...args, "--session", f.sessionId, "--json"],
+    { env: { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") } });
+  try {
+    const side = await sdk.sessions.spawn(f.sessionId, "side");
+    const catalogue = JSON.parse((await run("tools", "edit_file")).stdout);
+    assert.ok(catalogue.tools.some((tool: { name: string }) => tool.name === "edit_file"));
+    const value = JSON.parse((await run("coordinate", "read", JSON.stringify({ action: "inspect", targetSessionId: side.id }))).stdout);
+    assert.equal(value.data.id, side.id); assert.equal(value.data.mode, "read-only");
+    assert.equal(f.requests.length, 0);
+  } finally { sdk.disconnect(); await f.close(); }
+});
 
 test("the shared tooling API binds schema/source approvals without spending on a model", async () => {
   const f = await setupFixture();

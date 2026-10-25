@@ -10,6 +10,7 @@ import { effectiveTools } from "../apps/service/src/tools.ts";
 import { setupFixture, waitFor, type GeneratedProviderOptions } from "./fixture.ts";
 import { retainedCiphertextRows, writeLegacyState } from "./fixtures/legacy-state.ts";
 import { remoteFixture } from "./fixtures/remote-service.ts";
+import { operationProjection } from "../apps/service/src/operation-telemetry.ts";
 
 test("only a workspace-bound model receives Agent terminal tools; project-free chats do not pay for an unusable command capability", async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
@@ -71,7 +72,8 @@ test("the actual model executes in its Agent terminal and rereads that exact out
     await fixture.configure(); await fixture.send("Generated agent terminal execution and reread.");
     await waitFor(() => fixture.requests[0]);
     const declared = fixture.requests[0]!.tools;
-    assert.ok(Array.isArray(declared) && declared.some((tool) => isRecord(tool) && isRecord(tool.function) && tool.function.name === "read_agent_terminal"), "The owning solver must receive the agent-terminal read capability.");
+    assert.ok(Array.isArray(declared) && declared.some((tool) => isRecord(tool) && isRecord(tool.function) && tool.function.name === "discover_tools"), "The solver must be able to discover its scoped Agent reader.");
+    assert.equal((await sdk.tools.catalog(fixture.sessionId, "read_agent_terminal")).tools.some((tool) => tool.name === "read_agent_terminal"), true);
     await fixture.approve(); await fixture.approve(); await fixture.approve(); await fixture.terminal();
     const completed = fixture.service.controller.events(0).filter((event) => event.event_type === "tool.completed" && event.payload.call.name === "read_agent_terminal");
     assert.equal(completed.length, 2);
@@ -130,23 +132,33 @@ test("Agent output can follow a bounded UTF-8 tail without splitting characters 
 });
 
 test("desktop schema-45 command history converges without changing ciphertext or replaying its command after restart", { skip: process.platform !== "darwin" }, async () => {
-  const fixture = await setupFixture({ toolCall: { name: "run_command", args: { command: "printf 'Generated retained agent output\\n'", timeoutMs: 2000 } } });
+  const fixture = await setupFixture();
   const sdk = await new MoguriSdk(fixture.service.connection).ready();
   let store: EventStore | undefined, restarted: Awaited<ReturnType<typeof startService>> | undefined, peer: MoguriSdk | undefined;
   try {
-    await fixture.configure(); await fixture.send("Generated retained command."); await fixture.approve(); await fixture.terminal();
-    const command = (await sdk.agentTerminals.list(fixture.sessionId)).activity.entries[0]!;
-    const original = (await sdk.agentTerminals.read(fixture.sessionId, command.id)).content!.text;
-    const rows = retainedCiphertextRows(fixture.service.store.db), path = fixture.service.store.path;
-    sdk.disconnect(); await writeLegacyState(fixture.service, 45, "desktop");
+    sdk.disconnect(); await fixture.service.close();
+    const path = fixture.service.store.path, legacy = new EventStore(path, fixture.retentionKey);
+    const scope = { profile_id: "default", project_id: fixture.session().projectId, session_id: fixture.sessionId, turn_id: "generated-legacy-turn", step_id: "generated-legacy-step" };
+    const call = { id: "generated-legacy-call", name: "run_command", arguments: { command: "printf 'Generated retained agent output\\n'", timeoutMs: 2000 } };
+    const original = "Generated retained agent output\n[exit=0]";
+    const events = legacy.commit([
+      { ...scope, event_type: "turn.started", payload: { item: { id: "generated-legacy-item", text: "Generated retained command.", attachments: [], delivery: "queue" }, controls: fixture.session().controls, policyRevision: 0 } },
+      { ...scope, event_type: "tool.started", payload: { call } },
+      { ...scope, event_type: "tool.completed", payload: { call, text: original, isError: false, outcome: "completed" } },
+      { ...scope, event_type: "turn.finished", payload: { outcome: "completed", diagnostic: null } },
+    ]);
+    legacy.commit(operationProjection(events).map((entry) => ({ event_type: "operation.recorded", profile_id: "default", payload: { entry } })));
+    const rows = retainedCiphertextRows(legacy.db); legacy.close();
+    await writeLegacyState(fixture.service, 45, "desktop");
     store = new EventStore(path, fixture.retentionKey);
     assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
     assert.deepEqual(retainedCiphertextRows(store.db), rows);
     store.close(); store = undefined;
     restarted = await startService({ stateDir: join(fixture.directory, "state"), provider: fixture.provider, retentionKey: fixture.retentionKey });
     peer = await new MoguriSdk(restarted.connection).ready();
+    const command = (await peer.agentTerminals.list(fixture.sessionId)).activity.entries[0]!;
     assert.equal((await peer.agentTerminals.read(fixture.sessionId, command.id)).content?.text, original);
-    assert.equal(fixture.requests.length, 2);
+    assert.equal(fixture.requests.length, 0);
   } finally { sdk.disconnect(); store?.close(); peer?.disconnect(); await restarted?.close(); await fixture.close(); }
 });
 

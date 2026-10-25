@@ -109,6 +109,12 @@ approved commands and output. The agent can reread its own command history;
 the separate User and Global consoles remain private. Commands keep their
 existing approvals and per-command PTY lifecycle, not shared shell state.
 
+[Lean tooling](docs/architecture/lean-tooling.md) adds lazy typed discovery,
+compact recoverable results, deterministic file/data/document operations and
+browser-free search. Root-bound main/child messaging and orchestration preserve
+read-only side chats, actual actors, approvals and aggregate budgets. Shared
+workflows are `/review`, `/security`, `/performance` and `/debug`.
+
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
 document snapshots with bounded, approved page/section/cell inspection.
 Originals stay retained; formulas never execute and scanned PDF pages explicitly
