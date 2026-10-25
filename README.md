@@ -275,8 +275,8 @@ clicks and text input. Its top **Agent control** switch starts off and revokes
 access immediately when disabled. It never adopts a personal browser.
 See [browser control](docs/architecture/agent-browser.md).
 
-Attached images have larger composer/chat previews and a near-full-window
-viewer, without cropping or changing captured context.
+Attachments stay compact in the composer/chat. Clicking an image opens the
+large, uncropped viewer without changing captured context.
 
 One profile-owned **Global terminal** also works without a session, separately
 from session consoles. Project-free Autopilot adds no tool grants, and side
