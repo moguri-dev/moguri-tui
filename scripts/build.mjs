@@ -1,12 +1,15 @@
 import { build } from "esbuild";
 import { build as viteBuild } from "vite";
-import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { prepareSpeech } from "./prepare-speech.mjs";
 import { buildIcons } from "./build-icons.mjs";
+import { bundledCliLauncher } from "../apps/desktop/src/cli-installation.ts";
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist/desktop", { recursive: true });
+await writeFile("dist/moguri", bundledCliLauncher(), { mode: 0o755 });
+await chmod("dist/moguri", 0o755);
 const speech = await prepareSpeech();
 await cp(new URL("../.native/speech", import.meta.url), "dist/native/speech", { recursive: true });
 const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
@@ -36,4 +39,4 @@ await Promise.all([
   buildIcons(),
 ]);
 execFileSync("node_modules/.bin/tsc", ["-p", "tsconfig.sdk.json"], { stdio: "inherit" });
-console.log(`Built shared SDK/types, CLI, service/workers, TUI and desktop. Pinned local speech runtime: ${speech}. No model weights downloaded.`);
+console.log(`Built shared SDK/types, CLI/exec launcher, service/workers, TUI and desktop. Pinned local speech runtime: ${speech}. No model weights downloaded.`);

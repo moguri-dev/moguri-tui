@@ -428,6 +428,11 @@ The [managed workspace contract](docs/architecture/managed-workspaces.md)
 records Local ownership, root consistency and partial-operation reconciliation.
 `npm run package:mac` produces an ad-hoc-signed development app, DMG and ZIP under
 `release/`. It is not a notarized distribution.
+The app includes the CLI, TUI and their shared Node runtime. Copying it does not
+start the TUI or add a shell command. Use **Settings > General > Command line >
+Install `moguri` command**, then follow the [PATH setup instructions](docs/setup.md#macos-command-line-installation).
+That guide also documents removal, moved-app recovery and the manual workaround
+for older builds.
 CI runs only on pushes to `main`, not pull requests or feature branches.
 
 ## macOS launch troubleshooting
