@@ -256,6 +256,10 @@ Toggle/dropdown preferences, model context and supported thinking effort save
 automatically through shared SDK controls; text settings retain explicit saves.
 See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).
 
+New chats can use a fixed **global default model/effort** or the current
+profile's **last explicit selection**. Existing chats and higher-priority
+overrides stay unchanged. See [model defaults](docs/architecture/model-controls.md#new-session-model-defaults).
+
 The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
 commands, enforced read-only sessions and parallel question-only side chats.
 Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,

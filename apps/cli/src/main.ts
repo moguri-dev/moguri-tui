@@ -652,7 +652,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (action === "mode" && (args[0] === "agent" || args[0] === "read-only")) output(await sdk.sessions.mode(values.session, args[0]));
         else if (action === "spawn" && (args[0] === "agent" || args[0] === "side")) output(await sdk.sessions.spawn(values.session, args[0], args.slice(1).join(" ") || undefined));
         else if (action === "organize" && args[0]) output(await sdk.sessions.organize(values.session, parse(SessionChangesSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
-        else if (action === "model-settings" && args[0]) output(await sdk.sessions.modelOptions(values.session, parse(ModelOptionsSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
+        else if (action === "model-settings" && args[0]) {
+          const options = parse(ModelOptionsSchema, JSON.parse(await readFile(args[0], "utf8")));
+          output(await sdk.sessions.modelOptions(values.session, options, expectedRevision(), Object.hasOwn(options, "thinkingEffort") || undefined));
+        }
         else if (action === "context") output(await sdk.sessions.context(values.session));
         else if (action === "delete" && values["confirm-remove"]) output(await sdk.sessions.delete(values.session, true, expectedRevision()));
         else if (action && ["archive", "restore", "stop", "resume"].includes(action)) output(await sdk.command({ type: `session.${action}` as "session.archive" | "session.restore" | "session.stop" | "session.resume", sessionId: values.session }));

@@ -101,9 +101,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const created = await client.command({ type: "session.create", projectId: project.id! });
     setSelectedId(created.id!); setMode("compose"); setShowArchived(false);
   };
-  const configure = (controls: Controls) => {
+  const configure = (controls: Controls, rememberModelSelection = false) => {
     if (!session) throw new Error("Create a session first.");
-    return client.command({ type: "session.configure", sessionId: session.id, expectedRevision: session.revision, controls });
+    return client.command({ type: "session.configure", sessionId: session.id, expectedRevision: session.revision, controls,
+      ...(rememberModelSelection ? { rememberModelSelection: true } : {}) });
   };
   const requiredProject = () => { if (!session?.projectId) throw new Error("This operation needs a selected project. Use Ctrl+O or open a project chat."); return session.projectId; };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
@@ -652,7 +653,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
           {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ? snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
-            onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
+            onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }, true); setMode("compose"); }); }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
           <text fg={colors.muted} height={4} flexShrink={0}>kupo routing is opt-in. /kupo status shows exact policy. /compound reviews Local Cascade/Critique and separate project tests. Finite Local turns need /winddown status and explicit reserved policy. Images/tuning stay blocked; model advice is not source or Git acceptance.</text></box> :
         mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
