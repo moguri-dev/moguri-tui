@@ -91,7 +91,9 @@ drag-to-attach, persisted session order and confirmation preferences. Global
 views live on the left; the right rail contains only the seven session tools.
 Click an active right-rail icon again to collapse its pane back to the rail.
 Global Terminal opens independently in Moguri's Local data directory; project terminals
-keep their own roots. Dictation distinguishes initialization, recording and
+keep their own roots. Opening Terminal or explicitly switching chats with it visible starts
+or reuses the exact selected console; + is independent of unrelated UI work.
+Dictation distinguishes initialization, recording and
 transcript finalization without sending a prompt automatically.
 
 [Chat activity](docs/setup.md#chat-activity-and-usage) uses small operation
