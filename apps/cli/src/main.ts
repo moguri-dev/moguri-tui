@@ -41,6 +41,15 @@ moguri status                     Project/session IDs and current work state
 moguri progress --session ID       Checked plan items and untrusted task estimate
 moguri activity list --session ID  Retained chat operations, without new inference
 moguri agent-terminal list --session ID  Approved Agent commands, never private consoles
+moguri tools [OFFSET] [QUERY] --session ID  Scoped typed catalogue, no inference
+moguri tool NAME SCHEMA_SHA ARGUMENTS_JSON --session ID  Exact approved Local job
+moguri tool-result STEP CALL [OFFSET] --session ID  Original retained source
+moguri state SELECT_SQL --session ID  Canonical todo/memory views
+moguri watch read JOB [OFFSET] --session ID  Real logs, outcome and observed statistics
+moguri coordinate read INPUT_JSON --session ID  Main/child context and progress
+moguri coordinate message TARGET TEXT --session ID  Advisory only, no paid reply
+moguri coordinate control INPUT_JSON --session ID  Explicit owned-child work
+moguri coordinate preview CHILD --session ID  Actual roots and grant review
 moguri COMMAND --profile ID        Immutable scope; never changes another client
 moguri profile list|create NAME [--color '#RRGGBB']
 moguri profile update ID CHANGES.json --revision N
@@ -361,6 +370,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else throw new Error("Use activity list [SEQUENCE ID], activity turn ID or activity read ID arguments|output [UTF8_OFFSET] with --session ID.");
     } else if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.slice().sort(compareSessionOrder).map(({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned }) => ({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned })) });
+    } else if (["tools", "tool", "tool-result", "state", "watch", "coordinate"].includes(group)) {
+      if (!values.session) throw new Error("Choose --session ID. No previous project/root or session authority is inherited.");
+      const value = await sdk.slash(values.session, `/${group}${action ? ` ${[action, ...args].join(" ")}` : ""}`, "cli");
+      output(value.kind === "text" ? values.json ? JSON.parse(value.text) : value.text : value);
     } else if (group === "knowledge" || group === "marketplace" || group === "hooks" || group === "capability" || group === "containment") {
       output(await workspaceFeatureCommand(sdk, group, action, args, values));
     } else if (group === "terminal") {

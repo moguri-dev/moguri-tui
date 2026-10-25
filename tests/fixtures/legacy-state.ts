@@ -9,7 +9,7 @@ export function assertCurrentSchema(store: { db: DatabaseSync }): void {
 export function removePost44FixtureMarkers(db: DatabaseSync): void {
   const future = db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type') IN ('candidate.owner_bound','candidate.cleanup_recorded','candidate.usage_retained','model.selection_remembered','session.pr_observed','skill.used','sandbox.setup_recorded','task.plan_updated','notification.sound_saved','notification.sound_removed','application.configured','application.storage_recorded','application.update_recorded')").get();
   if (Number(future?.count)) throw new Error("Generate genuine pre-settings history before relabeling an additive-marker fixture. New native intent or sound grants cannot become old data.");
-  db.exec("DELETE FROM retention_metadata WHERE id IN ('candidate_retention_schema','browser_control_schema','model_defaults_schema','session_indicators_schema','desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('lean_tooling_schema','lean_tooling_convergence_schema','candidate_retention_schema','browser_control_schema','model_defaults_schema','session_indicators_schema','desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
 }
 export function retainedCiphertextRows(db: DatabaseSync) {
   return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
@@ -18,6 +18,9 @@ export function retainedCiphertextRows(db: DatabaseSync) {
 export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56, lineage: "main" | "desktop" = "main"): Promise<void> {
   const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
   const desktop = lineage === "desktop";
+  if (events.some((event) => event.event_type.startsWith("coordination.") ||
+    event.event_type === "tool.completed" && event.payload.rawDigest ||
+    event.event_type === "session.created" && (event.payload.parentSnapshotDigest || event.payload.coordinationParentId))) throw new Error("Generate genuine pre-tooling history; retained source grants and coordination ownership cannot become older data.");
   if (desktop && (version < 44 || version > 46)) throw new Error("The divergent desktop lineage used only schemas 44 through 46.");
   if (version < 55 && events.some((event) => event.event_type === "model.selection_remembered")) throw new Error("Generate genuine pre-model-default history; explicit remembered selections cannot become older metadata.");
   if (version < 54 && events.some((event) => event.event_type === "session.pr_observed" ||
@@ -120,8 +123,10 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
       if (version < 29 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.saved'").get()?.count)) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
       if (version >= 14) {
         db.exec(`BEGIN IMMEDIATE;
+          DELETE FROM retention_metadata WHERE id='lean_tooling_schema';
+          DELETE FROM retention_metadata WHERE id='lean_tooling_convergence_schema';
           DELETE FROM retention_metadata WHERE id='candidate_retention_schema';
-          DELETE FROM retention_metadata WHERE id='browser_control_schema';
+          ${version < 56 ? "DELETE FROM retention_metadata WHERE id='browser_control_schema';" : ""}
           ${version < 55 ? "DELETE FROM retention_metadata WHERE id='model_defaults_schema';" : ""}
           ${version < 54 ? "DELETE FROM retention_metadata WHERE id='session_indicators_schema';" : ""}
           ${!desktop && version < 53 ? "DELETE FROM retention_metadata WHERE id='desktop_interaction_schema';" : ""}
@@ -166,7 +171,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
         return;
       }
       if (Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.profile_id') NOT IN ('default','_global')").get()?.count)) throw new Error("Generate Default-only legacy fixtures without dropping another user profile.");
-      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('candidate_retention_schema','browser_control_schema','model_defaults_schema','session_indicators_schema','desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','private_update_schema','state_location_schema','application_preferences_schema','notification_sound_schema','client_voice_capture_schema','settings_preferences_schema','workspace_entry_schema','document_attachment_schema','task_progress_schema','remote_memory_schema','candidate_workflow_schema','candidate_execution_schema','budget_planning_schema','candidate_generation_schema','role_sequence_schema','candidate_role_schema','model_evidence_schema','owned_role_contract_schema','paste_file_schema','native_execution_schema','compound_workflow_schema','budget_winddown_schema','owned_decision_schema'); DROP TRIGGER events_no_delete;
+      db.exec(`BEGIN IMMEDIATE; DROP TABLE memory_scopes; DELETE FROM retention_metadata WHERE id IN ('lean_tooling_schema','lean_tooling_convergence_schema','candidate_retention_schema','browser_control_schema','model_defaults_schema','session_indicators_schema','desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','private_update_schema','state_location_schema','application_preferences_schema','notification_sound_schema','client_voice_capture_schema','settings_preferences_schema','workspace_entry_schema','document_attachment_schema','task_progress_schema','remote_memory_schema','candidate_workflow_schema','candidate_execution_schema','budget_planning_schema','candidate_generation_schema','role_sequence_schema','candidate_role_schema','model_evidence_schema','owned_role_contract_schema','paste_file_schema','native_execution_schema','compound_workflow_schema','budget_winddown_schema','owned_decision_schema'); DROP TRIGGER events_no_delete;
         DELETE FROM events WHERE json_extract(data,'$.profile_id')='_global';
         CREATE TRIGGER events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'events are append-only'); END;`);
       for (const table of ["blob_payloads", "retention_keys", "retention_forgotten"]) db.prepare(`DELETE FROM ${table} WHERE scope='profile/_global' OR scope GLOB 'profile/_global/*'`).run();
