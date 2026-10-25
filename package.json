@@ -54,6 +54,7 @@
     "docs/architecture/candidate-primitives.md",
     "docs/architecture/candidate-workflows.md",
     "docs/architecture/candidate-generations.md",
+    "docs/architecture/candidate-cleanup.md",
     "docs/architecture/winddown-primitives.md",
     "docs/architecture/budget-plans.md",
     "docs/architecture/budgets.md",
