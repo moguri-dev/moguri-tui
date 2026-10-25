@@ -269,6 +269,12 @@ attach/unread/archive/delete actions; project settings and optional archived
 retention share the same SDK. Deleting a session preserves independent project
 artifacts and external PRs. A terminal is an explicit Local or pinned SSH
 user console, not an agent permission or a claimed sandbox.
+
+The Local **Browser** pane also supports approved agent navigation, inspection,
+clicks and text input. Its top **Agent control** switch starts off and revokes
+access immediately when disabled. It never adopts a personal browser.
+See [browser control](docs/architecture/agent-browser.md).
+
 One profile-owned **Global terminal** also works without a session, separately
 from session consoles. Project-free Autopilot adds no tool grants, and side
 chats expose an explicit concrete-model selector when needed.

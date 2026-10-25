@@ -72,6 +72,7 @@
     "docs/architecture/document-attachments.md",
     "docs/architecture/chat-activity.md",
     "docs/architecture/agent-terminal.md",
+    "docs/architecture/agent-browser.md",
     "docs/architecture/settings-platform.md"
   ],
   "engines": {
