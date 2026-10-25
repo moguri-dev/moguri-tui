@@ -8,8 +8,8 @@ import { waitFor, type GeneratedProviderOptions } from "../fixture.ts";
 import { candidateApiFixture } from "./candidate-api.ts";
 
 export const ownedRoleMarker = "GENERATED_OWNED_ROLE_RESULT_NOT_ACCEPTANCE";
-export async function ownedSequenceFixture(options: GeneratedProviderOptions = {}) {
-  const providerOptions: GeneratedProviderOptions & { workerPath: string } = { replyText: ownedRoleMarker, responseMode: "text", maxOutputTokens: 256,
+export async function ownedSequenceFixture(options: Parameters<typeof candidateApiFixture>[0] = {}) {
+  const providerOptions: GeneratedProviderOptions & { workerPath: string; legacyCandidateJournal?: boolean } = { replyText: ownedRoleMarker, responseMode: "text", maxOutputTokens: 256,
     workerPath: fileURLToPath(new URL("../../apps/service/src/worker.ts", import.meta.url)), ...options };
   const f = await candidateApiFixture(providerOptions);
   try {
