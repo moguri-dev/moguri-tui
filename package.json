@@ -73,7 +73,8 @@
     "docs/architecture/chat-activity.md",
     "docs/architecture/agent-terminal.md",
     "docs/architecture/agent-browser.md",
-    "docs/architecture/settings-platform.md"
+    "docs/architecture/settings-platform.md",
+    "docs/architecture/cli-launcher.md"
   ],
   "engines": {
     "node": ">=26.4.0 <27"
