@@ -87,8 +87,10 @@ the user selects their source.
 
 The [desktop interaction update](docs/setup.md#desktop-interactions) adds a
 compact five-source attachment menu, retained previews/removal, reviewed session
-drag-to-attach, persisted session order and confirmation preferences. Global
-views live on the left; the right rail contains only the seven session tools.
+drag-to-attach, persisted session order and confirmation preferences. Use the
+session grip or Alt+Up/Down to reorder without nesting; Unpin has a crossed-out
+pin. Global views live on the left; the right rail contains only the seven
+session tools.
 Click an active right-rail icon again to collapse its pane back to the rail.
 Global Terminal opens independently in Moguri's Local data directory; project terminals
 keep their own roots. Opening Terminal or explicitly switching chats with it visible starts
