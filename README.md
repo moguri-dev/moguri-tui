@@ -13,6 +13,10 @@ approval of project file and shell tools, persistent drafts and queues, distinct
 Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 
+The TUI uses Enter to send and Shift+Enter for newlines; Cmd/Ctrl+Enter still
+holds. Moguri includes its own verified [source setup instructions](docs/setup.md)
+in normal model context, including project-free chats.
+
 The **importable Moguri SDK** now powers the CLI, TUI and desktop. It exposes
 shared editable/restorable system instructions and permissions, opt-in local
 vector/graph and coding-style memory, standard skills, reviewed evolution
@@ -24,7 +28,9 @@ The mascot now also carries its small red antenna pom-pom.
 The [Plan sidebar](docs/architecture/task-progress.md) shows only an explicit
 multi-step model checklist, with long-task estimates separately labeled as advice,
 never proof of completion. [Session controls](docs/architecture/session-interactions.md)
-include ordered drag/drop, context-menu actions and serial held queues.
+include ordered drag/drop, context-menu actions, serial held queues and explicit
+work/question/approval/completion indicators with verified draft/open/merged PR state.
+Unread names use subtle font weight rather than extra session-list dots.
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
@@ -48,10 +54,11 @@ Require qualified SendBox** or `moguri containment require-sandbox
 qualification blocks new work; selecting this policy does not silently change
 an existing session's Env, qualify an old workload or choose a model.
 
-The macOS app bundles **SendBox 0.2.3 and a compatible pinned Linux worker,
+The macOS app bundles **SendBox 0.2.4 and a compatible pinned Linux worker,
 Node runtime and native dependencies**. [Managed setup](docs/architecture/managed-sandbox.md)
 replaces developer commands with one explicit in-app review. Private workspaces
-and selected-provider DNS aliases are automatic; public runtime updates stay
+and selected-provider DNS aliases are automatic. Setup review discloses 0.2.4's
+broader GitHub Meta network delegation; public runtime updates stay
 separate from activation and tool permissions.
 
 Explicitly configured **local OpenAI-compatible models** now share the same
@@ -77,6 +84,30 @@ images, exact reviewed folders, typed GitHub issue/PR references and authorized
 session-text snapshots. Unsupported image models preserve the draft/queue
 rather than dropping context. Bare attachment prefixes remain literal until
 the user selects their source.
+
+The [desktop interaction update](docs/setup.md#desktop-interactions) adds a
+compact five-source attachment menu, retained previews/removal, reviewed session
+drag-to-attach, persisted session order and confirmation preferences. Use the
+session grip or Alt+Up/Down to reorder without nesting; Unpin has a crossed-out
+pin. Global views live on the left; the right rail contains only the seven
+session tools.
+Click an active right-rail icon again to collapse its pane back to the rail.
+Global Terminal opens independently in Moguri's Local data directory; project terminals
+keep their own roots. Opening Terminal or explicitly switching chats with it visible starts
+or reuses the exact selected console; + is independent of unrelated UI work.
+Dictation distinguishes initialization, recording and
+transcript finalization without sending a prompt automatically.
+
+[Chat activity](docs/setup.md#chat-activity-and-usage) uses small operation
+icons, expandable original arguments/results, observed timing/output quantities
+and live timers. Responses have copy/info actions; the compact budget view puts
+estimated USD above tokens/context. Private reasoning and unknown costs are
+never invented.
+
+The [Agent terminal tab](docs/setup.md#separate-agent-terminal) shows Moguri's
+approved commands and output. The agent can reread its own command history;
+the separate User and Global consoles remain private. Commands keep their
+existing approvals and per-command PTY lifecycle, not shared shell state.
 
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
 document snapshots with bounded, approved page/section/cell inspection.
@@ -217,20 +248,36 @@ unless the user opts into previews.
 The desktop composer is an icon toolbar: attach, environment, model name,
 autonomy, unlimited-budget/usage, microphone and paper-plane Send. Holding
 Cmd/Ctrl turns idle Send into a queue clock; active turns show a red Stop icon
-in that same slot. Enter sends; Shift+Enter adds a line.
+in that same slot. A blocked session uses a Resume/play control there instead,
+preserving the unsent draft; inspect effects before continuing. Enter uses the
+current action; Shift+Enter adds a line.
 Both sidebars resize, and message copy appears on hover or keyboard focus.
 Toggle/dropdown preferences, model context and supported thinking effort save
 automatically through shared SDK controls; text settings retain explicit saves.
 See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).
 
+New chats can use a fixed **global default model/effort** or the current
+profile's **last explicit selection**. Existing chats and higher-priority
+overrides stay unchanged. See [model defaults](docs/architecture/model-controls.md#new-session-model-defaults).
+
 The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
 commands, enforced read-only sessions and parallel question-only side chats.
 Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
-isolated browser previews, linked PRs and Insights. Sessions support pin/group/
+isolated browser previews, linked PRs and Insights. Double-click a session to
+rename it. Sessions support pin/group/
 attach/unread/archive/delete actions; project settings and optional archived
 retention share the same SDK. Deleting a session preserves independent project
 artifacts and external PRs. A terminal is an explicit Local or pinned SSH
 user console, not an agent permission or a claimed sandbox.
+
+The Local **Browser** pane also supports approved agent navigation, inspection,
+clicks and text input. Its top **Agent control** switch starts off and revokes
+access immediately when disabled. It never adopts a personal browser.
+See [browser control](docs/architecture/agent-browser.md).
+
+Attachments stay compact in the composer/chat. Clicking an image opens the
+large, uncropped viewer without changing captured context.
+
 One profile-owned **Global terminal** also works without a session, separately
 from session consoles. Project-free Autopilot adds no tool grants, and side
 chats expose an explicit concrete-model selector when needed.
@@ -412,7 +459,7 @@ requirements from deferred work.
 - Always choose either a fixed model or **kupo**, Moguri's HydraFusion-inspired synthetic/auto model. kupo routes across a configured mix of local and hosted models and selects single-model, cascade, or draft/critique/revision workflows.
 - Optional System One decision providers, including [TypeSafe AI's Jev](https://docs.typesafe.ai/introduction), work with kupo and fixed models for delegated decisions, tool approvals, and steering.
 - The chat composer, TUI, and CLI expose **Env**, **Model**, **Autonomy level**, and **Budget**. Starting defaults are Local, no model until provider login or local-model configuration, Manual, and Unlimited. Global, profile, and repo/project settings can supply different defaults.
-- Desktop has an Attach button and image paste; shared attachment triggers are `^` for a local file, `:` for a local folder, `#` for a GitHub issue or PR, `!` for a Moguri session, and `@` for a project file. TUI/CLI expose equivalent typed attachments without the desktop button.
+- Desktop has an Attach button and image paste; attachment triggers are `^` for a local file or folder, `:` for an active session, `#` for a GitHub issue or PR, and `@` for a named Local project file/folder or GitHub file. `!` remains a legacy session alias. TUI/CLI expose the same typed snapshots and review boundaries.
 - **Env** offers **Local**, **Sandbox** via SendBox, and **Remote** via SSH. Remote runs the agent and model calls on the configured machine. Global policy may allow only Sandbox or Remote; it blocks new Local turns while existing Local turns may finish. Neither SSH nor a label implies SendBox containment.
 - **Autonomy level** is independent of model choice and env: **Manual** (default), **Guided** (current model recommends; user confirms), **Autopilot** (current model acts within delegated policy and asks sparingly), and **Autopilot Max** (a decision model decides and steers within delegated policy). No level can bypass hard permissions, budgets, or allowed-env policy.
 - **Budget** defaults to unlimited. Users can cap cumulative session tokens, USD, or both when telemetry supports it. The UI warns that caps may interrupt work; kupo tries to checkpoint and commit accepted changes before exhaustion when Git policy and approvals permit it.

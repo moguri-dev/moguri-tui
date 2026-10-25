@@ -101,9 +101,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const created = await client.command({ type: "session.create", projectId: project.id! });
     setSelectedId(created.id!); setMode("compose"); setShowArchived(false);
   };
-  const configure = (controls: Controls) => {
+  const configure = (controls: Controls, rememberModelSelection = false) => {
     if (!session) throw new Error("Create a session first.");
-    return client.command({ type: "session.configure", sessionId: session.id, expectedRevision: session.revision, controls });
+    return client.command({ type: "session.configure", sessionId: session.id, expectedRevision: session.revision, controls,
+      ...(rememberModelSelection ? { rememberModelSelection: true } : {}) });
   };
   const requiredProject = () => { if (!session?.projectId) throw new Error("This operation needs a selected project. Use Ctrl+O or open a project chat."); return session.projectId; };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
@@ -196,7 +197,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const dictate = () => perform(async () => {
     if (!session || !editor) throw new Error("Open a session before dictating.");
     await editor.flush();
-    if (voiceJob) return client.voice.stop(voiceJob.id);
+    if (voiceJob) return voiceJob.progress.startsWith("Preparing") ? client.jobs.cancel(voiceJob.id) : client.voice.stop(voiceJob.id);
     return client.voice.record(session.id);
   });
   const insertTranscript = () => perform(async () => {
@@ -491,7 +492,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     }
     if (key.name === "f8") { key.preventDefault(); void perform(openProfiles); return; }
     if (key.name === "f6") { key.preventDefault(); if (pendingQuestion) setMode("question"); else setNotice("No actual pending question is owned by this turn."); return; }
-    if (mode === "compose" && key.name === "return" && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {
+    if (mode === "compose" && ["return", "kpenter"].includes(key.name) && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {
       key.preventDefault(); key.stopPropagation();
       if (editor) void perform(() => submit(editor.getState().text, !key.shift));
       return;
@@ -580,9 +581,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
-            <select focused flexGrow={1} options={[...pendingQuestion.choices.flatMap((choice, index) => choice === "Other, please specify" ? [] : [{ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` }]), { name: "Other, please specify", description: "Type a custom answer in the saved composer. Shift+Cmd/Ctrl+Enter submits; Cmd/Ctrl+Enter still holds.", value: "other" }, ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
+            <select focused flexGrow={1} options={[...pendingQuestion.choices.flatMap((choice, index) => choice === "Other, please specify" ? [] : [{ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` }]), { name: "Other, please specify", description: "Type a custom answer in the saved composer. Enter submits; Cmd/Ctrl+Enter still holds.", value: "other" }, ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
               if (!option) return;
-              if (option.value === "other" || option.value === "freeform") { setOtherQuestion(option.value === "other" ? pendingQuestion.id : null); setMode("compose"); setNotice("Type your actual answer. Shift+Cmd/Ctrl+Enter answers; Cmd/Ctrl+Enter still queues."); return; }
+              if (option.value === "other" || option.value === "freeform") { setOtherQuestion(option.value === "other" ? pendingQuestion.id : null); setMode("compose"); setNotice("Type your actual answer. Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues."); return; }
               const index = Number(String(option.value).slice(7)), choice = pendingQuestion.choices[index];
               if (choice === undefined) { setNotice("This offered answer is no longer available. Review the current question."); return; }
               void perform(async () => { await client.questions.answer(pendingQuestion.id, choice, pendingQuestion.revision); setMode("compose"); });
@@ -652,7 +653,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
           {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ? snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
-            onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }); setMode("compose"); }); }} /> :
+            onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }, true); setMode("compose"); }); }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
           <text fg={colors.muted} height={4} flexShrink={0}>kupo routing is opt-in. /kupo status shows exact policy. /compound reviews Local Cascade/Critique and separate project tests. Finite Local turns need /winddown status and explicit reserved policy. Images/tuning stay blocked; model advice is not source or Git acceptance.</text></box> :
         mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
@@ -760,7 +761,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>
           <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
         </box>}
-        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Type in the saved composer; Shift+Cmd/Ctrl+Enter answers. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
+        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
         {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}
@@ -776,7 +777,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         </box>
       </box>
     </box>
-    <box height={3} paddingLeft={2} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>Cmd/Ctrl+Enter queue | Shift+Cmd/Ctrl+Enter send | Ctrl+C stop | Ctrl+K commands</text></box>
+    <box height={3} paddingLeft={2} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>Enter send | Shift+Enter newline | Cmd/Ctrl+Enter hold | Ctrl+C stop | Ctrl+K commands</text></box>
   </box>;
 }
 function TuiComposer({ editor, session, focused, submit, run }: { editor: DraftEditor; session: Session; focused: boolean; submit: () => void; run: (operation: () => Promise<void>) => Promise<void> }) {
@@ -793,8 +794,11 @@ function TuiComposer({ editor, session, focused, submit, run }: { editor: DraftE
   return <box flexDirection="column" border borderColor={focused ? colors.accent : colors.border} padding={1} marginTop={1} flexShrink={0}>
     {/^\/budget\s+(?:set|profile|global)\b/.test(draft.text) && <text fg={colors.attention} height={3} flexShrink={0}>{BUDGET_WARNING} Input reservations use an explicit estimate-based policy, not a billing guarantee.</text>}
     <textarea ref={ref} focused={focused} initialValue={draft.text} height={4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.background}
-      placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Cmd/Ctrl+Enter queues. /help for commands."}
-      keyBindings={[{ name: "return", ctrl: true, shift: true, action: "submit" }]} onSubmit={submit}
+      placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Enter sends; Shift+Enter newline. /help for commands."}
+      keyBindings={[{ name: "return", action: "submit" }, { name: "return", shift: true, action: "newline" },
+        { name: "kpenter", action: "submit" }, { name: "kpenter", shift: true, action: "newline" },
+        { name: "j", ctrl: true, action: "newline" },
+        { name: "return", ctrl: true, shift: true, action: "submit" }]} onSubmit={submit}
       onPaste={(event) => {
         let text: string;
         try { text = new TextDecoder("utf-8", { fatal: true }).decode(event.bytes); }

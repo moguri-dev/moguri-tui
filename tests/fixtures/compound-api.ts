@@ -45,7 +45,7 @@ export async function compoundApiFixture() {
       confidence: 0.95, reason: "GENERATED_ROUTER_REASON_NOT_SOLVER_CONTEXT" });
     const configure = async () => {
       await f.sdk.routing.configure(policy, f.sdk.settings.get()!.revision);
-      await f.sdk.sessions.configure(f.sessionId, { ...f.session().controls, modelId: KUPO_MODEL_ID });
+      await f.sdk.sessions.configure(f.sessionId, { ...f.session().controls, modelId: KUPO_MODEL_ID }, undefined, false);
     };
     return { ...f, providers, options, routerOptions, ids, policy, input, proposal, command, alternate, configure,
       source: () => readFile(join(f.project, "fixture.txt"), "utf8"),

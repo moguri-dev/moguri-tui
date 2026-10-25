@@ -23,6 +23,9 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
 }
 export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
+  reasoningText?: string;
+  toolCall?: { name: string; args: Record<string, unknown> };
+  agentTerminalRead?: boolean;
   contextWindow?: number; supportedContextWindows?: number[];
   readPaste?: { offset?: number; limit?: number; search?: string };
   documentTool?: { name: "read_document" | "search_document"; arguments: Record<string, unknown> };
@@ -61,8 +64,11 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
       })}\n\n`);
       const finish = (tool?: { name: string; args: Record<string, unknown> }, text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
         if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] }); }
-        else chunk({ role: "assistant", content: text });
-        chunk({}, tool ? "tool_calls" : options.finishReason ?? "stop");
+        else {
+          if (options.reasoningText) chunk({ role: "assistant", reasoning_content: options.reasoningText });
+          chunk({ role: "assistant", content: text });
+        }
+        chunk({}, options.finishReason ?? (tool ? "tool_calls" : "stop"));
         if (!options.omitUsage) response.write(`data: ${JSON.stringify({ choices: [], usage: options.usage ?? { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
         response.end("data: [DONE]\n\n");
       };
@@ -77,6 +83,15 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         chunk({ role: "assistant", content: "Generated work in progress." });
         held.add(response);
         response.on("close", () => held.delete(response));
+      } else if (options.toolCall && toolMessages.length === 0) {
+        finish(options.toolCall);
+      } else if (options.agentTerminalRead && toolMessages.length === 1) {
+        finish({ name: "read_agent_terminal", args: { action: "list" } });
+      } else if (options.agentTerminalRead && toolMessages.length === 2) {
+        const listed: unknown = JSON.parse(String(toolMessages.at(-1)!.content));
+        const first = isRecord(listed) && Array.isArray(listed.commands) ? listed.commands[0] : null;
+        if (!isRecord(first) || typeof first.id !== "string") throw new Error("Generated agent command list has no exact command ID.");
+        finish({ name: "read_agent_terminal", args: { action: "read", commandId: first.id } });
       } else if (options.documentTool && /"attachmentId":"[^"]+"/.test(prompt) && toolMessages.length === 0) {
         finish({ name: options.documentTool.name, args: { attachmentId: prompt.match(/"attachmentId":"([^"]+)"/)![1]!, ...options.documentTool.arguments } });
       } else if (options.taskProgress && prompt.includes("generated task progress") && toolMessages.length === 0) {

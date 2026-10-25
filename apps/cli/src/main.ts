@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { audioFromBase64, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
@@ -39,6 +39,8 @@ moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
 moguri progress --session ID       Checked plan items and untrusted task estimate
+moguri activity list --session ID  Retained chat operations, without new inference
+moguri agent-terminal list --session ID  Approved Agent commands, never private consoles
 moguri COMMAND --profile ID        Immutable scope; never changes another client
 moguri profile list|create NAME [--color '#RRGGBB']
 moguri profile update ID CHANGES.json --revision N
@@ -339,8 +341,24 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "progress") {
       if (!values.session) throw new Error("Choose --session ID to inspect its actual bound plan.");
       output(await sdk.sessions.progress(values.session));
+    } else if (group === "agent-terminal") {
+      if (!values.session) throw new Error("Choose --session ID for its exact Agent command output.");
+      if ((!action || action === "list") && args.length === 0) output(await sdk.agentTerminals.list(values.session));
+      else if (action === "list" && args.length === 2 && /^\d+$/.test(args[0]!) && Number.isSafeInteger(Number(args[0]))) output(await sdk.agentTerminals.list(values.session, { before: { sequence: Number(args[0]), id: args[1]! } }));
+      else if (action === "read" && args[0] && args.length <= 2 && (!args[1] || args[1] === "tail" || /^\d+$/.test(args[1]) && Number.isSafeInteger(Number(args[1])))) {
+        output(await sdk.agentTerminals.read(values.session, args[0], args[1] === "tail" ? { tail: true } : { offset: Number(args[1] ?? 0) }));
+      } else throw new Error("Use agent-terminal list [SEQUENCE ID] or agent-terminal read COMMAND_ID [UTF8_OFFSET|tail] with --session ID. No private console was accessed.");
+    } else if (group === "activity") {
+      if (!values.session) throw new Error("Choose --session ID for exact retained activity.");
+      if ((!action || action === "list") && args.length === 0) output(await sdk.activity.list(values.session));
+      else if (action === "list" && args.length === 2 && /^\d+$/.test(args[0]!) && Number.isSafeInteger(Number(args[0]))) output(await sdk.activity.list(values.session, { before: { sequence: Number(args[0]), id: args[1]! } }));
+      else if (action === "turn" && args[0] && args.length === 1) output(await sdk.activity.turn(values.session, args[0]));
+      else if (action === "read" && args[0] && (args[1] === "arguments" || args[1] === "output") && args.length <= 3) {
+        if (args[2] && (!/^\d+$/.test(args[2]) || !Number.isSafeInteger(Number(args[2])))) throw new Error("Use a returned UTF-8 byte offset.");
+        output(await sdk.activity.read(values.session, args[0], args[1], { offset: Number(args[2] ?? 0) }));
+      } else throw new Error("Use activity list [SEQUENCE ID], activity turn ID or activity read ID arguments|output [UTF8_OFFSET] with --session ID.");
     } else if (group === "status") {
-      output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.map(({ id, projectId, title, status, mode, parentSessionId }) => ({ id, projectId, title, status, mode, parentSessionId })) });
+      output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.slice().sort(compareSessionOrder).map(({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned }) => ({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned })) });
     } else if (group === "knowledge" || group === "marketplace" || group === "hooks" || group === "capability" || group === "containment") {
       output(await workspaceFeatureCommand(sdk, group, action, args, values));
     } else if (group === "terminal") {
@@ -348,6 +366,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         const terminals = snapshot.terminals.filter((terminal) => !values.session || terminal.sessionId === values.session);
         output({ terminals, owners: snapshot.terminalOwners, warning: "Owners are profile/Local-or-pinned-SSH scoped. Actual env/peer/root remain captured; bounded volatile output, no agent context, automatic replacement or input replay." });
       } else if (action === "open" && values.session) output(await sdk.terminal.open(values.session, 80, 24, undefined, values.root));
+      else if (action === "global") output(await sdk.terminal.openGlobal());
       else if (action === "open-global" && args[0]) output(await sdk.terminal.openGlobal(args[0]));
       else if (action === "default-root") output(await sdk.terminal.defaultRoot());
       else if (action === "read" && args[0]) output(await sdk.terminal.read(args[0]));
@@ -362,7 +381,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         let data = "";
         for await (const chunk of process.stdin) { data += String(chunk); if (Buffer.byteLength(data) > 65536) throw new Error("One terminal input batch is limited to 64 KiB; nothing was submitted."); }
         await sdk.terminal.input(args[0], data); output({ acknowledged: true, warning: "Accepted by the exact owned PTY, not proof a shell command succeeded. No input was persisted or replayed." });
-      } else throw new Error("Use terminal list/open/open-global/default-root/read/reconcile/close/input/acknowledge. Open needs --session ID, project-free open needs --root PATH, and open-global needs an explicit absolute root. Inspection acknowledgements need --confirm-review.");
+      } else throw new Error("Use terminal list/open/global/open-global/default-root/read/reconcile/close/input/acknowledge. Open needs --session ID; project-free open needs --root PATH. Global uses the Moguri data root; open-global needs an explicit absolute root. Inspection acknowledgements need --confirm-review.");
     } else if (group === "profile" || group === "profiles") {
       if (!action || action === "list") output(await sdk.profiles.list());
       else if (action === "create" && args.length) { const created = await sdk.profiles.create(args.join(" "), values.color ?? null); output(await sdk.profiles.wait(created.id!)); }
@@ -626,13 +645,17 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         output(await sdk.sessions.create(values.project ?? null, undefined, overrides, values.workspace));
       }
       else if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }, values.workspace));
+      else if (action === "reorder" && args.length) output(await sdk.sessions.reorder(args));
       else {
         if (!values.session) throw new Error("Choose --session ID from moguri status.");
         if (action === "rename") output(await sdk.sessions.rename(values.session, args.join(" ")));
         else if (action === "mode" && (args[0] === "agent" || args[0] === "read-only")) output(await sdk.sessions.mode(values.session, args[0]));
         else if (action === "spawn" && (args[0] === "agent" || args[0] === "side")) output(await sdk.sessions.spawn(values.session, args[0], args.slice(1).join(" ") || undefined));
         else if (action === "organize" && args[0]) output(await sdk.sessions.organize(values.session, parse(SessionChangesSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
-        else if (action === "model-settings" && args[0]) output(await sdk.sessions.modelOptions(values.session, parse(ModelOptionsSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
+        else if (action === "model-settings" && args[0]) {
+          const options = parse(ModelOptionsSchema, JSON.parse(await readFile(args[0], "utf8")));
+          output(await sdk.sessions.modelOptions(values.session, options, expectedRevision(), Object.hasOwn(options, "thinkingEffort") || undefined));
+        }
         else if (action === "context") output(await sdk.sessions.context(values.session));
         else if (action === "delete" && values["confirm-remove"]) output(await sdk.sessions.delete(values.session, true, expectedRevision()));
         else if (action && ["archive", "restore", "stop", "resume"].includes(action)) output(await sdk.command({ type: `session.${action}` as "session.archive" | "session.restore" | "session.stop" | "session.resume", sessionId: values.session }));

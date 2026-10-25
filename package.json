@@ -70,6 +70,9 @@
     "docs/architecture/task-progress.md",
     "docs/architecture/session-interactions.md",
     "docs/architecture/document-attachments.md",
+    "docs/architecture/chat-activity.md",
+    "docs/architecture/agent-terminal.md",
+    "docs/architecture/agent-browser.md",
     "docs/architecture/settings-platform.md"
   ],
   "engines": {
@@ -154,6 +157,10 @@
     "vite": "8.3.4"
   },
   "main": "dist/desktop/main.mjs",
+  "overrides": {
+    "encoding-sniffer": "1.0.2",
+    "node-fetch": "npm:node-fetch-native@1.6.7"
+  },
   "allowScripts": {
     "esbuild@0.28.2": true,
     "node@26.12.0": true,
