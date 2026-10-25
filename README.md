@@ -89,8 +89,8 @@ The [desktop interaction update](docs/setup.md#desktop-interactions) adds a
 compact five-source attachment menu, retained previews/removal, reviewed session
 drag-to-attach, persisted session order and confirmation preferences. Use the
 session grip or Alt+Up/Down to reorder without nesting; Unpin has a crossed-out
-pin. Global views live on the left; the right rail contains only the seven
-session tools.
+pin. Global views live on the left; the right rail contains the session tools
+and per-session **Code change** and **Work item** links.
 Click an active right-rail icon again to collapse its pane back to the rail.
 Global Terminal opens independently in the user's configured HOME; project terminals
 keep their own roots. Opening Terminal or explicitly switching chats with it visible starts
@@ -121,7 +121,9 @@ profile-private **skill gateway** for local folders and refreshed remote
 archives. Settings use compact information/copy controls and contain Artifacts,
 Candidates and unified Sandbox management. Suggestions starts globally with
 local usage-gap checks; model generation still requires exact source review.
-Automations, Code change and Work item navigation are intentionally empty.
+Automations and the Work item link panel are intentionally empty. Existing
+session PRs open in Code change. Copilot connection status stays in Settings,
+not the left sidebar.
 
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
 document snapshots with bounded, approved page/section/cell inspection.
