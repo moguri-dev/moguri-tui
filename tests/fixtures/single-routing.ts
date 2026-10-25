@@ -26,6 +26,8 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
   };
   try {
     const settings = structuredClone(sdk.settings.get()!.values);
+    // Shared routing fixtures also generate genuine pre-sound recovery histories.
+    settings.notifications = { inApp: settings.notifications.inApp, os: settings.notifications.os, previewContent: settings.notifications.previewContent };
     const endpoint = { id: "generated-routed-solver", name: "Generated routed solver", enabled: true, baseUrl: `${solver.baseUrl}/v1`, auth: "none" as const,
       models: [{ id: solver.modelId, name: "Generated routed solver", contextWindow: 16384, maxTokens: 128, imageInput: false }] };
     if (remote) {
@@ -43,6 +45,7 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
     const model = sdk.getState().snapshot!.provider.models.find((model) => model.source === "local" && Boolean(model.id.startsWith("remote.")) === remote);
     if (!model) throw new Error("The generated routed solver was not discovered in its explicit environment.");
     const configured = structuredClone(sdk.settings.get()!.values);
+    configured.notifications = settings.notifications;
     configured.kupo = { enabled: true, workflow: "single", classifierModelId: fixture.modelId, approvedModelIds: [model.id], allowHosted: true, minimumConfidence: 0.9 };
     options.replyText = JSON.stringify({ pattern: "single", modelId: model.id, confidence: 0.95, reason: "Generated classifier advice, never user instructions or permissions." });
     if (configuration.configured !== false) await sdk.settings.update(configured, sdk.settings.get()!.revision);
