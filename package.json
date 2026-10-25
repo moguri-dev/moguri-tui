@@ -116,6 +116,9 @@
     "ajv": "8.20.0",
     "cacache": "21.0.1",
     "cheerio": "1.2.0",
+    "docx": "9.14.0",
+    "exceljs": "4.4.0",
+    "fflate": "0.8.3",
     "ghostty-web": "0.4.0",
     "ignore": "7.0.12",
     "mdast-util-from-markdown": "2.1.0",
@@ -125,6 +128,7 @@
     "node-pty": "1.1.0",
     "pnpm": "12.14.0",
     "pdfjs-dist": "6.4.299",
+    "pdf-lib": "1.17.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-markdown": "10.1.0",
@@ -150,6 +154,7 @@
     "@types/semver": "7.8.0",
     "@types/sax": "1.2.7",
     "@types/yauzl": "3.4.0",
+    "@vscode/debugprotocol": "1.68.0",
     "@vitejs/plugin-react": "6.1.2",
     "electron": "44.9.3",
     "esbuild": "0.28.2",
@@ -159,6 +164,9 @@
   },
   "main": "dist/desktop/main.mjs",
   "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    },
     "encoding-sniffer": "1.0.2",
     "node-fetch": "npm:node-fetch-native@1.6.7"
   },
