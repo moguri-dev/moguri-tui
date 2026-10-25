@@ -246,7 +246,9 @@ unless the user opts into previews.
 The desktop composer is an icon toolbar: attach, environment, model name,
 autonomy, unlimited-budget/usage, microphone and paper-plane Send. Holding
 Cmd/Ctrl turns idle Send into a queue clock; active turns show a red Stop icon
-in that same slot. Enter sends; Shift+Enter adds a line.
+in that same slot. A blocked session uses a Resume/play control there instead,
+preserving the unsent draft; inspect effects before continuing. Enter uses the
+current action; Shift+Enter adds a line.
 Both sidebars resize, and message copy appears on hover or keyboard focus.
 Toggle/dropdown preferences, model context and supported thinking effort save
 automatically through shared SDK controls; text settings retain explicit saves.
