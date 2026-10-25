@@ -218,6 +218,9 @@ moguri capability rollback ID --revision N --digest SHA --confirm-review
 moguri capability use ID --session ID --digest SHA  Inserts a skill into the saved draft
 moguri containment status|require-sandbox --confirm-review  Explicit global new-turn policy
 moguri skills import PROJECT_ID SKILL.md
+moguri skills sources|find [QUERY] [--session ID]
+moguri skills read ID --digest SHA [--session ID]  Refresh and check exact skill bytes
+moguri dashboard [work|usage|cost|velocity] [--filters JSON --project ID]
 moguri plugins import PROJECT_ID manifest.json
 moguri mcp --session SESSION_ID    Native stdio MCP gateway
 moguri mcp tools SERVER [QUERY]    Bounded tool discovery
@@ -801,8 +804,19 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else throw new Error("Use memory index/search/graph PROJECT_ID for Local data, or --session SESSION_ID.");
       }
     } else if (group === "skills" || group === "plugins") {
-      if (action !== "import" || !args[0] || !args[1]) throw new Error("Use import PROJECT_ID FILE. Imported capabilities start disabled.");
-      output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));
+      if (group === "skills" && action === "sources") output(sdk.settings.get()?.values.skillSources ?? []);
+      else if (group === "skills" && action === "find") output(await sdk.skills.find(args.join(" "), { ...(values.session ? { sessionId: values.session } : {}) }));
+      else if (group === "skills" && action === "read" && args[0] && values.digest) output(await sdk.skills.read(args[0], values.digest, values.session));
+      else {
+        if (action !== "import" || !args[0] || !args[1]) throw new Error("Use skills sources/find/read ID --digest SHA, or import PROJECT_ID FILE. Imported capabilities start disabled.");
+        output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));
+      }
+    } else if (group === "dashboard") {
+      if (action && !["work", "usage", "cost", "velocity"].includes(action)) throw new Error("Use dashboard work, usage, cost or velocity, with optional --filters JSON.");
+      const filters: unknown = values.filters ? JSON.parse(values.filters) : {};
+      if (!isRecord(filters) || Object.hasOwn(filters, "type")) throw new Error("Use a dashboard filter object with range and optional projectId.");
+      const { DashboardQuerySchema } = await import("../../../packages/sdk/src/index.ts");
+      output(await sdk.query(parse(DashboardQuerySchema, { ...filters, ...(values.project ? { projectId: values.project } : {}), type: "dashboard.overview" })));
     } else if (group === "mcp") {
       if (!action) {
         if (!values.session) throw new Error("Bind the gateway to --session SESSION_ID. It cannot approve itself.");

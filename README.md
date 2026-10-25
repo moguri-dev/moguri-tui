@@ -92,7 +92,7 @@ session grip or Alt+Up/Down to reorder without nesting; Unpin has a crossed-out
 pin. Global views live on the left; the right rail contains only the seven
 session tools.
 Click an active right-rail icon again to collapse its pane back to the rail.
-Global Terminal opens independently in Moguri's Local data directory; project terminals
+Global Terminal opens independently in the user's configured HOME; project terminals
 keep their own roots. Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
 Dictation distinguishes initialization, recording and
@@ -114,6 +114,14 @@ compact recoverable results, deterministic file/data/document operations and
 browser-free search. Root-bound main/child messaging and orchestration preserve
 read-only side chats, actual actors, approvals and aggregate budgets. Shared
 workflows are `/review`, `/security`, `/performance` and `/debug`.
+
+The [workspace experience](docs/architecture/workspace-experience.md) adds
+chart-first **My work, Usage, Cost and Velocity** dashboard pages and a
+profile-private **skill gateway** for local folders and refreshed remote
+archives. Settings use compact information/copy controls and contain Artifacts,
+Candidates and unified Sandbox management. Suggestions starts globally with
+local usage-gap checks; model generation still requires exact source review.
+Automations, Code change and Work item navigation are intentionally empty.
 
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
 document snapshots with bounded, approved page/section/cell inspection.
