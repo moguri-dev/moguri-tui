@@ -18,12 +18,14 @@ export async function winddownApiFixture(options: { git?: boolean; capDelta?: nu
       git(["config", "user.name", "Generated fixture"]); git(["config", "user.email", "fixture@example.invalid"]);
     }
     const settings = structuredClone(f.sdk.settings.get()!.values);
+    settings.notifications = { inApp: settings.notifications.inApp, os: settings.notifications.os, previewContent: settings.notifications.previewContent };
     settings.localModels.push({ id: "generated-winddown", name: "Generated wind-down model", enabled: true, baseUrl: checkpoint.baseUrl + "/v1", auth: "none",
       models: [{ id: checkpoint.modelId, name: "Generated wind-down model", contextWindow: 32768, maxTokens: 128, imageInput: false }] });
     await f.sdk.settings.update(settings, f.sdk.settings.get()!.revision); await f.sdk.models.refresh();
     const model = f.sdk.getState().snapshot!.provider.models.find((model) => model.name === "Generated wind-down model");
     if (!model) throw new Error("Generated bounded wind-down model is missing.");
     const configured = structuredClone(f.sdk.settings.get()!.values);
+    configured.notifications = settings.notifications;
     configured.winddown = { enabled: true, modelId: model.id, allowHosted: false, outputTokens: 64, timeoutMs: 10000 };
     await f.sdk.settings.update(configured, f.sdk.settings.get()!.revision);
     await f.sdk.sessions.configure(f.sessionId, { ...f.session().controls, budget: { kind: "limited", basis: "estimate", tokens: 1000000 } });

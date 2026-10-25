@@ -7,7 +7,7 @@ import { digest } from "../../apps/service/src/store.ts";
 import { fixtureProvider, waitFor, type GeneratedProviderOptions } from "../fixture.ts";
 import { candidateApiFixture } from "./candidate-api.ts";
 
-export async function compoundApiFixture() {
+export async function compoundApiFixture(configuration: { legacyNotifications?: boolean } = {}) {
   const routerOptions: GeneratedProviderOptions & { workerPath: string } = { responseMode: "text", maxOutputTokens: 8192, contextWindow: 262144,
     exposeModels: true, replyText: "Generated pending compound classifier.", workerPath: fileURLToPath(new URL("../../apps/service/src/worker.ts", import.meta.url)) };
   const f = await candidateApiFixture(routerOptions);
@@ -16,6 +16,7 @@ export async function compoundApiFixture() {
     const proposal = { plan: "Generated plan: replace only the reviewed fixture.", architecture: "Generated architecture: preserve the source and validate in one owned worktree.",
       patch: { kind: "patch" as const, summary: "Generated public candidate.", edits: [{ path: "fixture.txt", baseDigest: digest("generated original\n"), text: "Generated passing candidate.\n" }] } };
     const settings = structuredClone(f.sdk.settings.get()!.values);
+    if (configuration.legacyNotifications) settings.notifications = { inApp: settings.notifications.inApp, os: settings.notifications.os, previewContent: settings.notifications.previewContent };
     for (const role of ["first", "selected", "escalation", "critic"]) {
       const value: GeneratedProviderOptions = { responseMode: "text", replyText: JSON.stringify(proposal), exposeModels: true, maxOutputTokens: 8192, contextWindow: 262144 };
       options.push(value);
@@ -44,7 +45,9 @@ export async function compoundApiFixture() {
     routerOptions.replyText = JSON.stringify({ routeId: "generated-selected-route", pattern: "cascade", draftId: ids[1], escalationId: ids[2],
       confidence: 0.95, reason: "GENERATED_ROUTER_REASON_NOT_SOLVER_CONTEXT" });
     const configure = async () => {
-      await f.sdk.routing.configure(policy, f.sdk.settings.get()!.revision);
+      const current = f.sdk.settings.get()!;
+      if (configuration.legacyNotifications) await f.sdk.settings.update({ ...current.values, notifications: settings.notifications, kupo: policy }, current.revision);
+      else await f.sdk.routing.configure(policy, current.revision);
       await f.sdk.sessions.configure(f.sessionId, { ...f.session().controls, modelId: KUPO_MODEL_ID }, undefined, false);
     };
     return { ...f, providers, options, routerOptions, ids, policy, input, proposal, command, alternate, configure,
