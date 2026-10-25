@@ -11,6 +11,7 @@ import type { TaskProgressInput } from "../packages/protocol/src/progress.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
 import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
 import { supportedThinking } from "../apps/service/src/model-controls.ts";
+import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
 
 export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 8000): Promise<NonNullable<T>> {
@@ -200,7 +201,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
     },
   };
 }
-export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions } = {}) {
+export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project");
   const { mkdir } = await import("node:fs/promises");
@@ -214,6 +215,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     args: ["-e", "process.stdin.resume();process.stdout.write('GENERATED_TERMINAL_READY\\n');"] };
   const platform = { ...options.platform, terminal: { ...program, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
+  const restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
   const sessionId = sessionResult.id!;
@@ -236,6 +238,6 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
       return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));
     },
     terminal: async () => waitFor<Session>(() => { const current = session(); return !current.turnId && ["completed", "stopped", "partial", "failed"].includes(current.status) ? current : false; }),
-    close: async () => { await service.close(); await fixture.close(); await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); },
+    close: async () => { await service.close(); restoreJournal(); await fixture.close(); await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); },
   };
 }

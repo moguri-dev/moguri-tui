@@ -272,8 +272,11 @@ Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
 isolated browser previews, linked PRs and Insights. Double-click a session to
 rename it. Sessions support pin/group/
 attach/unread/archive/delete actions; project settings and optional archived
-retention share the same SDK. Deleting a session preserves independent project
-artifacts and external PRs. A terminal is an explicit Local or pinned SSH
+retention share the same SDK. Permanent session deletion also deletes its
+originating candidates and generation proposals; archiving alone preserves them.
+Fresh verification of an exact linked PR's merge also cleans up its candidates.
+Ordinary artifacts, applied code, worktrees and external PRs survive. See
+[candidate retention](docs/architecture/candidate-cleanup.md). A terminal is an explicit Local or pinned SSH
 user console, not an agent permission or a claimed sandbox.
 
 The Local **Browser** pane also supports approved agent navigation, inspection,
@@ -308,7 +311,8 @@ Discovery does not adopt or grant access to unmanaged worktrees.
 reports with revisions and actual source provenance. Create them without a
 conversation, or explicitly retain a completed user/model/tool result. Each has
 its own encrypted retention grant. Project removal previews the exact set and
-requires retain, export-then-delete or delete; session retention never erases it.
+requires retain, export-then-delete or delete; ordinary documents survive session
+retention. Candidate/proposal reports are the explicit session-owned exception.
 Real structured clarifications record actual user answers and retain them by
 default, with an explicit opt-out. Answers never grant tool/Git permissions.
 Documents can associate with profile folders and project work items. Explicit

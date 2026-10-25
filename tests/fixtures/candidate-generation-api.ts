@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { digest } from "../../apps/service/src/store.ts";
-import type { GeneratedProviderOptions } from "../fixture.ts";
 import { candidateApiFixture } from "./candidate-api.ts";
 
 export const generatedCandidatePatch = { kind: "patch" as const, summary: "Generated model proposal", edits: [
   { path: "fixture.txt", baseDigest: digest("generated original\n"), text: "GENERATED_MODEL_PROPOSAL_NOT_CONTEXT\n" },
 ] };
-export async function candidateGenerationFixture(reply = JSON.stringify(generatedCandidatePatch), options: GeneratedProviderOptions = {}) {
+export async function candidateGenerationFixture(reply = JSON.stringify(generatedCandidatePatch), options: Parameters<typeof candidateApiFixture>[0] = {}) {
   const f = await candidateApiFixture({ replyText: reply, responseMode: "text", maxOutputTokens: 256, ...options });
   try {
     await f.configure();
