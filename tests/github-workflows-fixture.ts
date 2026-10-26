@@ -19,7 +19,7 @@ export async function connectGithubSdk(sdk: MoguriSdk): Promise<void> {
     await delay(10);
   }
 }
-export async function githubServiceFixture(options: GitHubWorkflowOptions = {}) {
+export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, configuredProvider?: ProviderAdapter, retentionKey: Buffer = randomBytes(32)) {
   const parent = resolve(".moguri", "qualification");
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const directory = join(parent, `generated-github-service-${randomUUID()}`);
@@ -34,14 +34,14 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}) 
   git(["config", "commit.gpgSign", "false"]); git(["config", "tag.gpgSign", "false"]); git(["config", "core.hooksPath", hooks]);
   bare(["config", "core.hooksPath", hooks]); await writeFile(join(root, "fixture.txt"), "generated base\n");
   git(["add", "--", "fixture.txt"]); git(["commit", "--no-gpg-sign", "-m", "Generated base"]); git(["remote", "add", "origin", remote]); git(["push", "origin", "main"]);
-  const provider: ProviderAdapter = {
+  const provider: ProviderAdapter = configuredProvider ?? {
     state: { status: "disconnected", models: [], login: null, diagnostic: "Generated offline Git-only fixture" }, onChange: () => {},
     refresh: async () => {}, login: () => { throw new Error("Generated fixture forbids personal authorization."); }, cancel: async () => {}, logout: async () => {},
     prepare: async () => { throw new Error("Generated fixture forbids inference."); },
   };
   let service: Awaited<ReturnType<typeof startService>> | undefined, sdk: MoguriSdk | undefined;
   try {
-    service = await startService({ stateDir, retentionKey: randomBytes(32), provider, platform: {
+    service = await startService({ stateDir, retentionKey, provider, platform: {
       integrations: { githubCliRead: async (endpoint, root, signal) => {
         if (!options.runProgram) throw new MoguriError("github_cli_unavailable", "Generated fixture has no authenticated GitHub CLI account.", 403);
         const response = await options.runProgram("gh", ["api", "--hostname", "github.com", "--include", "--method", "GET", endpoint], {
@@ -65,7 +65,7 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}) 
     sdk?.disconnect(); await service?.close(); await rm(directory, { recursive: true, force: true }); throw error;
   }
 }
-export async function githubApplicationFixture() {
+export async function githubApplicationFixture(options: { provider?: ProviderAdapter; ownedNetwork?: boolean; retentionKey?: Buffer } = {}) {
     const calls: { method: string; path: string }[] = [];
     const repository = { id: 41, name: "fixture", full_name: "generated-owner/fixture",
       owner: { login: "generated-owner", type: "User" }, description: "Generated application repository",
@@ -90,19 +90,54 @@ export async function githubApplicationFixture() {
       if (path === "user") data = { login: "generated-owner", id: accountId };
       else if (path.startsWith("user/repos?")) data = [repository];
       else if (path === "repos/generated-owner/fixture") data = repository;
-      else if (path.startsWith("repos/generated-owner/fixture/branches/")) data = { name: decodeURIComponent(path.split("/branches/")[1]!), commit: { sha: head } };
+      else if (path.startsWith("repos/generated-owner/fixture/branches/")) {
+        const name = decodeURIComponent(path.split("/branches/")[1]!);
+        let branchHead = head;
+        if (options.ownedNetwork) {
+          try { branchHead = fixture.bare(["rev-parse", "--verify", `refs/heads/${name}`]); }
+          catch { return "HTTP/2.0 404 Not Found\r\n\r\n{}"; }
+        }
+        data = { name, commit: { sha: branchHead } };
+      }
       else if (method === "POST" && path === "repos/generated-owner/fixture/issues") { issueWrites++; const created = issue(20 + issueWrites, fields.title, fields.body); issues.push(created); data = created; }
-      else if (method === "POST" && path === "repos/generated-owner/fixture/pulls") { prWrites++; const created = pull(30 + prWrites, fields.title, fields.body, fields.draft === "true"); pulls.push(created); data = created; }
+      else if (method === "POST" && path === "repos/generated-owner/fixture/pulls") {
+        prWrites++; const created = pull(30 + prWrites, fields.title, fields.body, fields.draft === "true");
+        if (options.ownedNetwork) created.head = { ref: fields.head!, sha: fixture.bare(["rev-parse", "--verify", `refs/heads/${fields.head}`]), repo: repository };
+        pulls.push(created); data = created;
+      }
       else if (path.startsWith("repos/generated-owner/fixture/issues?")) data = issues;
       else if (path.startsWith("repos/generated-owner/fixture/pulls?")) data = pulls;
       else if (/^repos\/generated-owner\/fixture\/issues\/\d+$/.test(path)) data = changedBody ? issue(Number(path.split("/").at(-1))) : issues.find((item) => item.number === Number(path.split("/").at(-1)));
-      else if (/^repos\/generated-owner\/fixture\/pulls\/\d+$/.test(path)) data = pulls.find((item) => item.number === Number(path.split("/").at(-1)));
+      else if (/^repos\/generated-owner\/fixture\/pulls\/\d+$/.test(path)) {
+        const selected = pulls.find((item) => item.number === Number(path.split("/").at(-1)))!;
+        if (options.ownedNetwork) {
+          selected.head.sha = fixture.bare(["rev-parse", "--verify", `refs/heads/${selected.head.ref}`]);
+          if (method === "PATCH") { selected.title = fields.title ?? selected.title; selected.body = fields.body ?? selected.body; prWrites++; }
+        }
+        data = selected;
+      }
       else throw new Error(`Unexpected generated GitHub request: ${method} ${path}`);
       return `HTTP/2.0 200 OK\r\n\r\n${JSON.stringify(data)}`;
-    } });
+    } }, options.provider, options.retentionKey);
     head = fixture.git(["rev-parse", "HEAD"]); pulls.push(pull(11));
     fixture.git(["remote", "set-url", "origin", repository.ssh_url]);
     fixture.git(["switch", "-c", "generated-feature"]);
+    if (options.ownedNetwork) {
+      const executable = join(fixture.directory, "generated-git-ssh.mjs");
+      await writeFile(executable, `#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+const request = process.argv.at(-1);
+const allowed = ["git-upload-pack 'generated-owner/fixture.git'", "git-receive-pack 'generated-owner/fixture.git'"];
+if (!allowed.includes(request)) process.exit(65);
+const command = request.startsWith("git-upload-pack") ? "git-upload-pack" : "git-receive-pack";
+const result = spawnSync(command, [${JSON.stringify(fixture.remote)}], { stdio: "inherit", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
+if (result.error) { console.error(result.error.message); process.exit(66); }
+process.exit(result.status ?? 67);
+`, { mode: 0o700 });
+      fixture.git(["config", "core.sshCommand", JSON.stringify(executable)]);
+      fixture.bare(["update-ref", "refs/heads/generated-feature", head]);
+      fixture.bare(["update-ref", "refs/pull/11/head", head]);
+    }
     const board = defaultBoard(fixture.projectId);
     await fixture.sdk.issues.configure(fixture.projectId, { ...board, autoRefreshPrs: false }, 0);
     return { ...fixture, calls, repository, changeSource: () => { changedBody = true; }, changeAccount: (id: number) => { accountId = id; }, writes: () => ({ issues: issueWrites, pulls: prWrites }) };

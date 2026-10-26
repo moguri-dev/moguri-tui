@@ -339,7 +339,12 @@ user explicitly accepts and downloads the model once. NVIDIA documents
 ready languages. No cloud ASR fallback or automatic model-weight download occurs.
 
 Projects also have a **local Kanban** for feature, bug and misc tickets, with
-custom phases, connected PRs and read-only merge observation. A verified merge
+their own board chat, shared Show/Hide preference and same-panel GitHub/Linear
+sources. **Continue work** takes one eligible item in an isolated Local checkout
+through its draft PR; it does not merge or drain the backlog. Project secondary
+click opens actions; dragging or Alt+Up/Down reorders. Work item can select a
+Kanban card. [Setup and boundaries](docs/architecture/project-kanban.md).
+Custom phases, connected PRs and read-only observation remain. A verified merge
 moves a ticket to the chosen phase. Optional Linear imports start off, use a
 user-supplied keychain credential and never upload local tickets.
 
@@ -353,8 +358,10 @@ a real SendBox boundary is qualified.
 This is a **macOS development alpha**, not the completed first milestone.
 Explicit **estimate-based token/USD caps** and separate profile/global hard
 policies now share cumulative role-aware reservations. Unknown completion holds
-capacity; deletion, defaults and restart do not refund it. USD needs dated
-user-approved model rates, never a guessed Copilot price. These are admission
+capacity; deletion, defaults and restart do not refund it. Named Copilot/reseller
+models can use **originating-provider API-equivalent estimates**, not subscription
+bills. Finite USD needs a fresh user rate or explicit reference-rate consent;
+missing/stale prices remain unknown. These are admission
 limits, not exact provider-billing guarantees. CLI/TUI, desktop composer,
 settings and the profile usage dashboard share the SDK.
 Dashboard views now add UTC presets/year/custom ranges, calendar buckets,

@@ -14,6 +14,7 @@ import { workspaceFeatureCommand } from "./workspace-features.ts";
 import { integrationCommand } from "./integrations.ts";
 import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../packages/sdk/src/index.ts";
 import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "../../../packages/sdk/src/index.ts";
+import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -244,6 +245,13 @@ moguri issues update ISSUE_ID issue.json --revision N
 moguri issues move ISSUE_ID PHASE --revision N
 moguri issues archive|restore ISSUE_ID --revision N
 moguri issues configure PROJECT_ID board.json --revision N
+moguri kanban open PROJECT_ID
+moguri kanban items PROJECT_ID [kanban|github-issues|github-prs] [PAGE]
+moguri kanban continue SESSION_ID [CARD_ID]
+moguri kanban work|stop RUN_ID
+moguri kanban inspect RUN_ID --revision N --confirm-review
+moguri prices
+moguri prices refresh [anthropic|openai|google|xai]
 moguri cache inspect PROJECT_ID npm|pnpm
 moguri cache inspect PROJECT_ID python|cargo|go
 moguri cache prepare|install PROJECT_ID MANAGER SHA256 --accept-dependency-metadata
@@ -731,6 +739,19 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         const draft = new DraftEditor(sdk, session.id, session.draft);
         try { draft.edit(await readFile(args[0], "utf8")); output(await draft.send("queue", true)); } finally { draft.dispose(); }
       } else throw new Error("Use queue list/copy/run/remove/edit/reorder/hold. Queue mutations use the observed queue --revision.");
+    } else if (group === "prices") {
+      if (!action) output(await sdk.prices.catalog());
+      else if (action === "refresh") output(await sdk.prices.refresh(args.length ? args.map((provider) => parse(PriceProviderSchema, provider)) : undefined));
+      else throw new Error("Use prices or prices refresh [anthropic|openai|google|xai]. References are API-equivalent estimates, not bills.");
+    } else if (group === "kanban") {
+      if (!args[0]) throw new Error("Choose the exact project, origin session or retained task ID.");
+      if (action === "open") output(await sdk.kanban.open(args[0]));
+      else if (action === "items") output(await sdk.kanban.items(args[0], parse(KanbanSourceSchema, args[1] ?? "kanban"), args[2] ? Number(args[2]) : 1));
+      else if (action === "continue") output(await sdk.kanban.continue(args[0], args[1]));
+      else if (action === "work") output(await sdk.kanban.work(args[0]));
+      else if (action === "stop") output(await sdk.kanban.cancel(args[0]));
+      else if (action === "inspect" && values["confirm-review"]) output(await sdk.kanban.inspect(args[0], expectedRevision(), true));
+      else throw new Error("Use kanban open/items/continue/work/stop/inspect. Inspection requires the exact --revision and --confirm-review.");
     } else if (group === "issues") {
       if (!args[0]) throw new Error("Choose a project or issue ID from moguri status or issues list.");
       if (action === "list") output(await sdk.issues.board(args[0]));

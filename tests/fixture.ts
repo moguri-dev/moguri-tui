@@ -32,6 +32,8 @@ export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   reasoningText?: string;
   toolCall?: { name: string; args: Record<string, unknown> };
+  toolCalls?: { name: string; args: Record<string, unknown> }[];
+  toolBatches?: { name: string; args: Record<string, unknown> }[][];
   agentTerminalRead?: boolean;
   contextWindow?: number; supportedContextWindows?: number[];
   readPaste?: { offset?: number; limit?: number; search?: string };
@@ -69,8 +71,9 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         id: "generated-response", object: "chat.completion.chunk", model: base.id,
         choices: [{ index: 0, delta, finish_reason }],
       })}\n\n`);
-      const finish = (tool?: { name: string; args: Record<string, unknown> }, text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
-        if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] }); }
+      const finish = (tool?: { name: string; args: Record<string, unknown> } | { name: string; args: Record<string, unknown> }[], text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
+        if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); const tools = Array.isArray(tool) ? tool : [tool];
+          chunk({ role: "assistant", tool_calls: tools.map((item, index) => ({ index, id: `generated-call-${requests.length}${tools.length > 1 ? `-${index}` : ""}`, type: "function", function: { name: item.name, arguments: JSON.stringify(item.args) } })) }); }
         else {
           if (options.reasoningText) chunk({ role: "assistant", reasoning_content: options.reasoningText });
           chunk({ role: "assistant", content: text });
@@ -111,6 +114,10 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
           { sql: "INSERT INTO todos(id,text,status) VALUES (1,'Generated first step','done'),(2,'Generated second step','pending')" },
           { sql: "INSERT INTO memories(id,title,text) VALUES ('generated-note','Generated note','Generated retained observation.')" },
         ] } });
+      } else if (options.toolBatches && toolMessages.length < options.toolBatches.length) {
+        finish(options.toolBatches[toolMessages.length]);
+      } else if (options.toolCalls && toolMessages.length < options.toolCalls.length) {
+        finish(options.toolCalls[toolMessages.length]);
       } else if (options.toolCall && toolMessages.length === 0) {
         finish(options.toolCall);
       } else if (options.agentTerminalRead && toolMessages.length === 1) {

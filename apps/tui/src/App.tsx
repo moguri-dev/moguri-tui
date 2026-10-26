@@ -12,7 +12,7 @@ type MoguriClient = MoguriSdk;
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
@@ -65,6 +65,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const availableModels = snapshot?.provider.models.filter((model) => !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
   const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
   const localIssues = snapshot?.issues.filter((issue) => issue.projectId === project?.id && !issue.archived) ?? [];
+  const continuedWork = snapshot?.projectWorkRuns.findLast((work) => work.originSessionId === session?.id);
   const editor = React.useMemo(() => {
     if (!session) return null;
     let value = editors.current.get(session.id);
@@ -245,7 +246,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (result.kind === "profile") { await chooseProfile(result.profileId); return; }
     if (result.kind === "ok") { setNotice(result.message); return; }
     if (result.kind === "text") { show(result.text); return; }
-    if (result.kind === "session") { await chooseSession(result.sessionId); return; }
+    if (result.kind === "session") { await chooseSession(result.sessionId); if (client.getState().snapshot?.sessions.find((session) => session.id === result.sessionId)?.purpose === "kanban") setMode("issues"); return; }
     if (result.kind === "copy") { if (!native) throw new Error("Clipboard access is unavailable in this terminal binding."); await native.copy(result.text); setNotice("Copied."); return; }
     if (result.kind === "artifact-editor") { openArtifactEditor(result.artifact); return; }
     if (result.kind === "export") { if (!native?.saveExport || !result.path) throw new Error("Use /artifact export ID ABSOLUTE_NEW_FILE_PATH with an available native file binding."); const saved = await native.saveExport(result.path, result.document); setNotice(`Export saved to ${saved.path}. Stored copies are unchanged.`); return; }
@@ -254,7 +255,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     else if (result.panel === "Settings") setMode("settings");
     else if (result.panel === "Queue") setMode("queue");
     else if (result.panel === "Artifacts") setMode("artifacts");
-    else if (result.panel === "Work item") await openGithubItems("issue");
+    else if (result.panel === "Work item") setMode("work-items");
     else if (result.panel === "Insights") show({ session, project, routings: session ? client.routing.history(session.id) : [], events: events.filter((event) => event.session_id === session?.id).slice(-20) });
     else if (result.url) { if (!native) throw new Error("Default-browser access is unavailable in this terminal binding."); await native.browser(result.url); }
     else if (result.path) { if (!native) throw new Error("Default-file access is unavailable in this terminal binding."); await native.file(result.path); }
@@ -736,12 +737,21 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "artifacts" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Independent retained documents</text><text fg={colors.muted} height={3}>Ordinary artifacts survive session deletion. Candidates and generation proposals are deleted with their origin session or verified exact PR merge. Archiving alone preserves them. Provenance never grants permission.</text>
           <select focused flexGrow={1} options={[{ name: "+ New retained document", description: "Plan, decision, answer, research note or report.", value: "" }, ...(snapshot?.artifacts ?? []).map((artifact) => ({ name: safe(artifact.name), description: `${artifact.kind} / ${artifact.status} / revision ${artifact.revision} / ${artifact.projectId ? snapshot?.projects.find((project) => project.id === artifact.projectId)?.name ?? "Former project" : "Profile"}`, value: artifact.id }))]} onSelect={(_, option) => { if (option) void perform(() => openArtifact(String(option.value) || undefined)); }} />
           <text fg={colors.muted} height={3}>Enter edits text, folderId and workItemId. /artifact ID reads provenance. /project-removal materialize-preview reviews a repository copy. F5 works without a session. Esc returns.</text></box> :
+        mode === "work-items" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Project work item / {safe(project?.name ?? "Choose a project")}</text>
+          <select focused flexGrow={1} options={[{ name: "GitHub issues", description: "Read this project's actual signed-in account.", value: "github" },
+            { name: "Clear Kanban work item", description: "Metadata only; no card is deleted.", value: "" }, ...localIssues.map((issue) => ({ name: `#${issue.number} ${safe(issue.title)}`,
+              description: issue.linear ? `Linear ${safe(issue.linear.identifier)} / retained local card` : "Project Kanban card / no inference", value: issue.id }))]}
+            onSelect={(_, option) => { if (!option || !session) return; void perform(async () => {
+              if (option.value === "github") { await openGithubItems("issue"); return; }
+              await client.sessions.organize(session.id, { workItemId: String(option.value) || null, ...(option.value ? { workItemUrl: null } : {}) }); setMode("compose"); setNotice("Kanban work item updated.");
+            }); }} />
+          <text fg={colors.muted} height={3}>Enter links a card, or opens the GitHub picker. /continue-work [CARD_ID] starts one isolated task to its draft PR. Esc returns.</text></box> :
         mode === "issues" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Local project Kanban / {safe(project?.name ?? "Open a project first")}</text>
           <text fg={colors.muted} height={3}>{board?.columns.map((column) => `${safe(column.name)}: ${localIssues.filter((issue) => issue.phaseId === column.id).length}`).join("  |  ") ?? "No project selected."}</text>
           <select focused flexGrow={1} options={[{ name: "+ New local issue", description: "Feature, bug or misc. No assignee.", value: "" }, ...localIssues.map((issue) => ({
             name: `#${issue.number} ${safe(issue.title)}`, description: `${issue.kind} / ${safe(board?.columns.find((column) => column.id === issue.phaseId)?.name ?? issue.phaseId)}${issue.pullRequest ? ` / PR ${issue.pullRequest.state}` : ""}`, value: issue.id,
           }))]} onSelect={(_, option) => { if (option) void perform(async () => openIssueEditor(String(option.value) || undefined)); }} />
-          <text fg={colors.muted} height={3}>Enter edits JSON. /board edit configures phases and Linear. /issue move ID PHASE moves tickets. /board refresh reads linked PRs. Esc returns.</text></box> :
+          <text fg={colors.muted} height={4}>Enter edits JSON. /continue-work [CARD_ID] runs one task to its draft PR. /work-item picks a card. /kanban source selects open GitHub work. /board edit configures phases/Linear. Esc opens this board's chat.</text></box> :
         mode === "capability-output" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
         mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
@@ -805,6 +815,8 @@ Esc composer
 /subagent PROMPT (only when explicitly enabled)
 /dictate status|download accept-license|record|stop|file WAV|insert
 /issues | /issue new | /issue create feature|bug|misc TITLE
+/kanban [show|hide|source kanban|github-issues|github-prs]
+/continue-work [CARD_ID] | /work-item [CARD_ID|clear]
 /issue edit ID | /issue move ID PHASE | /issue archive|restore ID
 /board | /board edit | /board refresh
 /cache inspect npm|pnpm
@@ -849,6 +861,10 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
               {message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) => <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>)}
             </box>)}
           </scrollbox>}
+        {mode === "compose" && continuedWork && <box flexDirection="column" border borderColor={colors.accent} padding={1} flexShrink={0}>
+          <text fg={colors.accent}>{safe(`${continuedWork.source.title}: ${continuedWork.status} / one delegated task to its PR`)}</text>
+          <text fg={colors.muted}>{safe(continuedWork.diagnostic ?? (continuedWork.prUrl ? `PR: ${continuedWork.prUrl}` : `Open its child in the sessions list, or inspect /kanban work ${continuedWork.id}.`))}</text>
+        </box>}
         {snapshot?.provider.login && <box flexDirection="column" border borderColor={colors.accent} padding={1}>
           <text fg={colors.accent}>GitHub Copilot sign-in: {snapshot.provider.login.code}</text><text fg={colors.foreground}>{snapshot.provider.login.url}</text><text fg={colors.muted}>Authorize in your browser. /cancel-login cancels. Account model policies may be enabled.</text>
         </box>}
