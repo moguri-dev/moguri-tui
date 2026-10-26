@@ -53,3 +53,24 @@ test("native TUI remembered approval choices share project grants with later tur
     await fixture.send("generated tool TUI remembered again"); assert.equal((await fixture.terminal()).status, "completed");
   } finally { flushSync(() => root.unmount()); await setup.dispose(); sdk.disconnect(); await fixture.close(); }
 });
+
+test("native TUI continuation asks for a route each time and sends the slash literally only after the actual model choice", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+  const fixture = await setupFixture({ responseMode: "text" }), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 140, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    await fixture.configure();
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk })));
+    await frameUntil(setup, "Write a prompt"); await setup.mockInput.typeText("/continue-work"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil(setup, "choose for this request");
+    assert.equal(fixture.requests.length, 0);
+    setup.mockInput.pressEscape(); await frameUntil(setup, "Draft saved");
+    assert.equal(setup.captureCharFrame().includes("choose for this request"), false);
+    assert.equal(fixture.session().draft.text, "/continue-work");
+    setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(setup, "choose for this request");
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter();
+    await fixture.terminal();
+    assert.equal(fixture.requests.length, 1);
+    assert.ok(fixture.session().messages.some((message) => message.role === "user" && message.text === "/continue-work"));
+    assert.equal(fixture.service.controller.snapshot().projectWorkRuns.length, 0);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); sdk.disconnect(); await fixture.close(); }
+});

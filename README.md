@@ -340,12 +340,15 @@ ready languages. No cloud ASR fallback or automatic model-weight download occurs
 
 Projects also have a **local Kanban** for feature, bug and misc tickets, with
 their own board chat, shared Show/Hide preference and same-panel GitHub/Linear
-sources. **Continue work** takes one eligible item in an isolated Local checkout
+sources, per-column creation and drag/drop. `/continue-work` or the prompt
+**continue work** asks each time whether to use Kanban or send the prompt
+normally. Kanban takes one eligible item in an isolated Local checkout
 through its draft PR; it does not merge or drain the backlog. Project secondary
 click opens actions; dragging or Alt+Up/Down reorders. Work item can select a
 Kanban card. [Setup and boundaries](docs/architecture/project-kanban.md).
-Custom phases, connected PRs and read-only observation remain. A verified merge
-moves a ticket to the chosen phase. Optional Linear imports start off, use a
+**Sync with GitHub** updates linked status into Kanban only and can optionally
+import open repository issues. Draft PRs mean in progress, ready PRs mean review,
+and completed/won't-do closed issues mean done. Optional Linear imports start off, use a
 user-supplied keychain credential and never upload local tickets.
 
 The **shared dependency cache** reuses SHA-512-verified archives across projects

@@ -8,6 +8,7 @@ import { startService } from "../apps/service/src/server.ts";
 import { runProgram } from "../apps/service/src/program.ts";
 import type { GitHubWorkflowOptions } from "../apps/service/src/github-workflows.ts";
 import type { ProviderAdapter } from "../apps/service/src/provider.ts";
+import type { IntegrationOptions } from "../apps/service/src/project-integrations.ts";
 import type { GithubScope } from "../packages/protocol/src/github-workflows.ts";
 import { defaultBoard, MoguriError } from "../packages/protocol/src/index.ts";
 
@@ -19,7 +20,7 @@ export async function connectGithubSdk(sdk: MoguriSdk): Promise<void> {
     await delay(10);
   }
 }
-export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, configuredProvider?: ProviderAdapter, retentionKey: Buffer = randomBytes(32)) {
+export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, configuredProvider?: ProviderAdapter, retentionKey: Buffer = randomBytes(32), integrations: IntegrationOptions = {}) {
   const parent = resolve(".moguri", "qualification");
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const directory = join(parent, `generated-github-service-${randomUUID()}`);
@@ -42,7 +43,7 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
   let service: Awaited<ReturnType<typeof startService>> | undefined, sdk: MoguriSdk | undefined;
   try {
     service = await startService({ stateDir, retentionKey, provider, platform: {
-      integrations: { githubCliRead: async (endpoint, root, signal) => {
+      integrations: { ...integrations, githubCliRead: async (endpoint, root, signal) => {
         if (!options.runProgram) throw new MoguriError("github_cli_unavailable", "Generated fixture has no authenticated GitHub CLI account.", 403);
         const response = await options.runProgram("gh", ["api", "--hostname", "github.com", "--include", "--method", "GET", endpoint], {
           cwd: root, signal, timeoutMs: 15000, maxBytes: 512 * 1024, label: "Generated GitHub account",
@@ -59,13 +60,13 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
     const sessionId = (await sdk.sessions.create(projectId, "Generated GitHub workflow")).id!;
     const scope: GithubScope = { env: "Local", projectId, sessionId };
     const session = () => sdk!.getState().snapshot!.sessions.find((value) => value.id === sessionId)!;
-    return { directory, root, remote, hooks, stateDir, service, sdk, scope, projectId, sessionId, session, git, bare,
+    return { directory, root, remote, hooks, stateDir, service, sdk, scope, projectId, sessionId, session, git, bare, githubProgram: options.runProgram,
       close: async () => { sdk!.disconnect(); await service!.close(); await rm(directory, { recursive: true, force: true }); } };
   } catch (error) {
     sdk?.disconnect(); await service?.close(); await rm(directory, { recursive: true, force: true }); throw error;
   }
 }
-export async function githubApplicationFixture(options: { provider?: ProviderAdapter; ownedNetwork?: boolean; retentionKey?: Buffer } = {}) {
+export async function githubApplicationFixture(options: { provider?: ProviderAdapter; ownedNetwork?: boolean; retentionKey?: Buffer; integrations?: IntegrationOptions } = {}) {
     const calls: { method: string; path: string }[] = [];
     const repository = { id: 41, name: "fixture", full_name: "generated-owner/fixture",
       owner: { login: "generated-owner", type: "User" }, description: "Generated application repository",
@@ -118,7 +119,7 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       }
       else throw new Error(`Unexpected generated GitHub request: ${method} ${path}`);
       return `HTTP/2.0 200 OK\r\n\r\n${JSON.stringify(data)}`;
-    } }, options.provider, options.retentionKey);
+    } }, options.provider, options.retentionKey, options.integrations);
     head = fixture.git(["rev-parse", "HEAD"]); pulls.push(pull(11));
     fixture.git(["remote", "set-url", "origin", repository.ssh_url]);
     fixture.git(["switch", "-c", "generated-feature"]);

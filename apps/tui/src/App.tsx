@@ -6,13 +6,13 @@ import { stripVTControlCharacters } from "node:util";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { attachmentStatus, compareSessions, progressBar } from "../../../packages/sdk/src/index.ts";
 import { commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope } from "../../../packages/sdk/src/index.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
@@ -25,6 +25,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null);
   const [mode, setMode] = useState<Mode>("compose");
   const [notice, setNotice] = useState("");
+  const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
   const [otherQuestion, setOtherQuestion] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [detailed, setDetailed] = useState(false);
@@ -242,6 +243,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     setTokenValue((value) => (value + text).slice(0, 32768));
   });
   const slashResult = async (result: SlashResult) => {
+    if (result.kind === "continue-work") { setContinueReview(result.review); setMode("continue-work"); return; }
     if (result.kind === "profiles") { await openProfiles(); return; }
     if (result.kind === "profile") { await chooseProfile(result.profileId); return; }
     if (result.kind === "ok") { setNotice(result.message); return; }
@@ -270,11 +272,17 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
       if (documentCapture.current?.sessionId === session.id) throw new Error("Document extraction is still active. Wait or use Ctrl+C to cancel this capture before sending or holding its prompt.");
       if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
+      if (!held && session.projectId && !text.startsWith("/") && continueWorkInput(text)) {
+        setContinueReview(await editor.reviewContinueWork()); setMode("continue-work"); return;
+      }
       if (name === "/steer" || name === "/interrupt") editor.edit(argument);
       await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
       return;
     }
     const shared = parseSlash(text);
+    if (shared?.name === "continue-work") {
+      await editor.flush(); await slashResult(await client.slash(session.id, text, "tui")); return;
+    }
     if (shared?.name === "github" && /^(?:repos(?:\s|$)|issues$|pulls$)/.test(shared.argument)) {
       await editor.flush();
       if (shared.argument === "issues" || shared.argument === "pulls") await openGithubItems(shared.argument === "issues" ? "issue" : "pull");
@@ -508,7 +516,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
-    if (key.name === "escape") { setMode("compose"); return; }
+    if (key.name === "escape") { setContinueReview(null); setMode("compose"); return; }
     if (mode === "github-clone" && githubCloneJob && key.ctrl && key.name === "c") { key.preventDefault(); void perform(() => client.jobs.cancel(githubCloneJob)); return; }
     if (mode === "github-detail" && githubSelection && key.ctrl && ["n", "l", "b"].includes(key.name)) {
       key.preventDefault();
@@ -674,6 +682,22 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.accent} height={2}>{safe(`${githubSelection?.source.repository}#${githubSelection?.item.number} ${githubSelection?.item.title}`)}</text>
           <scrollbox focused={!githubBusy} flexGrow={1}><text fg={colors.foreground}>{safe(`${githubSelection?.item.state}\n\n${githubSelection?.item.body ?? ""}\n\nController source workspace: ${githubSelection?.binding.root.root}\nSource SHA-256: ${githubSelection?.digest}`)}</text></scrollbox>
           <text fg={colors.attention} height={3}>Ctrl+N starts a session with this exact source as an unsent draft. Ctrl+L links it here. Ctrl+B opens GitHub. No checkout or inference is started. Esc returns.</text></box> :
+        mode === "continue-work" && continueReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>Continue work / choose for this request</text>
+          <text fg={colors.muted} height={4}>Work from Kanban, or send this exact prompt to the model? Esc cancels and preserves the draft. No route is remembered.</text>
+          <select flexGrow={1} focused options={[
+            { name: "Work from Kanban", description: "One actual project item in an isolated Local checkout, through its PR", value: "kanban" },
+            { name: "Send to model", description: "Send the unchanged prompt through the normal chat and permissions", value: "prompt" },
+          ]} selectedBackgroundColor={colors.panel} selectedTextColor={colors.accent} textColor={colors.foreground} descriptionColor={colors.muted}
+            onSelect={(_, option) => { if (option?.value === "kanban" || option?.value === "prompt") {
+              const choice = option.value, review = continueReview;
+              void perform(async () => {
+                if (!editor || editor.sessionId !== review.sessionId) throw new Error("The original continuation owner changed. No draft was consumed.");
+                await editor.chooseContinueWork(review, choice);
+                setContinueReview(null); setMode("compose");
+              });
+            } }} />
+        </box> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
@@ -745,13 +769,13 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               if (option.value === "github") { await openGithubItems("issue"); return; }
               await client.sessions.organize(session.id, { workItemId: String(option.value) || null, ...(option.value ? { workItemUrl: null } : {}) }); setMode("compose"); setNotice("Kanban work item updated.");
             }); }} />
-          <text fg={colors.muted} height={3}>Enter links a card, or opens the GitHub picker. /continue-work [CARD_ID] starts one isolated task to its draft PR. Esc returns.</text></box> :
+          <text fg={colors.muted} height={3}>Enter links a card, or opens the GitHub picker. /continue-work [CARD_ID] asks Kanban or model for this request. Esc returns.</text></box> :
         mode === "issues" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Local project Kanban / {safe(project?.name ?? "Open a project first")}</text>
           <text fg={colors.muted} height={3}>{board?.columns.map((column) => `${safe(column.name)}: ${localIssues.filter((issue) => issue.phaseId === column.id).length}`).join("  |  ") ?? "No project selected."}</text>
           <select focused flexGrow={1} options={[{ name: "+ New local issue", description: "Feature, bug or misc. No assignee.", value: "" }, ...localIssues.map((issue) => ({
             name: `#${issue.number} ${safe(issue.title)}`, description: `${issue.kind} / ${safe(board?.columns.find((column) => column.id === issue.phaseId)?.name ?? issue.phaseId)}${issue.pullRequest ? ` / PR ${issue.pullRequest.state}` : ""}`, value: issue.id,
           }))]} onSelect={(_, option) => { if (option) void perform(async () => openIssueEditor(String(option.value) || undefined)); }} />
-          <text fg={colors.muted} height={4}>Enter edits JSON. /continue-work [CARD_ID] runs one task to its draft PR. /work-item picks a card. /kanban source selects open GitHub work. /board edit configures phases/Linear. Esc opens this board's chat.</text></box> :
+          <text fg={colors.muted} height={4}>Enter edits JSON. /continue-work [CARD_ID] asks Kanban or model each time. /work-item picks a card. /kanban source selects open GitHub work. /board edit configures phases/sync/Linear. Esc opens this board's chat.</text></box> :
         mode === "capability-output" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
         mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>

@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { createInterface } from "node:readline/promises";
 import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
@@ -640,7 +641,15 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
       if (/^\/budget\s+(?:set|profile|global)\b/.test(action)) console.error(BUDGET_WARNING);
       const result = await sdk.slash(values.session, [action, ...args].join(" "), "cli");
-      if (result.kind === "export" && result.path) output(await saveArtifactExport(result.path, result.document)); else output(result);
+      if (result.kind === "continue-work" && process.stdin.isTTY && !values.json) {
+        const prompt = createInterface({ input: process.stdin, output: process.stdout });
+        try {
+          const answer = (await prompt.question("Continue work: [k] Kanban, [m] send to model, [c] cancel: ")).trim().toLowerCase();
+          if (answer === "k" || answer === "m") output(await sdk.kanban.choose(result.review, answer === "k" ? "kanban" : "prompt"));
+          else if (answer === "c" || answer === "") output({ cancelled: true, draftPreserved: true });
+          else throw new Error("Choose k, m or c. No request was dispatched; the saved draft is preserved.");
+        } finally { prompt.close(); }
+      } else if (result.kind === "export" && result.path) output(await saveArtifactExport(result.path, result.document)); else output(result);
     } else if (group === "metachat") {
       if (values.session && values.project) throw new Error("Choose --session or --project, not both. A settings chat cannot silently change its parent's scope.");
       const parent = snapshot.sessions.find((session) => session.id === values.session);
