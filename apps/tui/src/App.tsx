@@ -536,8 +536,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (key.name === "f5") { key.preventDefault(); setMode("artifacts"); return; }
     if (key.name === "f7") {
       key.preventDefault(); void perform(async () => {
-        const [budget, profiles, operations, storage] = await Promise.all([client.budgets.dashboard(), client.profiles.list(), client.telemetry.operations({ limit: 10 }), client.telemetry.storage()]);
-        show({ ...budget, globalBudget: profiles.catalog.globalBudget, operations, storage: storage.storage });
+        const [overview, budget, profiles, operations, storage] = await Promise.all([client.dashboard.overview(), client.budgets.dashboard(), client.profiles.list(), client.telemetry.operations({ limit: 10 }), client.telemetry.storage()]);
+        show({ ...overview, budget, globalBudget: profiles.catalog.globalBudget, operations, storage: storage.storage });
       }); return;
     }
     if (key.name === "f8") { key.preventDefault(); void perform(openProfiles); return; }

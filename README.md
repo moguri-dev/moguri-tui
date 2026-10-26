@@ -88,12 +88,15 @@ the user selects their source.
 The [desktop interaction update](docs/setup.md#desktop-interactions) adds a
 compact five-source attachment menu, retained previews/removal, reviewed session
 drag-to-attach, persisted session order and confirmation preferences. Use the
-session grip or Alt+Up/Down to reorder without nesting; Unpin has a crossed-out
-pin. Global views live on the left; the right rail contains only the seven
-session tools.
+whole session row or Alt+Up/Down to reorder siblings, including children.
+Dragging a child out asks before detaching, with a saved opt-out in Settings /
+Confirmations. Unpin has a crossed-out
+pin. Global views live on the left; the right rail contains the session tools
+and per-session **Code change** and **Work item** links.
 Click an active right-rail icon again to collapse its pane back to the rail.
-Global Terminal opens independently in Moguri's Local data directory; project terminals
-keep their own roots. Opening Terminal or explicitly switching chats with it visible starts
+Terminal belongs to a session: project-free consoles start in configured HOME,
+and project consoles keep their bound worktree. There is no global-terminal UI.
+Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
 Dictation distinguishes initialization, recording and
 transcript finalization without sending a prompt automatically.
@@ -114,6 +117,16 @@ compact recoverable results, deterministic file/data/document operations and
 browser-free search. Root-bound main/child messaging and orchestration preserve
 read-only side chats, actual actors, approvals and aggregate budgets. Shared
 workflows are `/review`, `/security`, `/performance` and `/debug`.
+
+The [workspace experience](docs/architecture/workspace-experience.md) adds
+chart-first **My work, Usage, Cost and Velocity** dashboard pages and a
+profile-private **skill gateway** for local folders and refreshed remote
+archives. Settings use compact information/copy controls and contain Artifacts,
+Candidates and unified Sandbox management. Suggestions starts globally with
+local usage-gap checks; model generation still requires exact source review.
+Automations and the Work item link panel are intentionally empty. Existing
+session PRs open in Code change. Copilot connection status stays in Settings,
+not the left sidebar.
 
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
 document snapshots with bounded, approved page/section/cell inspection.
@@ -287,8 +300,8 @@ See [browser control](docs/architecture/agent-browser.md).
 Attachments stay compact in the composer/chat. Clicking an image opens the
 large, uncropped viewer without changing captured context.
 
-One profile-owned **Global terminal** also works without a session, separately
-from session consoles. Project-free Autopilot cannot invent workspace access, and side
+Project-free sessions can open private HOME consoles without granting model
+workspace access. Project-free Autopilot cannot invent workspace access, and side
 chats expose an explicit concrete-model selector when needed.
 User consoles retain authenticated per-profile/peer owners across
 explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
