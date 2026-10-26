@@ -118,7 +118,6 @@ moguri candidate stop|wait ID       Inspect actual partial/cancelled outcomes; n
 moguri terminal list [--session ID]  Existing profile-owned consoles and actual Local/SSH roots
 moguri terminal open --session ID   Explicit new user console, not an agent tool
 moguri terminal open --session ID --root PATH  Explicit Local root for a project-free chat
-moguri terminal open-global PATH    One independent Local console for this profile
 moguri terminal default-root        Disclose the canonical home root; never starts a shell
 moguri terminal read|reconcile|close ID
 moguri terminal owner-reconcile OWNER_ID  Inspect even an owner with no terminal intent
@@ -218,6 +217,9 @@ moguri capability rollback ID --revision N --digest SHA --confirm-review
 moguri capability use ID --session ID --digest SHA  Inserts a skill into the saved draft
 moguri containment status|require-sandbox --confirm-review  Explicit global new-turn policy
 moguri skills import PROJECT_ID SKILL.md
+moguri skills sources|find [QUERY] [--session ID]
+moguri skills read ID --digest SHA [--session ID]  Refresh and check exact skill bytes
+moguri dashboard [work|usage|cost|velocity] [--filters JSON --project ID]
 moguri plugins import PROJECT_ID manifest.json
 moguri mcp --session SESSION_ID    Native stdio MCP gateway
 moguri mcp tools SERVER [QUERY]    Bounded tool discovery
@@ -381,8 +383,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         const terminals = snapshot.terminals.filter((terminal) => !values.session || terminal.sessionId === values.session);
         output({ terminals, owners: snapshot.terminalOwners, warning: "Owners are profile/Local-or-pinned-SSH scoped. Actual env/peer/root remain captured; bounded volatile output, no agent context, automatic replacement or input replay." });
       } else if (action === "open" && values.session) output(await sdk.terminal.open(values.session, 80, 24, undefined, values.root));
-      else if (action === "global") output(await sdk.terminal.openGlobal());
-      else if (action === "open-global" && args[0]) output(await sdk.terminal.openGlobal(args[0]));
+      else if (action === "global" || action === "open-global") throw new Error("Global Terminal was removed. Use terminal open --session ID. Existing consoles remain available through list/read/reconcile/close.");
       else if (action === "default-root") output(await sdk.terminal.defaultRoot());
       else if (action === "read" && args[0]) output(await sdk.terminal.read(args[0]));
       else if (action === "reconcile" && args[0]) { await sdk.terminal.reconcile(args[0]); output(sdk.getState().snapshot!.terminals.find((terminal) => terminal.id === args[0])); }
@@ -396,7 +397,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         let data = "";
         for await (const chunk of process.stdin) { data += String(chunk); if (Buffer.byteLength(data) > 65536) throw new Error("One terminal input batch is limited to 64 KiB; nothing was submitted."); }
         await sdk.terminal.input(args[0], data); output({ acknowledged: true, warning: "Accepted by the exact owned PTY, not proof a shell command succeeded. No input was persisted or replayed." });
-      } else throw new Error("Use terminal list/open/global/open-global/default-root/read/reconcile/close/input/acknowledge. Open needs --session ID; project-free open needs --root PATH. Global uses the Moguri data root; open-global needs an explicit absolute root. Inspection acknowledgements need --confirm-review.");
+      } else throw new Error("Use terminal list/open/default-root/read/reconcile/close/input/acknowledge. Open needs --session ID; project-free open needs --root PATH. Inspection acknowledgements need --confirm-review.");
     } else if (group === "profile" || group === "profiles") {
       if (!action || action === "list") output(await sdk.profiles.list());
       else if (action === "create" && args.length) { const created = await sdk.profiles.create(args.join(" "), values.color ?? null); output(await sdk.profiles.wait(created.id!)); }
@@ -801,8 +802,19 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else throw new Error("Use memory index/search/graph PROJECT_ID for Local data, or --session SESSION_ID.");
       }
     } else if (group === "skills" || group === "plugins") {
-      if (action !== "import" || !args[0] || !args[1]) throw new Error("Use import PROJECT_ID FILE. Imported capabilities start disabled.");
-      output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));
+      if (group === "skills" && action === "sources") output(sdk.settings.get()?.values.skillSources ?? []);
+      else if (group === "skills" && action === "find") output(await sdk.skills.find(args.join(" "), { ...(values.session ? { sessionId: values.session } : {}) }));
+      else if (group === "skills" && action === "read" && args[0] && values.digest) output(await sdk.skills.read(args[0], values.digest, values.session));
+      else {
+        if (action !== "import" || !args[0] || !args[1]) throw new Error("Use skills sources/find/read ID --digest SHA, or import PROJECT_ID FILE. Imported capabilities start disabled.");
+        output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));
+      }
+    } else if (group === "dashboard") {
+      if (action && !["work", "usage", "cost", "velocity"].includes(action)) throw new Error("Use dashboard work, usage, cost or velocity, with optional --filters JSON.");
+      const filters: unknown = values.filters ? JSON.parse(values.filters) : {};
+      if (!isRecord(filters) || Object.hasOwn(filters, "type")) throw new Error("Use a dashboard filter object with range and optional projectId.");
+      const { DashboardQuerySchema } = await import("../../../packages/sdk/src/index.ts");
+      output(await sdk.query(parse(DashboardQuerySchema, { ...filters, ...(values.project ? { projectId: values.project } : {}), type: "dashboard.overview" })));
     } else if (group === "mcp") {
       if (!action) {
         if (!values.session) throw new Error("Bind the gateway to --session SESSION_ID. It cannot approve itself.");
