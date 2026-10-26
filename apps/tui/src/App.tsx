@@ -62,7 +62,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const recommendation = pendingQuestion?.recommendation;
   const questionDetails = pendingQuestion ? `${pendingQuestion.question}${recommendation ? `\n\nModel recommends: ${recommendation.choice}\n${recommendation.reason}\nFrom ${recommendation.modelId}. Untrusted advice; you still decide.` : ""}` : "";
   const approvalAdvice = session?.pendingApproval?.recommendationSource?.stepId === session?.pendingApproval?.stepId && session?.pendingApproval?.recommendationSource?.callId === session?.pendingApproval?.call.id ? session?.pendingApproval?.recommendation : undefined;
-  const availableModels = snapshot?.provider.models.filter((model) => !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
+  const availableModels = snapshot?.provider.models.filter((model) => model.synthetic || !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
   const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
   const localIssues = snapshot?.issues.filter((issue) => issue.projectId === project?.id && !issue.archived) ?? [];
   const continuedWork = snapshot?.projectWorkRuns.findLast((work) => work.originSessionId === session?.id);
@@ -757,10 +757,18 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
-          {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ? snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
-            onSelect={(_, option) => { if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; } if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }, true); setMode("compose"); }); }} /> :
+          {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
+            model.environments && !model.environments.includes(session?.controls.env ?? "Local") ? `Unavailable: ${snapshot?.routingDiagnostics?.join(" ") ?? "No eligible model in this environment."}` :
+              snapshot?.settings.values.kupo.workflow === "auto" ? "Automatic Single / Cascade / eligible Critique; every actual role is metered" :
+                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
+            onSelect={(_, option) => {
+              if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; }
+              const model = availableModels.find((model) => model.id === option?.value);
+              if (model?.environments && !model.environments.includes(session.controls.env)) { setNotice(`Kupo is unavailable in ${session.controls.env}. ${snapshot?.routingDiagnostics?.join(" ") ?? ""}`); return; }
+              if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }, true); setMode("compose"); });
+            }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
-          <text fg={colors.muted} height={4} flexShrink={0}>kupo routing is opt-in. /kupo status shows exact policy. /compound reviews Local Cascade/Critique and separate project tests. Finite Local turns need /winddown status and explicit reserved policy. Images/tuning stay blocked; model advice is not source or Git acceptance.</text></box> :
+          <text fg={colors.muted} height={4} flexShrink={0}>Kupo uses configured models by default. One eligible model runs directly; multiple models support automatic Single, gated Cascade or eligible Critique. /kupo status shows capabilities and policy. Normal approvals remain authoritative. /compound keeps separate worktree/test review.</text></box> :
         mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
         mode === "help" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{`Commands
 
@@ -836,8 +844,9 @@ and separate accepted-work Git checkpoints. Local Max needs an explicitly
 configured bounded decision provider; /decisions status/set/read exposes only
 shared policy and actual evidence, never a fake user answer or new permission.
 Jev and Remote/native Max remain unqualified.
-kupo Single is experimental and off by default. Configure /kupo set POLICY_JSON
-before explicitly selecting /model kupo. Finite Local caps need explicit reserved
+Kupo is always listed. Select /model kupo to use configured eligible models.
+/kupo status shows capability categories and policy. Finite automatic caps stay blocked;
+legacy Single and reviewed worktree workflows need explicit reserved
 wind-down; images and model tuning remain blocked for Single. Guided needs a human.
 Selecting Autopilot/Max enables automatic tool approvals, never hard-policy overrides.
 Ctrl+Shift+Y remembers approvals; /github repos, issues and pulls open native pickers.

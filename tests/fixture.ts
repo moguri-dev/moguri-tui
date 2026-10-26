@@ -25,6 +25,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
 export interface GeneratedProviderOptions {
+  respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> }; hold?: boolean };
   issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
   stateSql?: boolean;
   stateSqlStatements?: { sql: string; parameters?: (string | number | boolean | null)[] }[];
@@ -82,7 +83,11 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         if (!options.omitUsage) response.write(`data: ${JSON.stringify({ choices: [], usage: options.usage ?? { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
         response.end("data: [DONE]\n\n");
       };
-      if (options.stream) {
+      if (options.respond) {
+        const result = options.respond(body, requests.length);
+        if (result.hold) { chunk({ role: "assistant", content: result.text ?? "Generated owned request held." }); held.add(response); response.on("close", () => held.delete(response)); }
+        else finish(result.tool, result.text);
+      } else if (options.stream) {
         for (const text of options.stream.chunks) {
           if (response.destroyed) return;
           chunk({ role: "assistant", content: text });

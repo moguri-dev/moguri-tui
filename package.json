@@ -36,6 +36,7 @@
     "docs/architecture/engagement.md",
     "docs/architecture/decision-primitives.md",
     "docs/architecture/routing.md",
+    "docs/architecture/automatic-kupo.md",
     "docs/architecture/execution-transports.md",
     "docs/architecture/managed-sandbox.md",
     "docs/architecture/session-workspace.md",
