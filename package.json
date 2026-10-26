@@ -66,6 +66,7 @@
     "docs/architecture/remote-plan-saves.md",
     "docs/architecture/platform-workflows.md",
     "docs/architecture/github-workflows.md",
+    "docs/architecture/session-github-workflows.md",
     "docs/architecture/linear-workflows.md",
     "docs/architecture/dependency-cache-scopes.md",
     "docs/architecture/task-progress.md",

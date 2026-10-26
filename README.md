@@ -288,7 +288,7 @@ Attachments stay compact in the composer/chat. Clicking an image opens the
 large, uncropped viewer without changing captured context.
 
 One profile-owned **Global terminal** also works without a session, separately
-from session consoles. Project-free Autopilot adds no tool grants, and side
+from session consoles. Project-free Autopilot cannot invent workspace access, and side
 chats expose an explicit concrete-model selector when needed.
 User consoles retain authenticated per-profile/peer owners across
 explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
@@ -476,7 +476,7 @@ requirements from deferred work.
 - The chat composer, TUI, and CLI expose **Env**, **Model**, **Autonomy level**, and **Budget**. Starting defaults are Local, no model until provider login or local-model configuration, Manual, and Unlimited. Global, profile, and repo/project settings can supply different defaults.
 - Desktop has an Attach button and image paste; attachment triggers are `^` for a local file or folder, `:` for an active session, `#` for a GitHub issue or PR, and `@` for a named Local project file/folder or GitHub file. `!` remains a legacy session alias. TUI/CLI expose the same typed snapshots and review boundaries.
 - **Env** offers **Local**, **Sandbox** via SendBox, and **Remote** via SSH. Remote runs the agent and model calls on the configured machine. Global policy may allow only Sandbox or Remote; it blocks new Local turns while existing Local turns may finish. Neither SSH nor a label implies SendBox containment.
-- **Autonomy level** is independent of model choice and env: **Manual** (default), **Guided** (current model recommends; user confirms), **Autopilot** (current model acts within delegated policy and asks sparingly), and **Autopilot Max** (a decision model decides and steers within delegated policy). No level can bypass hard permissions, budgets, or allowed-env policy.
+- **Autonomy level** is independent of model choice and env: **Manual** (default), **Guided** (model recommends; user confirms), **Autopilot** (automatic tool/command approvals), and **Autopilot Max** (the same approvals plus qualified decision-model choices and steering). Hard denials, read-only mode, budgets and allowed-env policy remain final. See [session and GitHub workflows](docs/setup.md#session-approvals-and-github-workflows) for remembered grants, repository/PR/issue pickers and updater-token setup.
 - **Budget** defaults to unlimited. Users can cap cumulative session tokens, USD, or both when telemetry supports it. The UI warns that caps may interrupt work; kupo tries to checkpoint and commit accepted changes before exhaustion when Git policy and approvals permit it.
 - Dashboard (7,30,60,90,365 days, entire selectable year, custom period, all time)
   - Sessions cost

@@ -9,14 +9,21 @@ export function assertCurrentSchema(store: { db: DatabaseSync }): void {
 export function removePost44FixtureMarkers(db: DatabaseSync): void {
   const future = db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type') IN ('candidate.owner_bound','candidate.cleanup_recorded','candidate.usage_retained','model.selection_remembered','session.pr_observed','skill.used','sandbox.setup_recorded','task.plan_updated','notification.sound_saved','notification.sound_removed','application.configured','application.storage_recorded','application.update_recorded')").get();
   if (Number(future?.count)) throw new Error("Generate genuine pre-settings history before relabeling an additive-marker fixture. New native intent or sound grants cannot become old data.");
+  db.exec("DELETE FROM retention_metadata WHERE id='session_github_workflows_schema'");
   db.exec("DELETE FROM retention_metadata WHERE id IN ('lean_tooling_schema','lean_tooling_convergence_schema','candidate_retention_schema','browser_control_schema','model_defaults_schema','session_indicators_schema','desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
 }
 export function retainedCiphertextRows(db: DatabaseSync) {
   return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
     .map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()] as const);
 }
-export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56, lineage: "main" | "desktop" = "main"): Promise<void> {
+export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57 | 58, lineage: "main" | "desktop" = "main"): Promise<void> {
   const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
+  if (events.some((event) => (event.event_type === "session.created" || event.event_type === "session.configured") && event.payload.controls.automaticApprovals !== undefined ||
+    event.event_type === "session.created" && (event.payload.workItemUrl || event.payload.githubSource) || event.event_type === "session.organized" && event.payload.changes.workItemUrl !== undefined ||
+    event.event_type === "tool.decided" && event.payload.actor === "autonomy" ||
+    event.event_type === "settings.updated" && event.payload.settings.permissions.remembered?.length)) {
+    throw new Error("Generate genuine pre-workflow history; automatic approval consent, remembered grants and GitHub issue bindings cannot become older state.");
+  }
   const desktop = lineage === "desktop";
   if (events.some((event) => event.event_type.startsWith("coordination.") ||
     event.event_type === "tool.completed" && event.payload.rawDigest ||
@@ -114,6 +121,7 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
+      db.exec("DELETE FROM retention_metadata WHERE id='session_github_workflows_schema'");
       if (version < 50 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.update_recorded'").get()?.count)) throw new Error("Generate pre-update history; never relabel actual download, installer or retained restart identity as an older schema.");
       if (version < 49 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.storage_recorded'").get()?.count)) throw new Error("Generate pre-relocation history; never relabel actual whole-store copy/root authority as an older schema.");
       if (version < 48 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.configured'").get()?.count)) throw new Error("Generate pre-application-preference history; never relabel actual root-owned configuration as an older schema.");
@@ -123,9 +131,8 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
       if (version < 29 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='candidate.saved'").get()?.count)) throw new Error("Generate pre-candidate history for a legacy fixture; do not relabel future events as an older schema.");
       if (version >= 14) {
         db.exec(`BEGIN IMMEDIATE;
-          DELETE FROM retention_metadata WHERE id='lean_tooling_schema';
-          DELETE FROM retention_metadata WHERE id='lean_tooling_convergence_schema';
-          DELETE FROM retention_metadata WHERE id='candidate_retention_schema';
+          ${version < 58 ? "DELETE FROM retention_metadata WHERE id='lean_tooling_schema'; DELETE FROM retention_metadata WHERE id='lean_tooling_convergence_schema';" : ""}
+          ${version < 57 ? "DELETE FROM retention_metadata WHERE id='candidate_retention_schema';" : ""}
           ${version < 56 ? "DELETE FROM retention_metadata WHERE id='browser_control_schema';" : ""}
           ${version < 55 ? "DELETE FROM retention_metadata WHERE id='model_defaults_schema';" : ""}
           ${version < 54 ? "DELETE FROM retention_metadata WHERE id='session_indicators_schema';" : ""}

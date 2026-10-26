@@ -5,13 +5,14 @@ import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { attachmentStatus, compareSessions, progressBar } from "../../../packages/sdk/src/index.ts";
+import { commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope } from "../../../packages/sdk/src/index.ts";
 import { DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
@@ -31,6 +32,13 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [settingsText, setSettingsText] = useState("");
   const settingsRevision = useRef(0);
   const [capabilityOutput, setCapabilityOutput] = useState("");
+  const [githubRepositories, setGithubRepositories] = useState<Extract<GithubResponse, { type: "github.repositories" }> | null>(null);
+  const [githubRepository, setGithubRepository] = useState<GithubRepository | null>(null), [githubCloneJob, setGithubCloneJob] = useState<string | null>(null);
+  const [githubItems, setGithubItems] = useState<{ scope: GithubScope; context: Extract<GithubResponse, { type: "github.project" }>; kind: "issue" | "pull"; items: GithubItem[]; nextPage: number | null } | null>(null);
+  const [githubSelection, setGithubSelection] = useState<(Extract<GithubResponse, { type: "github.source" }> & { scope: GithubScope }) | null>(null);
+  const [githubBusy, setGithubBusy] = useState(false), githubPending = useRef(false);
+  const githubSearch = useRef({ source: "account" as "account" | "public", query: "" });
+  const githubOwner = useRef("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
   const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache">("mcp");
@@ -46,6 +54,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); for (const client of clients.current) client.disconnect(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
+  githubOwner.current = JSON.stringify([client.profileId, session?.id, session?.projectId, session?.workspaceId, session?.controls.env]);
   const taskProgress = useTaskProgress(client, session, status === "connected");
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
@@ -72,6 +81,25 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
   };
   const command = (command: Command) => perform(() => client.command(command));
+  const githubAction = async (action: () => Promise<void>) => {
+    if (githubPending.current) return;
+    githubPending.current = true; setGithubBusy(true);
+    try { await action(); } finally { githubPending.current = false; setGithubBusy(false); }
+  };
+  const openGithubRepositories = async (source: "account" | "public" = "account", query = "", page = 1, account?: string, accountId?: string) => githubAction(async () => {
+    const owner = githubOwner.current, result = await client.github.repositories({ source, query, page, ...(account ? { account } : {}), ...(accountId ? { accountId } : {}) });
+    if (githubOwner.current !== owner) return;
+    githubSearch.current = { source, query };
+    setGithubRepositories(result); setMode("github-repositories");
+  });
+  const openGithubItems = async (kind: "issue" | "pull", page = 1) => githubAction(async () => {
+    if (!session?.projectId || session.controls.env !== "Local") throw new Error("Choose an explicit Local project for GitHub items. No SSH or Sandbox fallback.");
+    const owner = githubOwner.current, scope: GithubScope = { env: "Local", projectId: session.projectId, sessionId: session.id, ...(session.workspaceId ? { workspaceId: session.workspaceId } : {}) };
+    const context = await client.github.project(scope), result = await client.github.browse(scope, { resource: kind === "pull" ? "pulls" : "issues", repository: context.repository, account: context.account, page, perPage: 30 });
+    if (context.accountId !== result.accountId) throw new Error("The GitHub account changed. Reload this project's items.");
+    if (githubOwner.current !== owner) return;
+    setGithubItems({ scope, context, kind, items: result.items, nextPage: result.nextPage }); setMode("github-items");
+  });
   const chooseSession = async (id: string) => { if (editorModes.includes(mode)) throw new Error("Save or discard the local editor before selecting another session."); await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
   const openProfiles = async () => { setProfiles((await client.profiles.list()).catalog); setMode("profiles"); };
   const chooseProfile = async (id: string) => {
@@ -226,6 +254,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     else if (result.panel === "Settings") setMode("settings");
     else if (result.panel === "Queue") setMode("queue");
     else if (result.panel === "Artifacts") setMode("artifacts");
+    else if (result.panel === "Work item") await openGithubItems("issue");
     else if (result.panel === "Insights") show({ session, project, routings: session ? client.routing.history(session.id) : [], events: events.filter((event) => event.session_id === session?.id).slice(-20) });
     else if (result.url) { if (!native) throw new Error("Default-browser access is unavailable in this terminal binding."); await native.browser(result.url); }
     else if (result.path) { if (!native) throw new Error("Default-file access is unavailable in this terminal binding."); await native.file(result.path); }
@@ -245,6 +274,15 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       return;
     }
     const shared = parseSlash(text);
+    if (shared?.name === "github" && /^(?:repos(?:\s|$)|issues$|pulls$)/.test(shared.argument)) {
+      await editor.flush();
+      if (shared.argument === "issues" || shared.argument === "pulls") await openGithubItems(shared.argument === "issues" ? "issue" : "pull");
+      else {
+        const query = shared.argument.slice(5).trim();
+        await openGithubRepositories(query.startsWith("public ") ? "public" : "account", query.startsWith("public ") ? query.slice(7) : query);
+      }
+      editor.edit(""); await editor.flush(); return;
+    }
     if (shared && (shared.name === "attach-document" || shared.name === "attach-file" && /\.(pdf|docx|xlsx)$/i.test(shared.argument))) {
       if (documentCapture.current) throw new Error("One document is already extracting in this TUI. Ctrl+C requests its exact stop.");
       await editor.flush();
@@ -408,7 +446,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         await client.sessions.env(session.id, argument as Controls["env"]); break;
       case "/autonomy":
         if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose Manual, Guided, Autopilot or Autopilot Max. Max requires an explicitly configured compatible bounded provider and exact delegated policy.");
-        await configure({ ...session.controls, autonomy: argument as Controls["autonomy"] }); break;
+        await client.sessions.autonomy(session.id, argument as Controls["autonomy"]); break;
       case "/attach":
         if (!argument) throw new Error("Use /attach path/to/project-file. Only explicit project UTF-8 snapshots are supported.");
         await editor.attach(argument); editor.edit(""); await editor.flush(); return;
@@ -470,6 +508,18 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       return;
     }
     if (key.name === "escape") { setMode("compose"); return; }
+    if (mode === "github-clone" && githubCloneJob && key.ctrl && key.name === "c") { key.preventDefault(); void perform(() => client.jobs.cancel(githubCloneJob)); return; }
+    if (mode === "github-detail" && githubSelection && key.ctrl && ["n", "l", "b"].includes(key.name)) {
+      key.preventDefault();
+      void perform(() => githubAction(async () => {
+        if (key.name === "n") { const created = await client.github.startSession(githubSelection.scope, githubSelection.source, githubSelection.digest); await chooseSession(created.id!); }
+        else if (key.name === "l") {
+          if (!session) throw new Error("The destination session was removed.");
+          await client.sessions.organize(session.id, githubSelection.source.kind === "pull" ? { prUrl: githubSelection.item.url } : { workItemUrl: githubSelection.item.url });
+          setNotice("Linked the exact item. No checkout or inference was started.");
+        } else { if (!native || !githubSelection.item.url) throw new Error("No native browser binding or canonical item URL is available."); await native.browser(githubSelection.item.url); }
+      })); return;
+    }
     if (mode === "compose" && key.name === "tab" && editor) {
       const trigger = parseAttachmentTrigger(editor.getState().text);
       if (trigger) {
@@ -524,6 +574,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     else if (key.name === "r") editor?.reload();
     else if (key.name === "s" && editor) void perform(() => editor.getState().conflict ? editor.keepMine() : editor.flush());
     else if (key.name === "v" && session?.pendingApproval) setMode("approval");
+    else if (key.name === "y" && key.shift && session?.pendingApproval) setMode("approval-choices");
     else if ((key.name === "y" || key.name === "d") && session?.pendingApproval) void command({
       type: "approval.respond", sessionId: session.id, approvalId: session.pendingApproval.id, allow: key.name === "y",
     });
@@ -578,6 +629,50 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               await openProfiles();
             } finally { switchingProfile.current = false; setProfilePending(false); }
           }); }} /></box> :
+        mode === "github-repositories" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>GitHub repositories / {safe(githubRepositories?.account ?? "")}</text>
+          <text fg={colors.muted} height={3}>Your repositories and organizations come first on each page. Public visibility is not proof of an open-source license. SSH cloning uses your existing keys, not a copied gh token.</text>
+          <select focused={!githubBusy} flexGrow={1} options={[...(githubRepositories?.repositories ?? []).map((repository) => ({ name: safe(repository.fullName), description: `${repository.relationship} / ${repository.visibility}`, value: String(repository.id) })),
+            ...(githubRepositories?.nextPage ? [{ name: "Load next repository page", description: "Explicit bounded page, same account.", value: "next" }] : [])]} onSelect={(_, option) => {
+            if (!option || githubBusy) return;
+            if (option.value === "next" && githubRepositories?.nextPage) { void perform(() => openGithubRepositories(githubSearch.current.source, githubSearch.current.query, githubRepositories.nextPage!, githubRepositories.account, githubRepositories.accountId)); return; }
+            const selected = githubRepositories?.repositories.find((entry) => String(entry.id) === option.value);
+            if (selected) { setGithubRepository(selected); setProjectPath(""); setGithubCloneJob(null); setMode("github-clone"); }
+          }} /><text fg={colors.muted} height={2}>Enter selects. /github repos public QUERY searches public repositories. Esc returns.</text></box> :
+        mode === "github-clone" ? <box flexDirection="column" flexGrow={1} paddingTop={1} gap={1}>
+          <text fg={colors.accent}>Clone {safe(githubRepository?.fullName ?? "")}</text>
+          <text fg={colors.muted} height={4}>Enter a new absolute destination in an existing parent folder. Enter explicitly clones and starts an idle session. No hooks, submodules, model call or automatic authentication. Cancellation preserves partial files.</text>
+          <input focused={!githubBusy && !githubCloneJob} placeholder="/absolute/path/to/new-checkout" value={projectPath} onInput={setProjectPath} onSubmit={() => {
+            if (!githubRepository || githubCloneJob || githubBusy) return;
+            void perform(() => githubAction(async () => {
+              const job = await client.projects.clone(githubRepository.sshUrl, projectPath, true); if (!job.id) throw new Error("Original clone was not acknowledged. Inspect jobs before retrying.");
+              setGithubCloneJob(job.id);
+              const result = await client.jobs.wait(job.id, { timeoutMs: 310_000 });
+              if (result.status !== "completed" || !result.projectClone) throw new Error(result.error ?? `Original clone is ${result.status}; it was not retried.`);
+              const created = await client.sessions.create(result.projectClone.projectId); await chooseSession(created.id!);
+            }));
+          }} />
+          {githubCloneJob && <text fg={colors.attention}>{safe(`${githubCloneJob}: ${snapshot?.jobs.find((entry) => entry.id === githubCloneJob)?.status ?? "unobserved"}. Ctrl+C stops only this clone; partial files are preserved. Esc returns.`)}</text>}
+        </box> :
+        mode === "github-items" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>{safe(githubItems?.context.repository ?? "")} / {githubItems?.kind === "pull" ? "Pull requests" : "Issues"}</text>
+          <text fg={colors.muted} height={2}>Controller GitHub CLI account: {safe(githubItems?.context.account ?? "")}. Enter reviews the exact full source before starting a session.</text>
+          <select focused={!githubBusy} flexGrow={1} options={[...(githubItems?.items ?? []).map((item) => ({ name: safe(`#${item.number} ${item.title}`), description: item.draft ? "draft" : safe(item.state), value: String(item.number) })),
+            ...(githubItems?.nextPage ? [{ name: "Load next page", description: "Same repository and account.", value: "next" }] : [])]} onSelect={(_, option) => {
+            if (!option || !githubItems || githubBusy) return;
+            if (option.value === "next" && githubItems.nextPage) { void perform(() => openGithubItems(githubItems.kind, githubItems.nextPage!)); return; }
+            const number = Number(option.value), owner = githubOwner.current;
+            void perform(() => githubAction(async () => {
+              const value = await client.github.source(githubItems.scope, { kind: githubItems.kind, repository: githubItems.context.repository, account: githubItems.context.account, accountId: githubItems.context.accountId, number });
+              if (JSON.stringify(value.binding) !== JSON.stringify(githubItems.context.binding)) throw new Error("The actual project root or policy changed. Reload its items before reviewing this source.");
+              if (githubOwner.current !== owner) return;
+              setGithubSelection({ ...value, scope: githubItems.scope }); setMode("github-detail");
+            }));
+          }} /><text fg={colors.muted} height={2}>No item is executed or attached by listing it. Esc returns.</text></box> :
+        mode === "github-detail" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>{safe(`${githubSelection?.source.repository}#${githubSelection?.item.number} ${githubSelection?.item.title}`)}</text>
+          <scrollbox focused={!githubBusy} flexGrow={1}><text fg={colors.foreground}>{safe(`${githubSelection?.item.state}\n\n${githubSelection?.item.body ?? ""}\n\nController source workspace: ${githubSelection?.binding.root.root}\nSource SHA-256: ${githubSelection?.digest}`)}</text></scrollbox>
+          <text fg={colors.attention} height={3}>Ctrl+N starts a session with this exact source as an unsent draft. Ctrl+L links it here. Ctrl+B opens GitHub. No checkout or inference is started. Esc returns.</text></box> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
@@ -731,8 +826,10 @@ shared policy and actual evidence, never a fake user answer or new permission.
 Jev and Remote/native Max remain unqualified.
 kupo Single is experimental and off by default. Configure /kupo set POLICY_JSON
 before explicitly selecting /model kupo. Finite Local caps need explicit reserved
-wind-down; images and model tuning remain blocked for Single. Guided needs a human; Autopilot requires explicit
-bounded delegations. Bare attachment prefixes stay literal.
+wind-down; images and model tuning remain blocked for Single. Guided needs a human.
+Selecting Autopilot/Max enables automatic tool approvals, never hard-policy overrides.
+Ctrl+Shift+Y remembers approvals; /github repos, issues and pulls open native pickers.
+Bare attachment prefixes stay literal.
 
 Protected policy blocks all new Local turns in this checkpoint.
 Only turns already running at the policy boundary may finish.
@@ -756,10 +853,24 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <text fg={colors.accent}>GitHub Copilot sign-in: {snapshot.provider.login.code}</text><text fg={colors.foreground}>{snapshot.provider.login.url}</text><text fg={colors.muted}>Authorize in your browser. /cancel-login cancels. Account model policies may be enabled.</text>
         </box>}
         {snapshot?.provider.diagnostic && <text fg={colors.attention}>{safe(snapshot.provider.diagnostic)}</text>}
-        {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={10} flexShrink={0}>
+        {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={mode === "approval-choices" ? 17 : 10} flexShrink={0}>
           <text fg={colors.attention}><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
-          <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>
-          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
+          {mode === "approval-choices" ? <select focused flexGrow={1} options={[
+            { name: "Approve only this action", description: "No remembered grant.", value: "once" },
+            { name: "Approve for this session", description: "Same exact command/arguments or MCP tool.", value: "session:exact" },
+            ...(session.projectId ? [{ name: "Approve for this project", description: "All project sessions, current environment.", value: "project:exact" }] : []),
+            { name: "Always approve across this profile", description: "Same exact command/arguments or schema-bound MCP tool.", value: "global:exact" },
+            ...((session.pendingApproval.call.name === "run_command" || session.pendingApproval.call.name === "command_job" && session.pendingApproval.call.arguments.action === "start") &&
+              typeof session.pendingApproval.call.arguments.command === "string" && commandFamily(session.pendingApproval.call.arguments.command) ? [
+                ...(session.projectId ? [{ name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} for this project`, description: "Any simple command arguments; compound expressions still ask.", value: "project:family" }] : []),
+                { name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} globally`, description: "Current profile and environment. Hard denials still win.", value: "global:family" },
+              ] : []),
+          ]} onSelect={(_, option) => {
+            if (!option || !session.pendingApproval) return;
+            const [scope, match] = String(option.value).split(":");
+            void perform(async () => { await client.approvals.respond(session.id, session.pendingApproval!.id, true, scope === "once" ? undefined : parse(RememberApprovalSchema, { scope, match })); setMode("compose"); });
+          }} /> : <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>}
+          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}Ctrl+Y once | Ctrl+Shift+Y remember | Ctrl+D deny | Ctrl+V args</text>
         </box>}
         {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}

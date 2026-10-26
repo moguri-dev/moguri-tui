@@ -6,7 +6,8 @@ import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-co
 import type { PreparedModel, ProviderAdapter } from "../apps/service/src/provider.ts";
 import { startService } from "../apps/service/src/server.ts";
 import { envelope } from "../apps/service/src/controller.ts";
-import { isRecord, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
+import { isRecord, MoguriError, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
+import { runProgram } from "../apps/service/src/program.ts";
 import type { TaskProgressInput } from "../packages/protocol/src/progress.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
 import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
@@ -213,7 +214,13 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
   const terminalVault = { read: async (id: string) => terminalSecrets.get(terminalSlot(id)) ?? null, write: async (id: string, value: string) => { terminalSecrets.set(terminalSlot(id), value); }, remove: async (id: string) => { terminalSecrets.delete(terminalSlot(id)); } };
   const program = options.platform?.terminal?.executable ? {} : { executable: process.execPath,
     args: ["-e", "process.stdin.resume();process.stdout.write('GENERATED_TERMINAL_READY\\n');"] };
-  const platform = { ...options.platform, terminal: { ...program, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
+  const platform: PlatformOptions = { ...options.platform, integrations: { ...options.platform?.integrations, program: options.platform?.integrations?.program ?? (async (executable, args, request) => {
+    if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture forbids personal GitHub authentication.");
+    return runProgram(executable, args, request);
+  }) }, github: { ...options.platform?.github, runProgram: options.platform?.github?.runProgram ?? (async (executable, args, request) => {
+    if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture has no GitHub account. Personal authentication is forbidden.");
+    return runProgram(executable, args, request);
+  }) }, terminal: { ...program, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
   const restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
@@ -232,7 +239,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     return service.controller.dispatch(envelope({ type: "message.send", sessionId, expectedRevision: session().draft.revision, delivery }));
   };
   return {
-    ...fixture, directory, project, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: platform.terminal.vault,
+    ...fixture, directory, project, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: options.platform?.terminal?.vault ?? terminalVault,
     approve: async (allow = true) => {
       const approval = await waitFor(() => session().pendingApproval);
       return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));
