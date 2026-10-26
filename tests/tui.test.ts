@@ -33,6 +33,27 @@ import { compoundApiFixture } from "./fixtures/compound-api.ts";
 import { winddownApiFixture } from "./fixtures/winddown-api.ts";
 
 const nativeSandbox = await nativeConfiguration();
+test("actual TUI model dropdown selects default automatic Kupo and runs its sole model without a classifier", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture({ responseMode: "text", maxOutputTokens: 128 }), client = await new MoguriClient(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 150, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`Automatic Kupo TUI did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    setup.mockInput.pressKey("m", { ctrl: true }); await frameUntil("Automatic Single / Cascade");
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter();
+    await waitFor(() => fixture.session().controls.modelId === "kupo"); await frameUntil("Write a prompt");
+    assert.equal(fixture.requests.length, 0);
+    await setup.mockInput.typeText("Generated terminal automatic Kupo task."); setup.mockInput.pressEnter({ ctrl: true, shift: true });
+    await fixture.terminal(); await frameUntil("The requested fixture operation is complete.");
+    assert.equal(fixture.requests.length, 1);
+    assert.deepEqual(fixture.session().usage.map((entry) => entry.role), ["solver"]);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("actual TUI keys review reserved budget data and separately create an accepted-work checkpoint branch without another model or source index/HEAD change", { skip: process.platform !== "darwin", timeout: 25000 }, async () => {
   const f = await winddownApiFixture({ git: true }), accepted = await f.accept(), checkpoint = await f.run(); assert.ok(f.git);
   const index = await readFile(join(f.project, ".git/index")), head = f.git(["rev-parse", "HEAD"]);
