@@ -380,15 +380,16 @@ and drafts remain retained; rejected/unknown calls still count. Desktop exposes
 review under Model, and CLI/TUI share `/compact`. Images, automatic compaction
 and implicit kupo compactor selection are not supported.
 
-[Experimental **kupo Single**](docs/architecture/routing.md) is opt-in with an
-explicit approved classifier/solver pool and separate hosted/network-data consent.
-The same owned worker records actual per-call roles/models and keeps normal
-approvals. Desktop settings, TUI and shared slash/SDK controls expose the policy
-and provenance. Invalid, stale or unmetered advice pauses without a fallback.
-Finite inherited caps require the separately configured qualified Local
-[reserved wind-down](docs/architecture/budget-winddown.md) policy. Without it
-Single remains blocked rather than lifting the cap. Images and per-model
-tuning remain unavailable on synthetic models.
+[**Kupo**](docs/architecture/automatic-kupo.md) is always in the model picker.
+Its automatic policy uses configured models: none blocks inference, one runs
+directly in Single, and multiple models support task-based Single, gated
+Cascade or eligible read-only Critique with one revision. Declared capability
+categories guide routing, including pools of three through twenty models.
+Only the selected response reaches normal approvals; every actual role is
+metered. Independent critique still needs reviewed lineage evidence. Finite
+automatic budgets, images, synthetic tuning and Sandbox routing remain
+unavailable without fallback. Existing explicit
+[Single policies](docs/architecture/routing.md) remain supported separately.
 
 [Reviewed **Local Cascade/Critique**](docs/architecture/compound-workflows.md)
 now has a shared development service/SDK, CLI, actual TUI and desktop path.
