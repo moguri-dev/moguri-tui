@@ -88,12 +88,15 @@ the user selects their source.
 The [desktop interaction update](docs/setup.md#desktop-interactions) adds a
 compact five-source attachment menu, retained previews/removal, reviewed session
 drag-to-attach, persisted session order and confirmation preferences. Use the
-session grip or Alt+Up/Down to reorder without nesting; Unpin has a crossed-out
+whole session row or Alt+Up/Down to reorder siblings, including children.
+Dragging a child out asks before detaching, with a saved opt-out in Settings /
+Confirmations. Unpin has a crossed-out
 pin. Global views live on the left; the right rail contains the session tools
 and per-session **Code change** and **Work item** links.
 Click an active right-rail icon again to collapse its pane back to the rail.
-Global Terminal opens independently in the user's configured HOME; project terminals
-keep their own roots. Opening Terminal or explicitly switching chats with it visible starts
+Terminal belongs to a session: project-free consoles start in configured HOME,
+and project consoles keep their bound worktree. There is no global-terminal UI.
+Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
 Dictation distinguishes initialization, recording and
 transcript finalization without sending a prompt automatically.
@@ -297,8 +300,8 @@ See [browser control](docs/architecture/agent-browser.md).
 Attachments stay compact in the composer/chat. Clicking an image opens the
 large, uncropped viewer without changing captured context.
 
-One profile-owned **Global terminal** also works without a session, separately
-from session consoles. Project-free Autopilot adds no tool grants, and side
+Project-free sessions can open private HOME consoles without granting model
+workspace access. Project-free Autopilot adds no tool grants, and side
 chats expose an explicit concrete-model selector when needed.
 User consoles retain authenticated per-profile/peer owners across
 explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
