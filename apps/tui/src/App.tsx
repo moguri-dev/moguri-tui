@@ -5,7 +5,7 @@ import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { attachmentStatus, compareSessions, progressBar } from "../../../packages/sdk/src/index.ts";
-import { commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope } from "../../../packages/sdk/src/index.ts";
+import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
@@ -591,11 +591,11 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).sort(compareSessions).map((item) => {
     const attention = snapshot.settings.values.notifications.inApp ? snapshot.attention.findLast((entry) => entry.sessionId === item.id && entry.active) : undefined;
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
-    return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? "No project"} / ${item.status}`, value: item.id };
+    return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : "No project")} / ${item.status}`, value: item.id };
   }) ?? [];
   return <box width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
     <box height={3} paddingLeft={2} paddingRight={2} alignItems="center" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
-      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}  /  {safe(project?.name ?? (session ? "No project" : "Workspace"))}  /  {profilePending ? "Updating profile..." : status}</text>
+      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}  /  {safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session ? "No project" : "Workspace"))}  /  {profilePending ? "Updating profile..." : status}</text>
     </box>
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {width >= 100 && <box width={26} border={["right"]} borderColor={colors.border} padding={1} flexDirection="column">
@@ -778,7 +778,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.muted} height={4}>Enter edits JSON. /continue-work [CARD_ID] asks Kanban or model each time. /work-item picks a card. /kanban source selects open GitHub work. /board edit configures phases/sync/Linear. Esc opens this board's chat.</text></box> :
         mode === "capability-output" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
         mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
-        mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
+        mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
           {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
@@ -907,16 +907,16 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           {mode === "approval-choices" ? <select focused flexGrow={1} options={[
             { name: "Approve only this action", description: "No remembered grant.", value: "once" },
             { name: "Approve for this session", description: "Same exact command/arguments or MCP tool.", value: "session:exact" },
-            ...(session.projectId ? [{ name: "Approve for this project", description: "All project sessions, current environment.", value: "project:exact" }] : []),
+            ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: "Approve for this project", description: "All sessions of the selected repository, current environment.", value: "project:exact" }] : []),
             { name: "Always approve across this profile", description: "Same exact command/arguments or schema-bound MCP tool.", value: "global:exact" },
             ...(!["run_command", "command_job", "debug", "mcp_gateway"].includes(session.pendingApproval.call.name) ? [
               { name: `Always approve ${session.pendingApproval.call.name} for this session`, description: "New arguments, same actual session and environment.", value: "session:tool" },
-              ...(session.projectId ? [{ name: `Always approve ${session.pendingApproval.call.name} for this project`, description: "New arguments in this project; hard restrictions still apply.", value: "project:tool" }] : []),
+              ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: `Always approve ${session.pendingApproval.call.name} for this project`, description: "New arguments in the selected repository; hard restrictions still apply.", value: "project:tool" }] : []),
               { name: `Always approve ${session.pendingApproval.call.name} globally`, description: "Current profile and environment; not a command or MCP wildcard.", value: "global:tool" },
             ] : []),
             ...((session.pendingApproval.call.name === "run_command" || session.pendingApproval.call.name === "command_job" && session.pendingApproval.call.arguments.action === "start") &&
               typeof session.pendingApproval.call.arguments.command === "string" && commandFamily(session.pendingApproval.call.arguments.command) ? [
-                ...(session.projectId ? [{ name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} for this project`, description: "Any simple command arguments; compound expressions still ask.", value: "project:family" }] : []),
+                ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} for this project`, description: "Any simple command arguments in this repository; compound expressions still ask.", value: "project:family" }] : []),
                 { name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} globally`, description: "Current profile and environment. Hard denials still win.", value: "global:family" },
               ] : []),
           ]} onSelect={(_, option) => {

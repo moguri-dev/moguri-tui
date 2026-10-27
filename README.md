@@ -31,6 +31,10 @@ never proof of completion. [Session controls](docs/architecture/session-interact
 include ordered drag/drop, context-menu actions, serial held queues and explicit
 work/question/approval/completion indicators with verified draft/open/merged PR state.
 Unread names use subtle font weight rather than extra session-list dots.
+Center drops nest sessions or create named project folders; folder chats capture
+all member repositories for explicit Local reads, edits and commands. Fuzzy
+session/settings search and compact settings controls share the
+[session reliability contract](docs/architecture/session-reliability.md).
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
@@ -98,8 +102,9 @@ Terminal belongs to a session: project-free consoles start in configured HOME,
 and project consoles keep their bound worktree. There is no global-terminal UI.
 Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
-Dictation distinguishes initialization, recording and
-transcript finalization without sending a prompt automatically.
+Hold Ctrl+Space to dictate directly into the draft; release flushes the streamed
+transcript without an Insert step or automatic prompt submission. Side chat
+opens immediately, read-only, with inherited controls and captured main context.
 
 [Chat activity](docs/setup.md#chat-activity-and-usage) uses small operation
 icons, expandable original arguments/results, observed timing/output quantities
@@ -124,8 +129,8 @@ profile-private **skill gateway** for local folders and refreshed remote
 archives. Settings use compact information/copy controls and contain Artifacts,
 Candidates and unified Sandbox management. Suggestions starts globally with
 local usage-gap checks; model generation still requires exact source review.
-Automations and the Work item link panel are intentionally empty. Existing
-session PRs open in Code change. Copilot connection status stays in Settings,
+Automations remain unimplemented. Work item links the project's Kanban cards or
+GitHub issues; session PRs open in Code change. Copilot connection status stays in Settings,
 not the left sidebar.
 
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
