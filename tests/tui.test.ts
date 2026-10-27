@@ -549,7 +549,8 @@ test("the actual TUI explicitly generates, reviews, applies and restores one met
     await slash(`/compact generate ${JSON.stringify({ digest: preview.digest, modelId: preview.modelId, keepRecentTurns: preview.keepRecentTurns })} confirm-cost`, "requested");
     await fixture.terminal(); setup.mockInput.pressEscape();
     const entry = (await fixture.sdk.compactions.state(fixture.sessionId)).compactions.at(-1)!;
-    await slash(`/compact read ${entry.id}`, "Generated summary");
+    await slash(`/compact read ${entry.id}`, '"status": "proposed"');
+    await frameUntil("Generated summary");
     setup.mockInput.pressEscape();
     await slash(`/compact apply ${entry.id} ${entry.revision} confirm-reviewed`, "Reviewed context prefix applied");
     assert.equal(fixture.session().activeCompactionId, entry.id); setup.mockInput.pressEscape();
