@@ -13,7 +13,18 @@ import type { PlatformOptions } from "../apps/service/src/platform.ts";
 import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
 import { supportedThinking } from "../apps/service/src/model-controls.ts";
 import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
+import type { MoguriSdk } from "../packages/sdk/src/index.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
+
+export async function automaticHome(sdk: MoguriSdk, title: string) {
+  const created = await sdk.sessions.create(null, title);
+  await sdk.sessions.autonomy(created.id!, "Autopilot"); return created.id!;
+}
+export async function homeCommand(sdk: MoguriSdk, sessionId: string, command: string, timeoutMs = 5000) {
+  const tool = (await sdk.tools.catalog(sessionId, "run_command")).tools.find((tool) => tool.name === "run_command");
+  if (!tool) throw new Error("Generated Home command is missing its actual scoped schema.");
+  return sdk.tools.execute(sessionId, tool.name, { command, timeoutMs }, tool.schemaDigest);
+}
 
 export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 8000): Promise<NonNullable<T>> {
   const deadline = Date.now() + timeout;
@@ -218,9 +229,9 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
 }
 export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
-  const project = join(directory, "project");
+  const project = join(directory, "project"), home = join(directory, "home");
   const { mkdir } = await import("node:fs/promises");
-  await mkdir(project);
+  await Promise.all([mkdir(project), mkdir(home)]);
   await writeFile(join(project, "fixture.txt"), "generated original\n");
   const fixture = await fixtureProvider(options);
   const terminalSecrets = new Map<string, string>();
@@ -234,7 +245,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
   }) }, github: { ...options.platform?.github, runProgram: options.platform?.github?.runProgram ?? (async (executable, args, request) => {
     if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture has no GitHub account. Personal authentication is forbidden.");
     return runProgram(executable, args, request);
-  }) }, terminal: { ...program, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
+  }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
   const restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
@@ -253,7 +264,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     return service.controller.dispatch(envelope({ type: "message.send", sessionId, expectedRevision: session().draft.revision, delivery }));
   };
   return {
-    ...fixture, directory, project, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: options.platform?.terminal?.vault ?? terminalVault,
+    ...fixture, directory, project, home: options.platform?.terminal?.defaultRoot ?? home, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: options.platform?.terminal?.vault ?? terminalVault,
     approve: async (allow = true) => {
       const approval = await waitFor(() => session().pendingApproval);
       return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));

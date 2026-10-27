@@ -105,6 +105,10 @@ and per-session **Code change** and **Work item** links.
 Click an active right-rail icon again to collapse its pane back to the rail.
 Terminal belongs to a session: project-free consoles start in configured HOME,
 and project consoles keep their bound worktree. There is no global-terminal UI.
+Ordinary project-free Local chats also use their
+[captured Home](docs/architecture/project-free-execution.md) for approved file
+and command tools, without creating a project. Browser control keeps its
+explicit user toggle; GitHub commands need an explicit repository target.
 Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
 Hold Ctrl+Space to dictate directly into the draft; release flushes the streamed

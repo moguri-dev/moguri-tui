@@ -44,6 +44,8 @@ moguri progress --session ID       Checked plan items and untrusted task estimat
 moguri activity list --session ID  Retained chat operations, without new inference
 moguri agent-terminal list --session ID  Approved Agent commands, never private consoles
 moguri tools [OFFSET] [QUERY] --session ID  Scoped typed catalogue, no inference
+moguri home [status] --session ID  Captured Home and independently retained original writers
+moguri home acknowledge WRITER REV confirm-inspected --session ID  Actual-user risk acknowledgement, never cleanup proof
 moguri tool NAME SCHEMA_SHA ARGUMENTS_JSON --session ID  Exact approved Local job
 moguri tool-result STEP CALL [OFFSET] --session ID  Original retained source
 moguri state SELECT_SQL --session ID  Canonical todo/memory views
@@ -385,7 +387,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else throw new Error("Use activity list [SEQUENCE ID], activity turn ID or activity read ID arguments|output [UTF8_OFFSET] with --session ID.");
     } else if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.slice().sort(compareSessionOrder).map(({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned }) => ({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned })) });
-    } else if (["tools", "tool", "tool-result", "state", "watch", "coordinate"].includes(group)) {
+    } else if (["home", "tools", "tool", "tool-result", "state", "watch", "coordinate"].includes(group)) {
       if (!values.session) throw new Error("Choose --session ID. No previous project/root or session authority is inherited.");
       const value = await sdk.slash(values.session, `/${group}${action ? ` ${[action, ...args].join(" ")}` : ""}`, "cli");
       output(value.kind === "text" ? values.json ? JSON.parse(value.text) : value.text : value);

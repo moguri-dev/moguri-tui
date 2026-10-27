@@ -610,11 +610,11 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).sort(compareSessions).map((item) => {
     const attention = snapshot.settings.values.notifications.inApp ? snapshot.attention.findLast((entry) => entry.sessionId === item.id && entry.active) : undefined;
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
-    return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : "No project")} / ${item.status}`, value: item.id };
+    return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home (no project)" : "No project")} / ${item.status}`, value: item.id };
   }) ?? [];
   return <box width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
     <box height={3} paddingLeft={2} paddingRight={2} alignItems="center" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
-      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}  /  {safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session ? "No project" : "Workspace"))}  /  {profilePending ? "Updating profile..." : status}</text>
+      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}  /  {safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session?.controls.env === "Local" && session.homeRoot ? "Home (no project)" : session ? "No project" : "Workspace"))}  /  {profilePending ? "Updating profile..." : status}</text>
     </box>
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {width >= 100 && <box width={26} border={["right"]} borderColor={colors.border} padding={1} flexDirection="column">

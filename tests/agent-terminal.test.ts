@@ -12,12 +12,13 @@ import { retainedCiphertextRows, writeLegacyState } from "./fixtures/legacy-stat
 import { remoteFixture } from "./fixtures/remote-service.ts";
 import { operationProjection } from "../apps/service/src/operation-telemetry.ts";
 
-test("only a workspace-bound model receives Agent terminal tools; project-free chats do not pay for an unusable command capability", async () => {
+test("Agent terminal tools require an actual project or captured Home, never an unbound scope", async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   try {
     const settings = sdk.settings.get()!.values;
     assert.equal(effectiveTools(settings, false, "agent", undefined, { project: false, env: "Local" }).some((tool) => tool.name === "read_agent_terminal"), false);
     assert.equal(effectiveTools(settings, false, "agent", undefined, { project: true, env: "Local" }).some((tool) => tool.name === "read_agent_terminal"), true);
+    assert.equal(effectiveTools(settings, false, "agent", undefined, { project: false, workspace: true, env: "Local" }).some((tool) => tool.name === "read_agent_terminal"), true);
     assert.equal(fixture.requests.length, 0);
   } finally { sdk.disconnect(); await fixture.close(); }
 });
