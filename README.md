@@ -281,6 +281,10 @@ overrides stay unchanged. See [model defaults](docs/architecture/model-controls.
 
 The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
 commands, enforced read-only sessions and parallel question-only side chats.
+Opening Side chat immediately gives the same composer, model/thinking controls
+and voice input with captured main-chat context, permanently read-only.
+Hold **Ctrl+Space** to dictate locally: words stream into the textbox and release
+flushes them without sending. Session names and settings support fuzzy search.
 Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
 isolated browser previews, linked PRs and Insights. Double-click a session to
 rename it. Sessions support pin/group/

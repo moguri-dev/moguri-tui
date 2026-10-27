@@ -69,6 +69,7 @@
     "docs/architecture/github-workflows.md",
     "docs/architecture/session-github-workflows.md",
     "docs/architecture/project-kanban.md",
+    "docs/architecture/session-reliability.md",
     "docs/architecture/linear-workflows.md",
     "docs/architecture/dependency-cache-scopes.md",
     "docs/architecture/task-progress.md",

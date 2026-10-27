@@ -909,6 +909,11 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             { name: "Approve for this session", description: "Same exact command/arguments or MCP tool.", value: "session:exact" },
             ...(session.projectId ? [{ name: "Approve for this project", description: "All project sessions, current environment.", value: "project:exact" }] : []),
             { name: "Always approve across this profile", description: "Same exact command/arguments or schema-bound MCP tool.", value: "global:exact" },
+            ...(!["run_command", "command_job", "debug", "mcp_gateway"].includes(session.pendingApproval.call.name) ? [
+              { name: `Always approve ${session.pendingApproval.call.name} for this session`, description: "New arguments, same actual session and environment.", value: "session:tool" },
+              ...(session.projectId ? [{ name: `Always approve ${session.pendingApproval.call.name} for this project`, description: "New arguments in this project; hard restrictions still apply.", value: "project:tool" }] : []),
+              { name: `Always approve ${session.pendingApproval.call.name} globally`, description: "Current profile and environment; not a command or MCP wildcard.", value: "global:tool" },
+            ] : []),
             ...((session.pendingApproval.call.name === "run_command" || session.pendingApproval.call.name === "command_job" && session.pendingApproval.call.arguments.action === "start") &&
               typeof session.pendingApproval.call.arguments.command === "string" && commandFamily(session.pendingApproval.call.arguments.command) ? [
                 ...(session.projectId ? [{ name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} for this project`, description: "Any simple command arguments; compound expressions still ask.", value: "project:family" }] : []),
