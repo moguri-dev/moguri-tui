@@ -278,6 +278,8 @@ current action; Shift+Enter adds a line.
 Both sidebars resize, and message copy appears on hover or keyboard focus.
 Toggle/dropdown preferences, model context and supported thinking effort save
 automatically through shared SDK controls; text settings retain explicit saves.
+`/thinking` and `/effort` set supported effort; `/context-window` sets an exact
+token ceiling or `min`, `half`, `max` without running a model.
 See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).
 
 New chats can use a fixed **global default model/effort** or the current

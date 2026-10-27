@@ -33,6 +33,25 @@ import { compoundApiFixture } from "./fixtures/compound-api.ts";
 import { winddownApiFixture } from "./fixtures/winddown-api.ts";
 
 const nativeSandbox = await nativeConfiguration();
+test("actual TUI thinking, effort and exact context shortcuts share saved model controls without inference", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture({ reasoning: true, contextWindow: 32769 }), client = await new MoguriClient(fixture.service.connection).ready();
+  await fixture.configure(); await client.refresh();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI model shortcut did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    for (const [command, expected] of [["/thinking high", "Thinking effort set to high"], ["/effort low", "Thinking effort set to low"], ["/context-window 24577", "Context window set to 24,577"], ["/thinking default", "Thinking effort set to the model default"]] as const) {
+      await setup.mockInput.typeText(command); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected);
+    }
+    assert.deepEqual(fixture.session().controls.modelOptions, { contextWindow: 24577 });
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("actual TUI model dropdown selects default automatic Kupo and runs its sole model without a classifier", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture({ responseMode: "text", maxOutputTokens: 128 }), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 150, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
