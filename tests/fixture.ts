@@ -25,6 +25,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
 export interface GeneratedProviderOptions {
+  modelId?: string;
   respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> }; hold?: boolean };
   issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
   stateSql?: boolean;
@@ -49,12 +50,13 @@ export interface GeneratedProviderOptions {
 }
 export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
+  const apiModelId = options.modelId ?? base.id;
   const requests: Record<string, unknown>[] = [];
   const held = new Set<ServerResponse>();
   const headers: (string | undefined)[] = [];
   const server = createServer((request, response) => {
     void (async () => {
-      if (request.method === "GET" && options.exposeModels && request.url?.endsWith("/models")) { response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ id: base.id }] })); return; }
+      if (request.method === "GET" && options.exposeModels && request.url?.endsWith("/models")) { response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ id: apiModelId }] })); return; }
       const chunks = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -69,7 +71,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
       if (prompt.includes("generated provider failure")) { response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "Generated unavailable provider", type: "authentication_error" } })); return; }
       response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
       const chunk = (delta: unknown, finish_reason: string | null = null) => response.write(`data: ${JSON.stringify({
-        id: "generated-response", object: "chat.completion.chunk", model: base.id,
+        id: "generated-response", object: "chat.completion.chunk", model: apiModelId,
         choices: [{ index: 0, delta, finish_reason }],
       })}\n\n`);
       const finish = (tool?: { name: string; args: Record<string, unknown> } | { name: string; args: Record<string, unknown> }[], text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
@@ -186,7 +188,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture bind failed.");
-  const model = { ...base, ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}), ...(options.supportedContextWindows ? { supportedContextWindows: options.supportedContextWindows } : {}), ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
+  const model = { ...base, id: apiModelId, ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}), ...(options.supportedContextWindows ? { supportedContextWindows: options.supportedContextWindows } : {}), ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
   const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, ...(model.supportedContextWindows ? { supportedContextWindows: model.supportedContextWindows } : {}), maxTokens: model.maxTokens, imageInput: options.imageInput ?? false, ...(options.toolInput !== undefined ? { toolInput: options.toolInput } : {}), thinkingLevels: supportedThinking(model) }];
   class FixtureProvider implements ProviderAdapter {
     state: ProviderState = { status: "connected", models: catalog, login: null, diagnostic: null };

@@ -71,6 +71,11 @@ hosts or downloads weights. New sessions resolve snapshotted global,
 current-profile and project controls, with explicit session overrides and
 visible provenance; existing sessions are not rewritten.
 
+**Settings / Models / Providers** can disable providers or unwanted models per
+profile. Matching upstream model IDs share one explicit provider choice, without
+duplicates or silent fallback. The same availability gates `/model`, routing and
+new calls. [Provider/model controls](docs/setup.md#provider-and-model-availability).
+
 Isolated **profiles** use immutable SDK clients over the same local authority.
 Desktop's profile selector, TUI **F8** and CLI `--profile ID` preserve separate
 accounts, projects, drafts, memory and artifacts. Creating a profile neither

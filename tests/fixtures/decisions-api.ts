@@ -6,7 +6,7 @@ export const generatedAdvice = (choice = "allow", confidence = 0.98) => JSON.str
   type: "choice", choice, confidence, probabilities: { allow: choice === "allow" ? 0.98 : 0.01, deny: choice === "deny" ? 0.98 : 0.01, askUser: choice === "askUser" ? 0.98 : 0.01 },
 } } });
 export async function setupDecisions(options: { primary?: GeneratedProviderOptions; advice?: GeneratedProviderOptions; delegated?: boolean } = {}) {
-  const f = await setupFixture(options.primary), advice = await fixtureProvider({ responseMode: "text", exposeModels: true, replyText: generatedAdvice(), ...options.advice });
+  const f = await setupFixture(options.primary), advice = await fixtureProvider({ modelId: "generated-decision-api", responseMode: "text", exposeModels: true, replyText: generatedAdvice(), ...options.advice });
   const sdk = await new MoguriSdk(f.service.connection).ready();
   try {
     await f.configure(); await sdk.refresh();
