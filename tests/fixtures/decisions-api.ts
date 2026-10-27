@@ -19,7 +19,8 @@ export async function setupDecisions(options: { primary?: GeneratedProviderOptio
     const configured = structuredClone(sdk.settings.get()!.values);
     configured.decisions = { ...configured.decisions, enabled: true, modelId: model.id, outputTokens: 256 };
     await sdk.settings.update(configured, sdk.settings.get()!.revision);
-    await sdk.sessions.configure(f.sessionId, { ...f.session().controls, autonomy: "Autopilot Max" });
+    // Transport/delegation fixtures explicitly retain bounded Max, not new automatic approvals.
+    await sdk.sessions.configure(f.sessionId, { ...f.session().controls, autonomy: "Autopilot Max", automaticApprovals: false });
     return { ...f, sdk, advice, decisionModelId: model.id, close: async () => { sdk.disconnect(); await f.close(); await advice.close(); } };
   } catch (error) { sdk.disconnect(); await f.close(); await advice.close(); throw error; }
 }
