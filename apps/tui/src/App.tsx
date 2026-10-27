@@ -25,6 +25,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null);
   const [mode, setMode] = useState<Mode>("compose");
   const [notice, setNotice] = useState("");
+  const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
   const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
   const [otherQuestion, setOtherQuestion] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -280,6 +281,12 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       return;
     }
     const shared = parseSlash(text);
+    if (shared?.name === "side" && shared.argument) {
+      await editor.flush();
+      const result = await client.slash(session.id, text, "tui"), saved = client.getState().snapshot?.sessions.find((entry) => entry.id === session.id)?.draft;
+      if (saved) editor.receive(saved);
+      await slashResult(result); return;
+    }
     if (shared?.name === "continue-work") {
       await editor.flush(); await slashResult(await client.slash(session.id, text, "tui")); return;
     }
@@ -490,8 +497,20 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       case "/sessions": setMode("sessions"); break;
       case "/trace": setMode("trace"); break;
       case "/details": setDetailed((value) => !value); break;
-      case "/help": setMode("help"); break;
-      default: throw new Error("Unknown slash command. Use /help. Ordinary @, ^, :, # and ! text stays literal.");
+      case "/help": {
+        const catalog = await client.commands.list(session.id);
+        setSkillHelp({ profileId: client.profileId, text: catalog.filter((entry) => entry.kind === "skill").map((entry) => `/${entry.name}  Skill / ${entry.skill.sourceName}: ${entry.description}`).join("\n") });
+        setMode("help"); break;
+      }
+      default: {
+        if (shared && (await client.commands.list(session.id)).some((entry) => entry.kind === "skill" && entry.name === shared.name)) {
+          await editor.flush(); const result = await client.slash(session.id, text, "tui");
+          const saved = client.getState().snapshot?.sessions.find((entry) => entry.id === session.id)?.draft;
+          if (saved) editor.receive(saved);
+          await slashResult(result); return;
+        }
+        throw new Error("Unknown slash command. Use /help. Ordinary @, ^, :, # and ! text stays literal.");
+      }
     }
     editor.edit(""); await editor.flush();
   };
@@ -857,6 +876,7 @@ Esc composer
 /linear status|token|clear-token|import CURSOR (optional, off by default)
 
 ${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
+${skillHelp?.profileId === client.profileId ? safe(skillHelp.text) : ""}
 
 Native Sandbox uses /sandbox setup for bundled runtime/image review, followed
 by its exact /sandbox enable command. Managed workspaces and selected-provider
