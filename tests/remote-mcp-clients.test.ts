@@ -21,7 +21,8 @@ test("CLI and shared TUI/desktop commands review exact Remote grants with no mod
     assert.equal(JSON.parse((await execute(["servers"])).stdout).servers[0].state, "configured");
     const tools = JSON.parse((await execute(["tools", "builtin", "grep"])).stdout).tools;
     const pending = await sdk.mcp.call(f.sessionId, "builtin", "grep_logs", { path: "fixture.txt", query: "remote source" }, tools[0].digest);
-    await f.approve(); assert.equal((await sdk.jobs.wait(pending.id!)).status, "completed");
+    assert.equal((await sdk.jobs.wait(pending.id!)).status, "completed");
+    assert.equal(f.session().pendingApproval, null);
     const calls = JSON.parse((await execute(["remote-calls"])).stdout).calls;
     assert.equal(calls.length, 1); assert.equal(calls[0].actor, "external");
     for (const client of ["tui", "desktop"] as const) {

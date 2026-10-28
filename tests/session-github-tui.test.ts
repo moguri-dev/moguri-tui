@@ -6,7 +6,7 @@ import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
 import { MoguriSdk } from "../packages/sdk/src/index.ts";
 import { githubApplicationFixture } from "./github-workflows-fixture.ts";
-import { setupFixture, waitFor } from "./fixture.ts";
+import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 
 async function frameUntil(setup: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
   const deadline = Date.now() + 8000;
@@ -41,6 +41,7 @@ test("native TUI remembered approval choices share project grants with later tur
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
+    await reviewNativeTools(fixture, ["read_file"]);
     await fixture.configure();
     flushSync(() => root.render(createElement(TuiApp, { client: sdk })));
     await fixture.send("generated tool TUI remembered approval"); await waitFor(() => fixture.session().pendingApproval);

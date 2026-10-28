@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { TuiApp } from "../apps/tui/src/App.tsx";
 import { MoguriSdk as MoguriClient } from "../packages/sdk/src/index.ts";
 import { envelope } from "../apps/service/src/controller.ts";
-import { setupFixture, waitFor } from "./fixture.ts";
+import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { profileFixture } from "./fixtures/profiles.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
@@ -167,6 +167,7 @@ test("native TUI keys review retained Sandbox outputs and confirm separate sourc
 test("actual native TUI qualifies the guest, prepares reviewed source, holds a queued prompt and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: 90_000 }, async () => {
   assert.ok(nativeSandbox);
   const fixture = await nativeApiFixture(nativeSandbox), { sdk, provider, project, service } = fixture;
+  await reviewNativeTools(sdk);
   const bound = await sdk.command({ type: "project.add", path: project }), created = await sdk.sessions.create(bound.id!);
   const session = () => service.controller.snapshot().sessions.find((value) => value.id === created.id)!;
   await sdk.sessions.configure(created.id!, { ...session().controls, modelId: provider.modelId });
