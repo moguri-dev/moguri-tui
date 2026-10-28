@@ -752,11 +752,12 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.attention} height={3}>Ctrl+N starts a session with this exact source as an unsent draft. Ctrl+L links it here. Ctrl+B opens GitHub. No checkout or inference is started. Esc returns.</text></box> :
         mode === "session-action" && archiveReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Archive {safe(archiveReview.session.title)} and review its subsessions</text>
-          <text fg={colors.muted} height={3}>{safe(archiveReview.children.map((child) =>
-            `${child.parentSessionId === archiveReview.session.id ? "" : "  nested: "}${child.title}`).join("\n"))}</text>
+          <text fg={colors.muted} height={3}>{safe([...archiveReview.children.slice(0, 12).map((child) =>
+            `${child.parentSessionId === archiveReview.session.id ? "" : "  nested: "}${child.title}`),
+          ...(archiveReview.children.length > 12 ? [`... and ${archiveReview.children.length - 12} more`] : [])].join("\n"))}</text>
           <text fg={colors.attention} height={3}>Cascade archives this exact tree. Detach retains direct child sessions and their nested hierarchy after settling owned work. Model-owned subagents cannot be detached. Esc cancels.</text>
           <select focused flexGrow={1} options={[
-            { name: "Archive all attached subsessions", description: "Archive every descendant in the reviewed tree.", value: "archive" },
+            { name: "Archive all attached subsessions", description: "Settle owned work and archive every descendant in the reviewed tree.", value: "archive" },
             ...(archiveReview.canDetach ? [{ name: "Detach direct children", description: "Settle owned work, preserve the sessions, and keep nested sessions attached.", value: "detach" }] : []),
             { name: "Archive all and don't ask me again", description: "Save this profile's archive-child choice.", value: "archive:remember" },
             ...(archiveReview.canDetach ? [{ name: "Detach direct children and don't ask me again", description: "Settle owned work and save this profile's detach-child choice.", value: "detach:remember" }] : []),
