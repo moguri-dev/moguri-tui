@@ -40,6 +40,7 @@
     "docs/architecture/automatic-kupo.md",
     "docs/architecture/execution-transports.md",
     "docs/architecture/managed-sandbox.md",
+    "docs/architecture/sendbox-0.2.4-qualification.md",
     "docs/architecture/session-workspace.md",
     "docs/architecture/terminal-reattachment.md",
     "docs/architecture/remote-mcp.md",

@@ -11,7 +11,7 @@ export async function nativeConfiguration(): Promise<SandboxConfiguration | null
     !isRecord(image.payload.files)) throw new MoguriError("native_fixture", "Use the actual verified installation and current-protocol immutable workload receipt.");
   return parse(SandboxConfigurationSchema, {
     executable: candidate.executable, configPath: null, image: image.image, bundlePath: candidate.bundle, trustRootPath: candidate.key,
-    qualification: { release: "0.2.3", hostSha256: candidate.hostSha256, keySha256: candidate.keySha256, manifestSha256: candidate.manifestSha256,
+    qualification: { release: candidate.version ?? "0.2.3", hostSha256: candidate.hostSha256, keySha256: candidate.keySha256, manifestSha256: candidate.manifestSha256,
       workerDigest: image.payload.files["dist/worker.mjs"], bridgeDigest: image.payload.files["dist/remote-bridge.mjs"],
       trustRootId: candidate.trustRootId, minimumReleaseSequence: candidate.minimumReleaseSequence, allowedDomains: [], allowCopilot: false,
       resources: { cpus: 2, memoryMb: 2048, diskMb: 2048 } },

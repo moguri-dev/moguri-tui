@@ -66,6 +66,9 @@ replaces developer commands with one explicit in-app review. Private workspaces
 and selected-provider DNS aliases are automatic. Setup review discloses 0.2.4's
 broader GitHub Meta network delegation; public runtime updates stay
 separate from activation and tool permissions.
+The [exact current native qualification](docs/architecture/sendbox-0.2.4-qualification.md)
+records physical artifact/network evidence separately from historical runs and
+the remaining milestone gates.
 
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
