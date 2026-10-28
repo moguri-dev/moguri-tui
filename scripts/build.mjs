@@ -28,6 +28,7 @@ await Promise.all([
   build({ ...nodeBuild, entryPoints: ["apps/service/src/terminal-bridge.ts"], outfile: "dist/terminal-bridge.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/document-worker.ts"], outfile: "dist/document-worker.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/data-worker.ts"], outfile: "dist/data-worker.mjs" }),
+  build({ ...nodeBuild, entryPoints: ["apps/service/src/speech-host.ts"], outfile: "dist/speech-host.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/cli/src/main.ts"], outfile: "dist/cli.mjs" }),
   build({ entryPoints: ["packages/sdk/src/index.ts"], outfile: "dist/sdk/index.mjs", bundle: true, platform: "browser", format: "esm", target: "es2024", packages: "external" }),
   build({ ...nodeBuild, entryPoints: ["packages/sdk/src/node.ts"], outfile: "dist/sdk/node.mjs" }),

@@ -5,13 +5,14 @@ import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { attachmentStatus, compareSessions, progressBar } from "../../../packages/sdk/src/index.ts";
-import { DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope } from "../../../packages/sdk/src/index.ts";
+import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
@@ -24,6 +25,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null);
   const [mode, setMode] = useState<Mode>("compose");
   const [notice, setNotice] = useState("");
+  const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
+  const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
   const [otherQuestion, setOtherQuestion] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [detailed, setDetailed] = useState(false);
@@ -31,6 +34,13 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [settingsText, setSettingsText] = useState("");
   const settingsRevision = useRef(0);
   const [capabilityOutput, setCapabilityOutput] = useState("");
+  const [githubRepositories, setGithubRepositories] = useState<Extract<GithubResponse, { type: "github.repositories" }> | null>(null);
+  const [githubRepository, setGithubRepository] = useState<GithubRepository | null>(null), [githubCloneJob, setGithubCloneJob] = useState<string | null>(null);
+  const [githubItems, setGithubItems] = useState<{ scope: GithubScope; context: Extract<GithubResponse, { type: "github.project" }>; kind: "issue" | "pull"; items: GithubItem[]; nextPage: number | null } | null>(null);
+  const [githubSelection, setGithubSelection] = useState<(Extract<GithubResponse, { type: "github.source" }> & { scope: GithubScope }) | null>(null);
+  const [githubBusy, setGithubBusy] = useState(false), githubPending = useRef(false);
+  const githubSearch = useRef({ source: "account" as "account" | "public", query: "" });
+  const githubOwner = useRef("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
   const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache">("mcp");
@@ -46,6 +56,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); for (const client of clients.current) client.disconnect(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
+  githubOwner.current = JSON.stringify([client.profileId, session?.id, session?.projectId, session?.workspaceId, session?.controls.env]);
   const taskProgress = useTaskProgress(client, session, status === "connected");
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
@@ -56,6 +67,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const availableModels = snapshot?.provider.models.filter((model) => model.synthetic || !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
   const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
   const localIssues = snapshot?.issues.filter((issue) => issue.projectId === project?.id && !issue.archived) ?? [];
+  const continuedWork = snapshot?.projectWorkRuns.findLast((work) => work.originSessionId === session?.id);
   const editor = React.useMemo(() => {
     if (!session) return null;
     let value = editors.current.get(session.id);
@@ -72,6 +84,25 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
   };
   const command = (command: Command) => perform(() => client.command(command));
+  const githubAction = async (action: () => Promise<void>) => {
+    if (githubPending.current) return;
+    githubPending.current = true; setGithubBusy(true);
+    try { await action(); } finally { githubPending.current = false; setGithubBusy(false); }
+  };
+  const openGithubRepositories = async (source: "account" | "public" = "account", query = "", page = 1, account?: string, accountId?: string) => githubAction(async () => {
+    const owner = githubOwner.current, result = await client.github.repositories({ source, query, page, ...(account ? { account } : {}), ...(accountId ? { accountId } : {}) });
+    if (githubOwner.current !== owner) return;
+    githubSearch.current = { source, query };
+    setGithubRepositories(result); setMode("github-repositories");
+  });
+  const openGithubItems = async (kind: "issue" | "pull", page = 1) => githubAction(async () => {
+    if (!session?.projectId || session.controls.env !== "Local") throw new Error("Choose an explicit Local project for GitHub items. No SSH or Sandbox fallback.");
+    const owner = githubOwner.current, scope: GithubScope = { env: "Local", projectId: session.projectId, sessionId: session.id, ...(session.workspaceId ? { workspaceId: session.workspaceId } : {}) };
+    const context = await client.github.project(scope), result = await client.github.browse(scope, { resource: kind === "pull" ? "pulls" : "issues", repository: context.repository, account: context.account, page, perPage: 30 });
+    if (context.accountId !== result.accountId) throw new Error("The GitHub account changed. Reload this project's items.");
+    if (githubOwner.current !== owner) return;
+    setGithubItems({ scope, context, kind, items: result.items, nextPage: result.nextPage }); setMode("github-items");
+  });
   const chooseSession = async (id: string) => { if (editorModes.includes(mode)) throw new Error("Save or discard the local editor before selecting another session."); await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
   const openProfiles = async () => { setProfiles((await client.profiles.list()).catalog); setMode("profiles"); };
   const chooseProfile = async (id: string) => {
@@ -213,11 +244,12 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     setTokenValue((value) => (value + text).slice(0, 32768));
   });
   const slashResult = async (result: SlashResult) => {
+    if (result.kind === "continue-work") { setContinueReview(result.review); setMode("continue-work"); return; }
     if (result.kind === "profiles") { await openProfiles(); return; }
     if (result.kind === "profile") { await chooseProfile(result.profileId); return; }
     if (result.kind === "ok") { setNotice(result.message); return; }
     if (result.kind === "text") { show(result.text); return; }
-    if (result.kind === "session") { await chooseSession(result.sessionId); return; }
+    if (result.kind === "session") { await chooseSession(result.sessionId); if (client.getState().snapshot?.sessions.find((session) => session.id === result.sessionId)?.purpose === "kanban") setMode("issues"); return; }
     if (result.kind === "copy") { if (!native) throw new Error("Clipboard access is unavailable in this terminal binding."); await native.copy(result.text); setNotice("Copied."); return; }
     if (result.kind === "artifact-editor") { openArtifactEditor(result.artifact); return; }
     if (result.kind === "export") { if (!native?.saveExport || !result.path) throw new Error("Use /artifact export ID ABSOLUTE_NEW_FILE_PATH with an available native file binding."); const saved = await native.saveExport(result.path, result.document); setNotice(`Export saved to ${saved.path}. Stored copies are unchanged.`); return; }
@@ -226,6 +258,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     else if (result.panel === "Settings") setMode("settings");
     else if (result.panel === "Queue") setMode("queue");
     else if (result.panel === "Artifacts") setMode("artifacts");
+    else if (result.panel === "Work item") setMode("work-items");
     else if (result.panel === "Insights") show({ session, project, routings: session ? client.routing.history(session.id) : [], events: events.filter((event) => event.session_id === session?.id).slice(-20) });
     else if (result.url) { if (!native) throw new Error("Default-browser access is unavailable in this terminal binding."); await native.browser(result.url); }
     else if (result.path) { if (!native) throw new Error("Default-file access is unavailable in this terminal binding."); await native.file(result.path); }
@@ -240,11 +273,32 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
       if (documentCapture.current?.sessionId === session.id) throw new Error("Document extraction is still active. Wait or use Ctrl+C to cancel this capture before sending or holding its prompt.");
       if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
+      if (!held && session.projectId && !text.startsWith("/") && continueWorkInput(text)) {
+        setContinueReview(await editor.reviewContinueWork()); setMode("continue-work"); return;
+      }
       if (name === "/steer" || name === "/interrupt") editor.edit(argument);
       await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
       return;
     }
     const shared = parseSlash(text);
+    if (shared?.name === "side" && shared.argument) {
+      await editor.flush();
+      const result = await client.slash(session.id, text, "tui"), saved = client.getState().snapshot?.sessions.find((entry) => entry.id === session.id)?.draft;
+      if (saved) editor.receive(saved);
+      await slashResult(result); return;
+    }
+    if (shared?.name === "continue-work") {
+      await editor.flush(); await slashResult(await client.slash(session.id, text, "tui")); return;
+    }
+    if (shared?.name === "github" && /^(?:repos(?:\s|$)|issues$|pulls$)/.test(shared.argument)) {
+      await editor.flush();
+      if (shared.argument === "issues" || shared.argument === "pulls") await openGithubItems(shared.argument === "issues" ? "issue" : "pull");
+      else {
+        const query = shared.argument.slice(5).trim();
+        await openGithubRepositories(query.startsWith("public ") ? "public" : "account", query.startsWith("public ") ? query.slice(7) : query);
+      }
+      editor.edit(""); await editor.flush(); return;
+    }
     if (shared && (shared.name === "attach-document" || shared.name === "attach-file" && /\.(pdf|docx|xlsx)$/i.test(shared.argument))) {
       if (documentCapture.current) throw new Error("One document is already extracting in this TUI. Ctrl+C requests its exact stop.");
       await editor.flush();
@@ -408,7 +462,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         await client.sessions.env(session.id, argument as Controls["env"]); break;
       case "/autonomy":
         if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose Manual, Guided, Autopilot or Autopilot Max. Max requires an explicitly configured compatible bounded provider and exact delegated policy.");
-        await configure({ ...session.controls, autonomy: argument as Controls["autonomy"] }); break;
+        await client.sessions.autonomy(session.id, argument as Controls["autonomy"]); break;
       case "/attach":
         if (!argument) throw new Error("Use /attach path/to/project-file. Only explicit project UTF-8 snapshots are supported.");
         await editor.attach(argument); editor.edit(""); await editor.flush(); return;
@@ -443,8 +497,20 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       case "/sessions": setMode("sessions"); break;
       case "/trace": setMode("trace"); break;
       case "/details": setDetailed((value) => !value); break;
-      case "/help": setMode("help"); break;
-      default: throw new Error("Unknown slash command. Use /help. Ordinary @, ^, :, # and ! text stays literal.");
+      case "/help": {
+        const catalog = await client.commands.list(session.id);
+        setSkillHelp({ profileId: client.profileId, text: catalog.filter((entry) => entry.kind === "skill").map((entry) => `/${entry.name}  Skill / ${entry.skill.sourceName}: ${entry.description}`).join("\n") });
+        setMode("help"); break;
+      }
+      default: {
+        if (shared && (await client.commands.list(session.id)).some((entry) => entry.kind === "skill" && entry.name === shared.name)) {
+          await editor.flush(); const result = await client.slash(session.id, text, "tui");
+          const saved = client.getState().snapshot?.sessions.find((entry) => entry.id === session.id)?.draft;
+          if (saved) editor.receive(saved);
+          await slashResult(result); return;
+        }
+        throw new Error("Unknown slash command. Use /help. Ordinary @, ^, :, # and ! text stays literal.");
+      }
     }
     editor.edit(""); await editor.flush();
   };
@@ -469,7 +535,19 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
-    if (key.name === "escape") { setMode("compose"); return; }
+    if (key.name === "escape") { setContinueReview(null); setMode("compose"); return; }
+    if (mode === "github-clone" && githubCloneJob && key.ctrl && key.name === "c") { key.preventDefault(); void perform(() => client.jobs.cancel(githubCloneJob)); return; }
+    if (mode === "github-detail" && githubSelection && key.ctrl && ["n", "l", "b"].includes(key.name)) {
+      key.preventDefault();
+      void perform(() => githubAction(async () => {
+        if (key.name === "n") { const created = await client.github.startSession(githubSelection.scope, githubSelection.source, githubSelection.digest); await chooseSession(created.id!); }
+        else if (key.name === "l") {
+          if (!session) throw new Error("The destination session was removed.");
+          await client.sessions.organize(session.id, githubSelection.source.kind === "pull" ? { prUrl: githubSelection.item.url } : { workItemUrl: githubSelection.item.url });
+          setNotice("Linked the exact item. No checkout or inference was started.");
+        } else { if (!native || !githubSelection.item.url) throw new Error("No native browser binding or canonical item URL is available."); await native.browser(githubSelection.item.url); }
+      })); return;
+    }
     if (mode === "compose" && key.name === "tab" && editor) {
       const trigger = parseAttachmentTrigger(editor.getState().text);
       if (trigger) {
@@ -524,6 +602,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     else if (key.name === "r") editor?.reload();
     else if (key.name === "s" && editor) void perform(() => editor.getState().conflict ? editor.keepMine() : editor.flush());
     else if (key.name === "v" && session?.pendingApproval) setMode("approval");
+    else if (key.name === "y" && key.shift && session?.pendingApproval) setMode("approval-choices");
     else if ((key.name === "y" || key.name === "d") && session?.pendingApproval) void command({
       type: "approval.respond", sessionId: session.id, approvalId: session.pendingApproval.id, allow: key.name === "y",
     });
@@ -531,11 +610,11 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).sort(compareSessions).map((item) => {
     const attention = snapshot.settings.values.notifications.inApp ? snapshot.attention.findLast((entry) => entry.sessionId === item.id && entry.active) : undefined;
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
-    return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? "No project"} / ${item.status}`, value: item.id };
+    return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home (no project)" : "No project")} / ${item.status}`, value: item.id };
   }) ?? [];
   return <box width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
     <box height={3} paddingLeft={2} paddingRight={2} alignItems="center" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
-      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}  /  {safe(project?.name ?? (session ? "No project" : "Workspace"))}  /  {profilePending ? "Updating profile..." : status}</text>
+      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}  /  {safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session?.controls.env === "Local" && session.homeRoot ? "Home (no project)" : session ? "No project" : "Workspace"))}  /  {profilePending ? "Updating profile..." : status}</text>
     </box>
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {width >= 100 && <box width={26} border={["right"]} borderColor={colors.border} padding={1} flexDirection="column">
@@ -578,6 +657,66 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               await openProfiles();
             } finally { switchingProfile.current = false; setProfilePending(false); }
           }); }} /></box> :
+        mode === "github-repositories" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>GitHub repositories / {safe(githubRepositories?.account ?? "")}</text>
+          <text fg={colors.muted} height={3}>Your repositories and organizations come first on each page. Public visibility is not proof of an open-source license. SSH cloning uses your existing keys, not a copied gh token.</text>
+          <select focused={!githubBusy} flexGrow={1} options={[...(githubRepositories?.repositories ?? []).map((repository) => ({ name: safe(repository.fullName), description: `${repository.relationship} / ${repository.visibility}`, value: String(repository.id) })),
+            ...(githubRepositories?.nextPage ? [{ name: "Load next repository page", description: "Explicit bounded page, same account.", value: "next" }] : [])]} onSelect={(_, option) => {
+            if (!option || githubBusy) return;
+            if (option.value === "next" && githubRepositories?.nextPage) { void perform(() => openGithubRepositories(githubSearch.current.source, githubSearch.current.query, githubRepositories.nextPage!, githubRepositories.account, githubRepositories.accountId)); return; }
+            const selected = githubRepositories?.repositories.find((entry) => String(entry.id) === option.value);
+            if (selected) { setGithubRepository(selected); setProjectPath(""); setGithubCloneJob(null); setMode("github-clone"); }
+          }} /><text fg={colors.muted} height={2}>Enter selects. /github repos public QUERY searches public repositories. Esc returns.</text></box> :
+        mode === "github-clone" ? <box flexDirection="column" flexGrow={1} paddingTop={1} gap={1}>
+          <text fg={colors.accent}>Clone {safe(githubRepository?.fullName ?? "")}</text>
+          <text fg={colors.muted} height={4}>Enter a new absolute destination in an existing parent folder. Enter explicitly clones and starts an idle session. No hooks, submodules, model call or automatic authentication. Cancellation preserves partial files.</text>
+          <input focused={!githubBusy && !githubCloneJob} placeholder="/absolute/path/to/new-checkout" value={projectPath} onInput={setProjectPath} onSubmit={() => {
+            if (!githubRepository || githubCloneJob || githubBusy) return;
+            void perform(() => githubAction(async () => {
+              const job = await client.projects.clone(githubRepository.sshUrl, projectPath, true); if (!job.id) throw new Error("Original clone was not acknowledged. Inspect jobs before retrying.");
+              setGithubCloneJob(job.id);
+              const result = await client.jobs.wait(job.id, { timeoutMs: 310_000 });
+              if (result.status !== "completed" || !result.projectClone) throw new Error(result.error ?? `Original clone is ${result.status}; it was not retried.`);
+              const created = await client.sessions.create(result.projectClone.projectId); await chooseSession(created.id!);
+            }));
+          }} />
+          {githubCloneJob && <text fg={colors.attention}>{safe(`${githubCloneJob}: ${snapshot?.jobs.find((entry) => entry.id === githubCloneJob)?.status ?? "unobserved"}. Ctrl+C stops only this clone; partial files are preserved. Esc returns.`)}</text>}
+        </box> :
+        mode === "github-items" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>{safe(githubItems?.context.repository ?? "")} / {githubItems?.kind === "pull" ? "Pull requests" : "Issues"}</text>
+          <text fg={colors.muted} height={2}>Controller GitHub CLI account: {safe(githubItems?.context.account ?? "")}. Enter reviews the exact full source before starting a session.</text>
+          <select focused={!githubBusy} flexGrow={1} options={[...(githubItems?.items ?? []).map((item) => ({ name: safe(`#${item.number} ${item.title}`), description: item.draft ? "draft" : safe(item.state), value: String(item.number) })),
+            ...(githubItems?.nextPage ? [{ name: "Load next page", description: "Same repository and account.", value: "next" }] : [])]} onSelect={(_, option) => {
+            if (!option || !githubItems || githubBusy) return;
+            if (option.value === "next" && githubItems.nextPage) { void perform(() => openGithubItems(githubItems.kind, githubItems.nextPage!)); return; }
+            const number = Number(option.value), owner = githubOwner.current;
+            void perform(() => githubAction(async () => {
+              const value = await client.github.source(githubItems.scope, { kind: githubItems.kind, repository: githubItems.context.repository, account: githubItems.context.account, accountId: githubItems.context.accountId, number });
+              if (JSON.stringify(value.binding) !== JSON.stringify(githubItems.context.binding)) throw new Error("The actual project root or policy changed. Reload its items before reviewing this source.");
+              if (githubOwner.current !== owner) return;
+              setGithubSelection({ ...value, scope: githubItems.scope }); setMode("github-detail");
+            }));
+          }} /><text fg={colors.muted} height={2}>No item is executed or attached by listing it. Esc returns.</text></box> :
+        mode === "github-detail" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>{safe(`${githubSelection?.source.repository}#${githubSelection?.item.number} ${githubSelection?.item.title}`)}</text>
+          <scrollbox focused={!githubBusy} flexGrow={1}><text fg={colors.foreground}>{safe(`${githubSelection?.item.state}\n\n${githubSelection?.item.body ?? ""}\n\nController source workspace: ${githubSelection?.binding.root.root}\nSource SHA-256: ${githubSelection?.digest}`)}</text></scrollbox>
+          <text fg={colors.attention} height={3}>Ctrl+N starts a session with this exact source as an unsent draft. Ctrl+L links it here. Ctrl+B opens GitHub. No checkout or inference is started. Esc returns.</text></box> :
+        mode === "continue-work" && continueReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>Continue work / choose for this request</text>
+          <text fg={colors.muted} height={4}>Work from Kanban, or send this exact prompt to the model? Esc cancels and preserves the draft. No route is remembered.</text>
+          <select flexGrow={1} focused options={[
+            { name: "Work from Kanban", description: "One actual project item in an isolated Local checkout, through its PR", value: "kanban" },
+            { name: "Send to model", description: "Send the unchanged prompt through the normal chat and permissions", value: "prompt" },
+          ]} selectedBackgroundColor={colors.panel} selectedTextColor={colors.accent} textColor={colors.foreground} descriptionColor={colors.muted}
+            onSelect={(_, option) => { if (option?.value === "kanban" || option?.value === "prompt") {
+              const choice = option.value, review = continueReview;
+              void perform(async () => {
+                if (!editor || editor.sessionId !== review.sessionId) throw new Error("The original continuation owner changed. No draft was consumed.");
+                await editor.chooseContinueWork(review, choice);
+                setContinueReview(null); setMode("compose");
+              });
+            } }} />
+        </box> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
@@ -641,15 +780,24 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "artifacts" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Independent retained documents</text><text fg={colors.muted} height={3}>Ordinary artifacts survive session deletion. Candidates and generation proposals are deleted with their origin session or verified exact PR merge. Archiving alone preserves them. Provenance never grants permission.</text>
           <select focused flexGrow={1} options={[{ name: "+ New retained document", description: "Plan, decision, answer, research note or report.", value: "" }, ...(snapshot?.artifacts ?? []).map((artifact) => ({ name: safe(artifact.name), description: `${artifact.kind} / ${artifact.status} / revision ${artifact.revision} / ${artifact.projectId ? snapshot?.projects.find((project) => project.id === artifact.projectId)?.name ?? "Former project" : "Profile"}`, value: artifact.id }))]} onSelect={(_, option) => { if (option) void perform(() => openArtifact(String(option.value) || undefined)); }} />
           <text fg={colors.muted} height={3}>Enter edits text, folderId and workItemId. /artifact ID reads provenance. /project-removal materialize-preview reviews a repository copy. F5 works without a session. Esc returns.</text></box> :
+        mode === "work-items" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Project work item / {safe(project?.name ?? "Choose a project")}</text>
+          <select focused flexGrow={1} options={[{ name: "GitHub issues", description: "Read this project's actual signed-in account.", value: "github" },
+            { name: "Clear Kanban work item", description: "Metadata only; no card is deleted.", value: "" }, ...localIssues.map((issue) => ({ name: `#${issue.number} ${safe(issue.title)}`,
+              description: issue.linear ? `Linear ${safe(issue.linear.identifier)} / retained local card` : "Project Kanban card / no inference", value: issue.id }))]}
+            onSelect={(_, option) => { if (!option || !session) return; void perform(async () => {
+              if (option.value === "github") { await openGithubItems("issue"); return; }
+              await client.sessions.organize(session.id, { workItemId: String(option.value) || null, ...(option.value ? { workItemUrl: null } : {}) }); setMode("compose"); setNotice("Kanban work item updated.");
+            }); }} />
+          <text fg={colors.muted} height={3}>Enter links a card, or opens the GitHub picker. /continue-work [CARD_ID] asks Kanban or model for this request. Esc returns.</text></box> :
         mode === "issues" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Local project Kanban / {safe(project?.name ?? "Open a project first")}</text>
           <text fg={colors.muted} height={3}>{board?.columns.map((column) => `${safe(column.name)}: ${localIssues.filter((issue) => issue.phaseId === column.id).length}`).join("  |  ") ?? "No project selected."}</text>
           <select focused flexGrow={1} options={[{ name: "+ New local issue", description: "Feature, bug or misc. No assignee.", value: "" }, ...localIssues.map((issue) => ({
             name: `#${issue.number} ${safe(issue.title)}`, description: `${issue.kind} / ${safe(board?.columns.find((column) => column.id === issue.phaseId)?.name ?? issue.phaseId)}${issue.pullRequest ? ` / PR ${issue.pullRequest.state}` : ""}`, value: issue.id,
           }))]} onSelect={(_, option) => { if (option) void perform(async () => openIssueEditor(String(option.value) || undefined)); }} />
-          <text fg={colors.muted} height={3}>Enter edits JSON. /board edit configures phases and Linear. /issue move ID PHASE moves tickets. /board refresh reads linked PRs. Esc returns.</text></box> :
+          <text fg={colors.muted} height={4}>Enter edits JSON. /continue-work [CARD_ID] asks Kanban or model each time. /work-item picks a card. /kanban source selects open GitHub work. /board edit configures phases/sync/Linear. Esc opens this board's chat.</text></box> :
         mode === "capability-output" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
         mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
-        mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Every tool action needs approval.</text>
+        mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
           <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
           {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
@@ -718,6 +866,8 @@ Esc composer
 /subagent PROMPT (only when explicitly enabled)
 /dictate status|download accept-license|record|stop|file WAV|insert
 /issues | /issue new | /issue create feature|bug|misc TITLE
+/kanban [show|hide|source kanban|github-issues|github-prs]
+/continue-work [CARD_ID] | /work-item [CARD_ID|clear]
 /issue edit ID | /issue move ID PHASE | /issue archive|restore ID
 /board | /board edit | /board refresh
 /cache inspect npm|pnpm
@@ -726,6 +876,7 @@ Esc composer
 /linear status|token|clear-token|import CURSOR (optional, off by default)
 
 ${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
+${skillHelp?.profileId === client.profileId ? safe(skillHelp.text) : ""}
 
 Native Sandbox uses /sandbox setup for bundled runtime/image review, followed
 by its exact /sandbox enable command. Managed workspaces and selected-provider
@@ -740,8 +891,10 @@ Jev and Remote/native Max remain unqualified.
 Kupo is always listed. Select /model kupo to use configured eligible models.
 /kupo status shows capability categories and policy. Finite automatic caps stay blocked;
 legacy Single and reviewed worktree workflows need explicit reserved
-wind-down; images and model tuning remain blocked for Single. Guided needs a human; Autopilot requires explicit
-bounded delegations. Bare attachment prefixes stay literal.
+wind-down; images and model tuning remain blocked for Single. Guided needs a human.
+Selecting Autopilot/Max enables automatic tool approvals, never hard-policy overrides.
+Ctrl+Shift+Y remembers approvals; /github repos, issues and pulls open native pickers.
+Bare attachment prefixes stay literal.
 
 Protected policy blocks all new Local turns in this checkpoint.
 Only turns already running at the policy boundary may finish.
@@ -761,14 +914,37 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
               {message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) => <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>)}
             </box>)}
           </scrollbox>}
+        {mode === "compose" && continuedWork && <box flexDirection="column" border borderColor={colors.accent} padding={1} flexShrink={0}>
+          <text fg={colors.accent}>{safe(`${continuedWork.source.title}: ${continuedWork.status} / one delegated task to its PR`)}</text>
+          <text fg={colors.muted}>{safe(continuedWork.diagnostic ?? (continuedWork.prUrl ? `PR: ${continuedWork.prUrl}` : `Open its child in the sessions list, or inspect /kanban work ${continuedWork.id}.`))}</text>
+        </box>}
         {snapshot?.provider.login && <box flexDirection="column" border borderColor={colors.accent} padding={1}>
           <text fg={colors.accent}>GitHub Copilot sign-in: {snapshot.provider.login.code}</text><text fg={colors.foreground}>{snapshot.provider.login.url}</text><text fg={colors.muted}>Authorize in your browser. /cancel-login cancels. Account model policies may be enabled.</text>
         </box>}
         {snapshot?.provider.diagnostic && <text fg={colors.attention}>{safe(snapshot.provider.diagnostic)}</text>}
-        {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={10} flexShrink={0}>
+        {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={mode === "approval-choices" ? 17 : 10} flexShrink={0}>
           <text fg={colors.attention}><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
-          <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>
-          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}Ctrl+Y approve | Ctrl+D deny | Ctrl+V full args</text>
+          {mode === "approval-choices" ? <select focused flexGrow={1} options={[
+            { name: "Approve only this action", description: "No remembered grant.", value: "once" },
+            { name: "Approve for this session", description: "Same exact command/arguments or MCP tool.", value: "session:exact" },
+            ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: "Approve for this project", description: "All sessions of the selected repository, current environment.", value: "project:exact" }] : []),
+            { name: "Always approve across this profile", description: "Same exact command/arguments or schema-bound MCP tool.", value: "global:exact" },
+            ...(!["run_command", "command_job", "debug", "mcp_gateway"].includes(session.pendingApproval.call.name) ? [
+              { name: `Always approve ${session.pendingApproval.call.name} for this session`, description: "New arguments, same actual session and environment.", value: "session:tool" },
+              ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: `Always approve ${session.pendingApproval.call.name} for this project`, description: "New arguments in the selected repository; hard restrictions still apply.", value: "project:tool" }] : []),
+              { name: `Always approve ${session.pendingApproval.call.name} globally`, description: "Current profile and environment; not a command or MCP wildcard.", value: "global:tool" },
+            ] : []),
+            ...((session.pendingApproval.call.name === "run_command" || session.pendingApproval.call.name === "command_job" && session.pendingApproval.call.arguments.action === "start") &&
+              typeof session.pendingApproval.call.arguments.command === "string" && commandFamily(session.pendingApproval.call.arguments.command) ? [
+                ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} for this project`, description: "Any simple command arguments in this repository; compound expressions still ask.", value: "project:family" }] : []),
+                { name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} globally`, description: "Current profile and environment. Hard denials still win.", value: "global:family" },
+              ] : []),
+          ]} onSelect={(_, option) => {
+            if (!option || !session.pendingApproval) return;
+            const [scope, match] = String(option.value).split(":");
+            void perform(async () => { await client.approvals.respond(session.id, session.pendingApproval!.id, true, scope === "once" ? undefined : parse(RememberApprovalSchema, { scope, match })); setMode("compose"); });
+          }} /> : <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>}
+          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}Ctrl+Y once | Ctrl+Shift+Y remember | Ctrl+D deny | Ctrl+V args</text>
         </box>}
         {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
@@ -780,7 +956,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         <box height={taskProgress.progress?.longRunning && taskProgress.progress.model ? 5 : 4} flexShrink={0} flexDirection="column">
           <text fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (Ctrl+M)"}` : "Env Local | Model not set"}</text>
           <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
-          <text fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls` : "Factory defaults. Ctrl+K commands."}</text>
+          <text fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls${session.kind === "side" ? " | main context per question" : ""}` : "Factory defaults. Ctrl+K commands."}</text>
           {session && <text fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : taskProgress.progress?.checklist.total ? `${taskProgress.progress.checklist.completed}/${taskProgress.progress.checklist.total}` : "no checklist"} / estimate, 15s`)}</text>}
           {taskProgress.progress?.longRunning && taskProgress.progress.model && <text fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent, 8)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MoguriSdk } from "../../packages/sdk/src/index.ts";
@@ -8,6 +8,7 @@ import { fixtureProvider } from "../fixture.ts";
 
 export async function profileFixture(extra?: (profileId: string, directory: string) => PlatformOptions, workerPath?: string, holdAfterTool = false) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-profiles-")), stateDir = join(directory, "state"), key = Buffer.alloc(32, 0x6a);
+  const home = join(directory, "home"); await mkdir(home);
   const providers = await Promise.all([fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool }), fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool }), fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool })]);
   const assigned = new Map<string, typeof providers[number]>([["default", providers[0]!]]), vaults = new Map<string, Map<string, string>>();
   const options = { stateDir, retentionKey: key, workerPath, profiles: {
@@ -19,7 +20,8 @@ export async function profileFixture(extra?: (profileId: string, directory: stri
     platform: (id: string) => {
       let values = vaults.get(id); if (!values) { values = new Map(); vaults.set(id, values); }
       const scoped = values;
-      return { ...extra?.(id, directory), vault: { read: async (key: string) => scoped.get(key) ?? null, write: async (key: string, value: string) => { scoped.set(key, value); }, remove: async (key: string) => { scoped.delete(key); } } };
+      const overrides = extra?.(id, directory);
+      return { ...overrides, terminal: { defaultRoot: home, ...overrides?.terminal }, vault: { read: async (key: string) => scoped.get(key) ?? null, write: async (key: string, value: string) => { scoped.set(key, value); }, remove: async (key: string) => { scoped.delete(key); } } };
     },
   } };
   const service = await startService(options), sdk = await new MoguriSdk(service.connection).ready(), clients: MoguriSdk[] = [sdk];

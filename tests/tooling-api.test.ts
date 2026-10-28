@@ -19,11 +19,16 @@ test("the compiled CLI uses the same typed catalogue and coordination authority 
     assert.ok(catalogue.tools.some((tool: { name: string }) => tool.name === "edit_file"));
     const value = JSON.parse((await run("coordinate", "read", JSON.stringify({ action: "inspect", targetSessionId: side.id }))).stdout);
     assert.equal(value.data.id, side.id); assert.equal(value.data.mode, "read-only");
+    await run("firewall", "add", "session", "cli.example.invalid");
+    const websites = JSON.parse((await run("firewall", "list")).stdout);
+    assert.equal(websites.effective.length, 1); assert.equal(websites.effective[0].site, "cli.example.invalid");
+    await run("firewall", "remove", websites.effective[0].id);
+    await sdk.refresh(); assert.deepEqual(sdk.webAllowlist.list(), []);
     assert.equal(f.requests.length, 0);
   } finally { sdk.disconnect(); await f.close(); }
 });
 
-test("the shared tooling API binds schema/source approvals without spending on a model", async () => {
+test("the shared tooling API binds native schema/source policy without spending on a model", async () => {
   const f = await setupFixture();
   try {
     const catalog = await f.service.controller.platform.query({ type: "tooling.catalog", sessionId: f.sessionId, query: "edit_file" });
@@ -37,11 +42,11 @@ test("the shared tooling API binds schema/source approvals without spending on a
     const result = await f.service.controller.dispatch(envelope({ type: "tooling.execute", sessionId: f.sessionId,
       name: tool.name, schemaDigest: tool.schemaDigest, arguments: { path: "fixture.txt" } }));
     assert.equal(f.requests.length, 0);
-    assert.equal(f.session().pendingApproval?.call.name, "read_file");
-    await f.approve();
+    assert.equal(f.session().pendingApproval, null);
     await waitFor(() => f.service.controller.snapshot().jobs.find((job) => job.id === result.id)?.status === "completed");
     assert.equal(await readFile(join(f.project, "fixture.txt"), "utf8"), "generated original\n");
     assert.equal(f.requests.length, 0);
+    assert.ok(f.service.controller.events(0).some((event) => event.event_type === "tool.decided" && event.payload.actor === "policy"));
     await assert.rejects(() => f.service.controller.dispatch(envelope({ type: "tooling.execute", sessionId: f.sessionId,
       name: "read_file", schemaDigest: "0".repeat(64), arguments: { path: "fixture.txt" } })), { code: "tool_schema" });
   } finally { await f.close(); }

@@ -7,7 +7,7 @@ import { routedFixture } from "./single-routing.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
 
 export async function winddownApiFixture(options: { git?: boolean; capDelta?: number } = {}) {
-  const f = await routedFixture(), checkpointOptions = { responseMode: "text" as const, exposeModels: true, replyText: JSON.stringify({
+  const f = await routedFixture(), checkpointOptions = { modelId: "generated-winddown-api", responseMode: "text" as const, exposeModels: true, replyText: JSON.stringify({
     summary: "Generated wind-down: ordinary work was blocked by the actual cumulative cap. No code was accepted or committed.",
   }) }, checkpoint = await fixtureProvider(checkpointOptions);
   let git: ReturnType<typeof initializeGeneratedRepository> | undefined;

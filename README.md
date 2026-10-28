@@ -8,14 +8,16 @@ Moguri is built from zero with borrowed libraries. The [implementation specifica
 
 The first executable checkpoint includes an **OpenTUI terminal client** and an
 **Electron desktop app** sharing one local service. It supports GitHub Copilot
-device sign-in, account-enabled model selection, streamed conversations, manual
-approval of project file and shell tools, persistent drafts and queues, distinct
+device sign-in, account-enabled model selection, streamed conversations, native
+file operations with script/unlisted-website approvals, persistent drafts and queues, distinct
 Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 
 The TUI uses Enter to send and Shift+Enter for newlines; Cmd/Ctrl+Enter still
 holds. Moguri includes its own verified [source setup instructions](docs/setup.md)
 in normal model context, including project-free chats.
+The [Local website allowlist](docs/architecture/native-network-policy.md) supports
+session, project and profile-wide grants through Guardrails and `/firewall`.
 
 The **importable Moguri SDK** now powers the CLI, TUI and desktop. It exposes
 shared editable/restorable system instructions and permissions, opt-in local
@@ -31,6 +33,10 @@ never proof of completion. [Session controls](docs/architecture/session-interact
 include ordered drag/drop, context-menu actions, serial held queues and explicit
 work/question/approval/completion indicators with verified draft/open/merged PR state.
 Unread names use subtle font weight rather than extra session-list dots.
+Center drops nest sessions or create named project folders; folder chats capture
+all member repositories for explicit Local reads, edits and commands. Fuzzy
+session/settings search and compact settings controls share the
+[session reliability contract](docs/architecture/session-reliability.md).
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
@@ -67,6 +73,11 @@ hosts or downloads weights. New sessions resolve snapshotted global,
 current-profile and project controls, with explicit session overrides and
 visible provenance; existing sessions are not rewritten.
 
+**Settings / Models / Providers** can disable providers or unwanted models per
+profile. Matching upstream model IDs share one explicit provider choice, without
+duplicates or silent fallback. The same availability gates `/model`, routing and
+new calls. [Provider/model controls](docs/setup.md#provider-and-model-availability).
+
 Isolated **profiles** use immutable SDK clients over the same local authority.
 Desktop's profile selector, TUI **F8** and CLI `--profile ID` preserve separate
 accounts, projects, drafts, memory and artifacts. Creating a profile neither
@@ -96,10 +107,15 @@ and per-session **Code change** and **Work item** links.
 Click an active right-rail icon again to collapse its pane back to the rail.
 Terminal belongs to a session: project-free consoles start in configured HOME,
 and project consoles keep their bound worktree. There is no global-terminal UI.
+Ordinary project-free Local chats also use their
+[captured Home](docs/architecture/project-free-execution.md) for approved file
+and command tools, without creating a project. Browser control keeps its
+explicit user toggle; GitHub commands need an explicit repository target.
 Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
-Dictation distinguishes initialization, recording and
-transcript finalization without sending a prompt automatically.
+Hold Ctrl+Space to dictate directly into the draft; release flushes the streamed
+transcript without an Insert step or automatic prompt submission. Side chat
+opens immediately, read-only, with inherited controls and captured main context.
 
 [Chat activity](docs/setup.md#chat-activity-and-usage) uses small operation
 icons, expandable original arguments/results, observed timing/output quantities
@@ -124,8 +140,8 @@ profile-private **skill gateway** for local folders and refreshed remote
 archives. Settings use compact information/copy controls and contain Artifacts,
 Candidates and unified Sandbox management. Suggestions starts globally with
 local usage-gap checks; model generation still requires exact source review.
-Automations and the Work item link panel are intentionally empty. Existing
-session PRs open in Code change. Copilot connection status stays in Settings,
+Automations remain unimplemented. Work item links the project's Kanban cards or
+GitHub issues; session PRs open in Code change. Copilot connection status stays in Settings,
 not the left sidebar.
 
 **PDF, Excel (.xlsx) and Word (.docx)** use locally extracted, encrypted
@@ -273,6 +289,8 @@ current action; Shift+Enter adds a line.
 Both sidebars resize, and message copy appears on hover or keyboard focus.
 Toggle/dropdown preferences, model context and supported thinking effort save
 automatically through shared SDK controls; text settings retain explicit saves.
+`/thinking` and `/effort` set supported effort; `/context-window` sets an exact
+token ceiling or `min`, `half`, `max` without running a model.
 See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).
 
 New chats can use a fixed **global default model/effort** or the current
@@ -281,6 +299,10 @@ overrides stay unchanged. See [model defaults](docs/architecture/model-controls.
 
 The session workspace adds **queue-only Cmd/Ctrl+Enter**, shared chat slash
 commands, enforced read-only sessions and parallel question-only side chats.
+Opening Side chat immediately gives the same composer, model/thinking controls
+and voice input with captured main-chat context, permanently read-only.
+Hold **Ctrl+Space** to dictate locally: words stream into the textbox and release
+flushes them without sending. Session names and settings support fuzzy search.
 Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
 isolated browser previews, linked PRs and Insights. Double-click a session to
 rename it. Sessions support pin/group/
@@ -301,7 +323,7 @@ Attachments stay compact in the composer/chat. Clicking an image opens the
 large, uncropped viewer without changing captured context.
 
 Project-free sessions can open private HOME consoles without granting model
-workspace access. Project-free Autopilot adds no tool grants, and side
+workspace access. Project-free Autopilot cannot invent workspace access, and side
 chats expose an explicit concrete-model selector when needed.
 User consoles retain authenticated per-profile/peer owners across
 explicit service restart or controller loss. Ghostty and shared SDK/CLI/TUI
@@ -339,8 +361,16 @@ user explicitly accepts and downloads the model once. NVIDIA documents
 ready languages. No cloud ASR fallback or automatic model-weight download occurs.
 
 Projects also have a **local Kanban** for feature, bug and misc tickets, with
-custom phases, connected PRs and read-only merge observation. A verified merge
-moves a ticket to the chosen phase. Optional Linear imports start off, use a
+their own board chat, shared Show/Hide preference and same-panel GitHub/Linear
+sources, per-column creation and drag/drop. `/continue-work` or the prompt
+**continue work** asks each time whether to use Kanban or send the prompt
+normally. Kanban takes one eligible item in an isolated Local checkout
+through its draft PR; it does not merge or drain the backlog. Project secondary
+click opens actions; dragging or Alt+Up/Down reorders. Work item can select a
+Kanban card. [Setup and boundaries](docs/architecture/project-kanban.md).
+**Sync with GitHub** updates linked status into Kanban only and can optionally
+import open repository issues. Draft PRs mean in progress, ready PRs mean review,
+and completed/won't-do closed issues mean done. Optional Linear imports start off, use a
 user-supplied keychain credential and never upload local tickets.
 
 The **shared dependency cache** reuses SHA-512-verified archives across projects
@@ -353,8 +383,10 @@ a real SendBox boundary is qualified.
 This is a **macOS development alpha**, not the completed first milestone.
 Explicit **estimate-based token/USD caps** and separate profile/global hard
 policies now share cumulative role-aware reservations. Unknown completion holds
-capacity; deletion, defaults and restart do not refund it. USD needs dated
-user-approved model rates, never a guessed Copilot price. These are admission
+capacity; deletion, defaults and restart do not refund it. Named Copilot/reseller
+models can use **originating-provider API-equivalent estimates**, not subscription
+bills. Finite USD needs a fresh user rate or explicit reference-rate consent;
+missing/stale prices remain unknown. These are admission
 limits, not exact provider-billing guarantees. CLI/TUI, desktop composer,
 settings and the profile usage dashboard share the SDK.
 Dashboard views now add UTC presets/year/custom ranges, calendar buckets,
@@ -490,7 +522,7 @@ requirements from deferred work.
 - The chat composer, TUI, and CLI expose **Env**, **Model**, **Autonomy level**, and **Budget**. Starting defaults are Local, no model until provider login or local-model configuration, Manual, and Unlimited. Global, profile, and repo/project settings can supply different defaults.
 - Desktop has an Attach button and image paste; attachment triggers are `^` for a local file or folder, `:` for an active session, `#` for a GitHub issue or PR, and `@` for a named Local project file/folder or GitHub file. `!` remains a legacy session alias. TUI/CLI expose the same typed snapshots and review boundaries.
 - **Env** offers **Local**, **Sandbox** via SendBox, and **Remote** via SSH. Remote runs the agent and model calls on the configured machine. Global policy may allow only Sandbox or Remote; it blocks new Local turns while existing Local turns may finish. Neither SSH nor a label implies SendBox containment.
-- **Autonomy level** is independent of model choice and env: **Manual** (default), **Guided** (current model recommends; user confirms), **Autopilot** (current model acts within delegated policy and asks sparingly), and **Autopilot Max** (a decision model decides and steers within delegated policy). No level can bypass hard permissions, budgets, or allowed-env policy.
+- **Autonomy level** is independent of model choice and env: **Manual** (default), **Guided** (model recommends; user confirms), **Autopilot** (automatic tool/command approvals), and **Autopilot Max** (the same approvals plus qualified decision-model choices and steering). Hard denials, read-only mode, budgets and allowed-env policy remain final. See [session and GitHub workflows](docs/setup.md#session-approvals-and-github-workflows) for remembered grants, repository/PR/issue pickers and updater-token setup.
 - **Budget** defaults to unlimited. Users can cap cumulative session tokens, USD, or both when telemetry supports it. The UI warns that caps may interrupt work; kupo tries to checkpoint and commit accepted changes before exhaustion when Git policy and approvals permit it.
 - Dashboard (7,30,60,90,365 days, entire selectable year, custom period, all time)
   - Sessions cost

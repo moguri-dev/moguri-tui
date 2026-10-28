@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { createInterface } from "node:readline/promises";
 import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
@@ -14,6 +15,7 @@ import { workspaceFeatureCommand } from "./workspace-features.ts";
 import { integrationCommand } from "./integrations.ts";
 import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../packages/sdk/src/index.ts";
 import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "../../../packages/sdk/src/index.ts";
+import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -42,6 +44,9 @@ moguri progress --session ID       Checked plan items and untrusted task estimat
 moguri activity list --session ID  Retained chat operations, without new inference
 moguri agent-terminal list --session ID  Approved Agent commands, never private consoles
 moguri tools [OFFSET] [QUERY] --session ID  Scoped typed catalogue, no inference
+moguri firewall [list|add session|project|global HOST_ORIGIN|remove ID] --session ID  Profile-owned Local website allowances
+moguri home [status] --session ID  Captured Home and independently retained original writers
+moguri home acknowledge WRITER REV confirm-inspected --session ID  Actual-user risk acknowledgement, never cleanup proof
 moguri tool NAME SCHEMA_SHA ARGUMENTS_JSON --session ID  Exact approved Local job
 moguri tool-result STEP CALL [OFFSET] --session ID  Original retained source
 moguri state SELECT_SQL --session ID  Canonical todo/memory views
@@ -59,6 +64,10 @@ moguri profile defaults CONTROLS.json --revision N  Shared global preferences
 moguri session create [--project ID]  Omit project for a project-free chat
 moguri session create --controls FILE  Explicit startup control overrides
 moguri models list|refresh         Copilot and configured local model discovery
+moguri models catalogue            Profile provider/model switches and exact source inventory
+moguri models enable|disable API_ID  Set shared profile model availability
+moguri models provider ID enable|disable  Retain login/configuration while switching a provider
+moguri models source API_ID MODEL_ID  Choose one exact provider offering; never fall back
 moguri models evidence MODEL_ID   Explicit provider claims, not independence/quality; no inference
 moguri models token ENDPOINT       Piped stdin only, never a shell argument
 moguri models clear-token ENDPOINT Remove the resource-bound endpoint key
@@ -244,6 +253,13 @@ moguri issues update ISSUE_ID issue.json --revision N
 moguri issues move ISSUE_ID PHASE --revision N
 moguri issues archive|restore ISSUE_ID --revision N
 moguri issues configure PROJECT_ID board.json --revision N
+moguri kanban open PROJECT_ID
+moguri kanban items PROJECT_ID [kanban|github-issues|github-prs] [PAGE]
+moguri kanban continue SESSION_ID [CARD_ID]
+moguri kanban work|stop RUN_ID
+moguri kanban inspect RUN_ID --revision N --confirm-review
+moguri prices
+moguri prices refresh [anthropic|openai|google|xai]
 moguri cache inspect PROJECT_ID npm|pnpm
 moguri cache inspect PROJECT_ID python|cargo|go
 moguri cache prepare|install PROJECT_ID MANAGER SHA256 --accept-dependency-metadata
@@ -372,7 +388,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else throw new Error("Use activity list [SEQUENCE ID], activity turn ID or activity read ID arguments|output [UTF8_OFFSET] with --session ID.");
     } else if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.slice().sort(compareSessionOrder).map(({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned }) => ({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned })) });
-    } else if (["tools", "tool", "tool-result", "state", "watch", "coordinate"].includes(group)) {
+    } else if (["firewall", "home", "tools", "tool", "tool-result", "state", "watch", "coordinate"].includes(group)) {
       if (!values.session) throw new Error("Choose --session ID. No previous project/root or session authority is inherited.");
       const value = await sdk.slash(values.session, `/${group}${action ? ` ${[action, ...args].join(" ")}` : ""}`, "cli");
       output(value.kind === "text" ? values.json ? JSON.parse(value.text) : value.text : value);
@@ -623,16 +639,28 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else throw new Error("Use remote status/probe/reconcile RUN_ID, acknowledge RUN_ID --confirm-review only after process inspection, or token/clear-token ENDPOINT.");
     } else if (group === "models") {
       if (action === "list") output({ models: snapshot.provider.models, connections: snapshot.provider.connections });
+      else if (action === "catalogue" && !args.length) output(sdk.models.catalogue());
+      else if ((action === "enable" || action === "disable") && args.length === 1) output(await sdk.models.setEnabled(args[0]!, action === "enable", values.revision === undefined ? undefined : expectedRevision()));
+      else if (action === "provider" && args.length === 2 && (args[1] === "enable" || args[1] === "disable")) output(await sdk.models.setProviderEnabled(args[0]!, args[1] === "enable", values.revision === undefined ? undefined : expectedRevision()));
+      else if (action === "source" && args.length === 2) output(await sdk.models.selectSource(args[0]!, args[1]!, values.revision === undefined ? undefined : expectedRevision()));
       else if (action === "evidence" && args.length === 1) output(await sdk.models.evidence(args[0]!));
       else if (action === "refresh") { await sdk.models.refresh(); output(sdk.getState().snapshot!.provider); }
       else if (action === "token" && args[0]) output(await sdk.models.setToken(args[0], await credential()));
       else if (action === "clear-token" && args[0]) output(await sdk.models.clearToken(args[0]));
-      else throw new Error("Use models list, refresh, evidence MODEL_ID, token ENDPOINT or clear-token ENDPOINT. Evidence is an explicit bounded account-catalogue read, not inference or independence. Configure endpoint URLs/limits in shared settings.");
+      else throw new Error("Use models list, catalogue, refresh, enable|disable API_ID, provider ID enable|disable, source API_ID MODEL_ID, evidence MODEL_ID, token ENDPOINT or clear-token ENDPOINT. Preference writes accept an observed --revision N. No sign-in, inference or source fallback is implied.");
     } else if (group === "slash") {
       if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
       if (/^\/budget\s+(?:set|profile|global)\b/.test(action)) console.error(BUDGET_WARNING);
       const result = await sdk.slash(values.session, [action, ...args].join(" "), "cli");
-      if (result.kind === "export" && result.path) output(await saveArtifactExport(result.path, result.document)); else output(result);
+      if (result.kind === "continue-work" && process.stdin.isTTY && !values.json) {
+        const prompt = createInterface({ input: process.stdin, output: process.stdout });
+        try {
+          const answer = (await prompt.question("Continue work: [k] Kanban, [m] send to model, [c] cancel: ")).trim().toLowerCase();
+          if (answer === "k" || answer === "m") output(await sdk.kanban.choose(result.review, answer === "k" ? "kanban" : "prompt"));
+          else if (answer === "c" || answer === "") output({ cancelled: true, draftPreserved: true });
+          else throw new Error("Choose k, m or c. No request was dispatched; the saved draft is preserved.");
+        } finally { prompt.close(); }
+      } else if (result.kind === "export" && result.path) output(await saveArtifactExport(result.path, result.document)); else output(result);
     } else if (group === "metachat") {
       if (values.session && values.project) throw new Error("Choose --session or --project, not both. A settings chat cannot silently change its parent's scope.");
       const parent = snapshot.sessions.find((session) => session.id === values.session);
@@ -731,6 +759,19 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         const draft = new DraftEditor(sdk, session.id, session.draft);
         try { draft.edit(await readFile(args[0], "utf8")); output(await draft.send("queue", true)); } finally { draft.dispose(); }
       } else throw new Error("Use queue list/copy/run/remove/edit/reorder/hold. Queue mutations use the observed queue --revision.");
+    } else if (group === "prices") {
+      if (!action) output(await sdk.prices.catalog());
+      else if (action === "refresh") output(await sdk.prices.refresh(args.length ? args.map((provider) => parse(PriceProviderSchema, provider)) : undefined));
+      else throw new Error("Use prices or prices refresh [anthropic|openai|google|xai]. References are API-equivalent estimates, not bills.");
+    } else if (group === "kanban") {
+      if (!args[0]) throw new Error("Choose the exact project, origin session or retained task ID.");
+      if (action === "open") output(await sdk.kanban.open(args[0]));
+      else if (action === "items") output(await sdk.kanban.items(args[0], parse(KanbanSourceSchema, args[1] ?? "kanban"), args[2] ? Number(args[2]) : 1));
+      else if (action === "continue") output(await sdk.kanban.continue(args[0], args[1]));
+      else if (action === "work") output(await sdk.kanban.work(args[0]));
+      else if (action === "stop") output(await sdk.kanban.cancel(args[0]));
+      else if (action === "inspect" && values["confirm-review"]) output(await sdk.kanban.inspect(args[0], expectedRevision(), true));
+      else throw new Error("Use kanban open/items/continue/work/stop/inspect. Inspection requires the exact --revision and --confirm-review.");
     } else if (group === "issues") {
       if (!args[0]) throw new Error("Choose a project or issue ID from moguri status or issues list.");
       if (action === "list") output(await sdk.issues.board(args[0]));

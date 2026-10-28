@@ -19,7 +19,7 @@ export async function compoundApiFixture(configuration: { legacyNotifications?: 
     const settings = structuredClone(f.sdk.settings.get()!.values);
     if (configuration.legacyNotifications) settings.notifications = { inApp: settings.notifications.inApp, os: settings.notifications.os, previewContent: settings.notifications.previewContent };
     for (const role of ["first", "selected", "escalation", "critic"]) {
-      const value: GeneratedProviderOptions = { responseMode: "text", replyText: JSON.stringify(proposal), exposeModels: true, maxOutputTokens: 8192, contextWindow: 262144 };
+      const value: GeneratedProviderOptions = { modelId: `generated-compound-${role}-api`, responseMode: "text", replyText: JSON.stringify(proposal), exposeModels: true, maxOutputTokens: 8192, contextWindow: 262144 };
       options.push(value);
       const provider = await fixtureProvider(value); providers.push(provider);
       settings.localModels.push({ id: `generated-compound-${role}`, name: `Generated compound ${role}`, enabled: true, baseUrl: `${provider.baseUrl}/v1`, auth: "none",

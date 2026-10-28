@@ -12,12 +12,13 @@ import { retainedCiphertextRows, writeLegacyState } from "./fixtures/legacy-stat
 import { remoteFixture } from "./fixtures/remote-service.ts";
 import { operationProjection } from "../apps/service/src/operation-telemetry.ts";
 
-test("only a workspace-bound model receives Agent terminal tools; project-free chats do not pay for an unusable command capability", async () => {
+test("Agent terminal tools require an actual project or captured Home, never an unbound scope", async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   try {
     const settings = sdk.settings.get()!.values;
     assert.equal(effectiveTools(settings, false, "agent", undefined, { project: false, env: "Local" }).some((tool) => tool.name === "read_agent_terminal"), false);
     assert.equal(effectiveTools(settings, false, "agent", undefined, { project: true, env: "Local" }).some((tool) => tool.name === "read_agent_terminal"), true);
+    assert.equal(effectiveTools(settings, false, "agent", undefined, { project: false, workspace: true, env: "Local" }).some((tool) => tool.name === "read_agent_terminal"), true);
     assert.equal(fixture.requests.length, 0);
   } finally { sdk.disconnect(); await fixture.close(); }
 });
@@ -74,7 +75,7 @@ test("the actual model executes in its Agent terminal and rereads that exact out
     const declared = fixture.requests[0]!.tools;
     assert.ok(Array.isArray(declared) && declared.some((tool) => isRecord(tool) && isRecord(tool.function) && tool.function.name === "discover_tools"), "The solver must be able to discover its scoped Agent reader.");
     assert.equal((await sdk.tools.catalog(fixture.sessionId, "read_agent_terminal")).tools.some((tool) => tool.name === "read_agent_terminal"), true);
-    await fixture.approve(); await fixture.approve(); await fixture.approve(); await fixture.terminal();
+    await fixture.approve(); await fixture.terminal();
     const completed = fixture.service.controller.events(0).filter((event) => event.event_type === "tool.completed" && event.payload.call.name === "read_agent_terminal");
     assert.equal(completed.length, 2);
     const read = completed.at(-1)!;
@@ -106,7 +107,7 @@ test("the Agent terminal exposes exact approved command results, not other tools
     await assert.rejects(() => sdk.agentTerminals.read(fixture.sessionId, user.id!), { code: "activity_missing" });
     await sdk.terminal.close(user.id!);
     delete options.toolCall;
-    await fixture.send("generated tool: read the fixture"); await fixture.approve(); await fixture.terminal();
+    await fixture.send("generated tool: read the fixture"); await fixture.terminal();
     const file = (await sdk.activity.list(fixture.sessionId)).activity.entries.find((entry) => entry.toolName === "read_file")!;
     await assert.rejects(() => sdk.agentTerminals.read(fixture.sessionId, file.id), { code: "activity_missing" });
     assert.equal((await sdk.agentTerminals.list(fixture.sessionId)).activity.entries.length, 1);
@@ -178,7 +179,6 @@ test("Agent reads obey explicit denial and remain read-only without granting ano
         ] } }, settings.revision);
       } else await sdk.slash(fixture.sessionId, "/read-only", "tui");
       await fixture.send("Generated permission-bound reread.");
-      if (mode === "read-only") await fixture.approve();
       await fixture.terminal();
       const result = fixture.service.controller.events(0).findLast((event) => event.event_type === "tool.completed" && event.payload.call.name === "read_agent_terminal")!;
       if (result.event_type !== "tool.completed") throw new Error("Generated policy result missing.");
@@ -203,7 +203,7 @@ test("policy revocation or stop during an Agent read cannot publish held output 
       t.mock.method(fixture.service.controller.platform.activity, "agentTerminal", async (...args: Parameters<typeof original>) => {
         const result = await original(...args); enter(); await held; return result;
       });
-      await fixture.send("Generated read with changing authority."); await fixture.approve(); await entered;
+      await fixture.send("Generated read with changing authority."); await entered;
       const turnId = fixture.session().turnId;
       if (change === "policy") {
         const settings = sdk.settings.get()!;
@@ -250,7 +250,7 @@ test("the actual pinned SSH worker runs and rereads its Agent command without a 
   const sdk = await new MoguriSdk(fixture.service.connection).ready();
   try {
     await fixture.probe(); await fixture.select(); await fixture.send("Generated Remote agent terminal.");
-    await fixture.approve(); await fixture.approve(); await fixture.approve(); await fixture.terminal();
+    await fixture.approve(); await fixture.terminal();
     const command = (await sdk.agentTerminals.list(fixture.sessionId)).activity.entries[0]!;
     assert.equal(command.env, "Remote"); assert.equal(command.status, "completed");
     const output = (await sdk.agentTerminals.read(fixture.sessionId, command.id)).content!.text;

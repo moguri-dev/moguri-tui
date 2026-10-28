@@ -6,13 +6,33 @@ import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-co
 import type { PreparedModel, ProviderAdapter } from "../apps/service/src/provider.ts";
 import { startService } from "../apps/service/src/server.ts";
 import { envelope } from "../apps/service/src/controller.ts";
-import { isRecord, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
+import { isRecord, MoguriError, type ProviderState, type Session } from "../packages/protocol/src/index.ts";
+import { runProgram } from "../apps/service/src/program.ts";
 import type { TaskProgressInput } from "../packages/protocol/src/progress.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
 import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
 import { supportedThinking } from "../apps/service/src/model-controls.ts";
 import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
+import type { MoguriSdk } from "../packages/sdk/src/index.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
+export async function reviewNativeTools(fixture: { service: Awaited<ReturnType<typeof startService>> } | MoguriSdk, names = ["read_file", "write_file"]) {
+  const current = "service" in fixture ? fixture.service.controller.snapshot().settings : fixture.settings.get();
+  if (!current) throw new Error("Connect the generated profile before configuring its explicit strict review rules.");
+  const command = { type: "settings.update" as const, expectedRevision: current.revision, acknowledgePromptRisk: false,
+    settings: { ...current.values, permissions: { ...current.values.permissions,
+      tools: [...current.values.permissions.tools, ...names.map((tool) => ({ id: `generated-review-${tool}`, tool, pathPrefix: "", decision: "ask" as const }))] } } };
+  return "service" in fixture ? fixture.service.controller.dispatch(envelope(command)) : fixture.command(command);
+}
+
+export async function automaticHome(sdk: MoguriSdk, title: string) {
+  const created = await sdk.sessions.create(null, title);
+  await sdk.sessions.autonomy(created.id!, "Autopilot"); return created.id!;
+}
+export async function homeCommand(sdk: MoguriSdk, sessionId: string, command: string, timeoutMs = 5000) {
+  const tool = (await sdk.tools.catalog(sessionId, "run_command")).tools.find((tool) => tool.name === "run_command");
+  if (!tool) throw new Error("Generated Home command is missing its actual scoped schema.");
+  return sdk.tools.execute(sessionId, tool.name, { command, timeoutMs }, tool.schemaDigest);
+}
 
 export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 8000): Promise<NonNullable<T>> {
   const deadline = Date.now() + timeout;
@@ -24,6 +44,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
 export interface GeneratedProviderOptions {
+  modelId?: string;
   respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> }; hold?: boolean };
   issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
   stateSql?: boolean;
@@ -32,6 +53,8 @@ export interface GeneratedProviderOptions {
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
   reasoningText?: string;
   toolCall?: { name: string; args: Record<string, unknown> };
+  toolCalls?: { name: string; args: Record<string, unknown> }[];
+  toolBatches?: { name: string; args: Record<string, unknown> }[][];
   agentTerminalRead?: boolean;
   contextWindow?: number; supportedContextWindows?: number[];
   readPaste?: { offset?: number; limit?: number; search?: string };
@@ -46,12 +69,13 @@ export interface GeneratedProviderOptions {
 }
 export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const base = githubCopilotProvider().getModels().find((model) => model.api === "openai-completions")!;
+  const apiModelId = options.modelId ?? base.id;
   const requests: Record<string, unknown>[] = [];
   const held = new Set<ServerResponse>();
   const headers: (string | undefined)[] = [];
   const server = createServer((request, response) => {
     void (async () => {
-      if (request.method === "GET" && options.exposeModels && request.url?.endsWith("/models")) { response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ id: base.id }] })); return; }
+      if (request.method === "GET" && options.exposeModels && request.url?.endsWith("/models")) { response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ id: apiModelId }] })); return; }
       const chunks = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -66,11 +90,12 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
       if (prompt.includes("generated provider failure")) { response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "Generated unavailable provider", type: "authentication_error" } })); return; }
       response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
       const chunk = (delta: unknown, finish_reason: string | null = null) => response.write(`data: ${JSON.stringify({
-        id: "generated-response", object: "chat.completion.chunk", model: base.id,
+        id: "generated-response", object: "chat.completion.chunk", model: apiModelId,
         choices: [{ index: 0, delta, finish_reason }],
       })}\n\n`);
-      const finish = (tool?: { name: string; args: Record<string, unknown> }, text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
-        if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); chunk({ role: "assistant", tool_calls: [{ index: 0, id: `generated-call-${requests.length}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] }); }
+      const finish = (tool?: { name: string; args: Record<string, unknown> } | { name: string; args: Record<string, unknown> }[], text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
+        if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); const tools = Array.isArray(tool) ? tool : [tool];
+          chunk({ role: "assistant", tool_calls: tools.map((item, index) => ({ index, id: `generated-call-${requests.length}${tools.length > 1 ? `-${index}` : ""}`, type: "function", function: { name: item.name, arguments: JSON.stringify(item.args) } })) }); }
         else {
           if (options.reasoningText) chunk({ role: "assistant", reasoning_content: options.reasoningText });
           chunk({ role: "assistant", content: text });
@@ -115,6 +140,10 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
           { sql: "INSERT INTO todos(id,text,status) VALUES (1,'Generated first step','done'),(2,'Generated second step','pending')" },
           { sql: "INSERT INTO memories(id,title,text) VALUES ('generated-note','Generated note','Generated retained observation.')" },
         ] } });
+      } else if (options.toolBatches && toolMessages.length < options.toolBatches.length) {
+        finish(options.toolBatches[toolMessages.length]);
+      } else if (options.toolCalls && toolMessages.length < options.toolCalls.length) {
+        finish(options.toolCalls[toolMessages.length]);
       } else if (options.toolCall && toolMessages.length === 0) {
         finish(options.toolCall);
       } else if (options.agentTerminalRead && toolMessages.length === 1) {
@@ -178,7 +207,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture bind failed.");
-  const model = { ...base, ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}), ...(options.supportedContextWindows ? { supportedContextWindows: options.supportedContextWindows } : {}), ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
+  const model = { ...base, id: apiModelId, ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}), ...(options.supportedContextWindows ? { supportedContextWindows: options.supportedContextWindows } : {}), ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
   const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, ...(model.supportedContextWindows ? { supportedContextWindows: model.supportedContextWindows } : {}), maxTokens: model.maxTokens, imageInput: options.imageInput ?? false, ...(options.toolInput !== undefined ? { toolInput: options.toolInput } : {}), thinkingLevels: supportedThinking(model) }];
   class FixtureProvider implements ProviderAdapter {
     state: ProviderState = { status: "connected", models: catalog, login: null, diagnostic: null };
@@ -208,9 +237,9 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
 }
 export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
-  const project = join(directory, "project");
+  const project = join(directory, "project"), home = join(directory, "home");
   const { mkdir } = await import("node:fs/promises");
-  await mkdir(project);
+  await Promise.all([mkdir(project), mkdir(home)]);
   await writeFile(join(project, "fixture.txt"), "generated original\n");
   const fixture = await fixtureProvider(options);
   const terminalSecrets = new Map<string, string>();
@@ -218,7 +247,13 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
   const terminalVault = { read: async (id: string) => terminalSecrets.get(terminalSlot(id)) ?? null, write: async (id: string, value: string) => { terminalSecrets.set(terminalSlot(id), value); }, remove: async (id: string) => { terminalSecrets.delete(terminalSlot(id)); } };
   const program = options.platform?.terminal?.executable ? {} : { executable: process.execPath,
     args: ["-e", "process.stdin.resume();process.stdout.write('GENERATED_TERMINAL_READY\\n');"] };
-  const platform = { ...options.platform, terminal: { ...program, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
+  const platform: PlatformOptions = { ...options.platform, integrations: { ...options.platform?.integrations, program: options.platform?.integrations?.program ?? (async (executable, args, request) => {
+    if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture forbids personal GitHub authentication.");
+    return runProgram(executable, args, request);
+  }) }, github: { ...options.platform?.github, runProgram: options.platform?.github?.runProgram ?? (async (executable, args, request) => {
+    if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture has no GitHub account. Personal authentication is forbidden.");
+    return runProgram(executable, args, request);
+  }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
   const restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
@@ -237,7 +272,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     return service.controller.dispatch(envelope({ type: "message.send", sessionId, expectedRevision: session().draft.revision, delivery }));
   };
   return {
-    ...fixture, directory, project, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: platform.terminal.vault,
+    ...fixture, directory, project, home: options.platform?.terminal?.defaultRoot ?? home, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: options.platform?.terminal?.vault ?? terminalVault,
     approve: async (allow = true) => {
       const approval = await waitFor(() => session().pendingApproval);
       return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));

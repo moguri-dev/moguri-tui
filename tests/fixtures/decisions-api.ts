@@ -6,7 +6,7 @@ export const generatedAdvice = (choice = "allow", confidence = 0.98) => JSON.str
   type: "choice", choice, confidence, probabilities: { allow: choice === "allow" ? 0.98 : 0.01, deny: choice === "deny" ? 0.98 : 0.01, askUser: choice === "askUser" ? 0.98 : 0.01 },
 } } });
 export async function setupDecisions(options: { primary?: GeneratedProviderOptions; advice?: GeneratedProviderOptions; delegated?: boolean } = {}) {
-  const f = await setupFixture(options.primary), advice = await fixtureProvider({ responseMode: "text", exposeModels: true, replyText: generatedAdvice(), ...options.advice });
+  const f = await setupFixture(options.primary), advice = await fixtureProvider({ modelId: "generated-decision-api", responseMode: "text", exposeModels: true, replyText: generatedAdvice(), ...options.advice });
   const sdk = await new MoguriSdk(f.service.connection).ready();
   try {
     await f.configure(); await sdk.refresh();
@@ -19,7 +19,8 @@ export async function setupDecisions(options: { primary?: GeneratedProviderOptio
     const configured = structuredClone(sdk.settings.get()!.values);
     configured.decisions = { ...configured.decisions, enabled: true, modelId: model.id, outputTokens: 256 };
     await sdk.settings.update(configured, sdk.settings.get()!.revision);
-    await sdk.sessions.configure(f.sessionId, { ...f.session().controls, autonomy: "Autopilot Max" });
+    // Transport/delegation fixtures explicitly retain bounded Max, not new automatic approvals.
+    await sdk.sessions.configure(f.sessionId, { ...f.session().controls, autonomy: "Autopilot Max", automaticApprovals: false });
     return { ...f, sdk, advice, decisionModelId: model.id, close: async () => { sdk.disconnect(); await f.close(); await advice.close(); } };
   } catch (error) { sdk.disconnect(); await f.close(); await advice.close(); throw error; }
 }

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { TuiApp } from "../apps/tui/src/App.tsx";
 import { MoguriSdk as MoguriClient } from "../packages/sdk/src/index.ts";
 import { envelope } from "../apps/service/src/controller.ts";
-import { setupFixture, waitFor } from "./fixture.ts";
+import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { profileFixture } from "./fixtures/profiles.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
@@ -33,6 +33,25 @@ import { compoundApiFixture } from "./fixtures/compound-api.ts";
 import { winddownApiFixture } from "./fixtures/winddown-api.ts";
 
 const nativeSandbox = await nativeConfiguration();
+test("actual TUI thinking, effort and exact context shortcuts share saved model controls without inference", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture({ reasoning: true, contextWindow: 32769 }), client = await new MoguriClient(fixture.service.connection).ready();
+  await fixture.configure(); await client.refresh();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI model shortcut did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    for (const [command, expected] of [["/thinking high", "Thinking effort set to high"], ["/effort low", "Thinking effort set to low"], ["/context-window 24577", "Context window set to 24,577"], ["/thinking default", "Thinking effort set to the model default"]] as const) {
+      await setup.mockInput.typeText(command); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected);
+    }
+    assert.deepEqual(fixture.session().controls.modelOptions, { contextWindow: 24577 });
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("actual TUI model dropdown selects default automatic Kupo and runs its sole model without a classifier", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture({ responseMode: "text", maxOutputTokens: 128 }), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 150, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -148,6 +167,7 @@ test("native TUI keys review retained Sandbox outputs and confirm separate sourc
 test("actual native TUI qualifies the guest, prepares reviewed source, holds a queued prompt and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: 90_000 }, async () => {
   assert.ok(nativeSandbox);
   const fixture = await nativeApiFixture(nativeSandbox), { sdk, provider, project, service } = fixture;
+  await reviewNativeTools(sdk);
   const bound = await sdk.command({ type: "project.add", path: project }), created = await sdk.sessions.create(bound.id!);
   const session = () => service.controller.snapshot().sessions.find((value) => value.id === created.id)!;
   await sdk.sessions.configure(created.id!, { ...session().controls, modelId: provider.modelId });
@@ -549,7 +569,8 @@ test("the actual TUI explicitly generates, reviews, applies and restores one met
     await slash(`/compact generate ${JSON.stringify({ digest: preview.digest, modelId: preview.modelId, keepRecentTurns: preview.keepRecentTurns })} confirm-cost`, "requested");
     await fixture.terminal(); setup.mockInput.pressEscape();
     const entry = (await fixture.sdk.compactions.state(fixture.sessionId)).compactions.at(-1)!;
-    await slash(`/compact read ${entry.id}`, "Generated summary");
+    await slash(`/compact read ${entry.id}`, '"status": "proposed"');
+    await frameUntil("Generated summary");
     setup.mockInput.pressEscape();
     await slash(`/compact apply ${entry.id} ${entry.revision} confirm-reviewed`, "Reviewed context prefix applied");
     assert.equal(fixture.session().activeCompactionId, entry.id); setup.mockInput.pressEscape();
@@ -901,7 +922,7 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
 
-test("the actual TUI creates project-free chats, shows attention and reviews metachat changes without workspace authority", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI creates Home-backed chats, shows attention and keeps metachat changes separately reviewed without filesystem authority", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 46, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
@@ -916,7 +937,7 @@ test("the actual TUI creates project-free chats, shows attention and reviews met
     await frameUntil("Write a prompt");
     await slash("/new global");
     const session = await waitFor(() => fixture.service.controller.snapshot().sessions.find((session) => session.projectId === null));
-    await frameUntil("No project");
+    await frameUntil("Home (no project)");
     setup.mockInput.pressKey("m", { ctrl: true });
     await frameUntil("Generated Copilot model"); setup.mockInput.pressEnter();
     await waitFor(() => fixture.service.controller.snapshot().sessions.find((value) => value.id === session.id)?.controls.modelId === fixture.modelId);

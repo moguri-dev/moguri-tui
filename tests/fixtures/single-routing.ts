@@ -9,7 +9,7 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
   const remote = configuration.env === "Remote";
   const secrets = new Map<string, string>(), vault = { read: async (id: string) => secrets.get(id) ?? null, write: async (id: string, value: string) => { secrets.set(id, value); }, remove: async (id: string) => { secrets.delete(id); } };
   const options: GeneratedProviderOptions & { platform?: PlatformOptions } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text", platform: { ...configuration.platform, remote: { ...configuration.platform?.remote, vault, modelsVault: vault } } };
-  const solverOptions: GeneratedProviderOptions = { maxOutputTokens: 128, exposeModels: true, replyText: "Generated routed solver answer." };
+  const solverOptions: GeneratedProviderOptions = { modelId: "generated-routed-solver-api", maxOutputTokens: 128, exposeModels: true, replyText: "Generated routed solver answer." };
   const fixture = await setupFixture(options), solver = await fixtureProvider(solverOptions);
   const sdk = await new MoguriSdk(fixture.service.connection).ready();
   let ssh: Awaited<ReturnType<typeof createSshTarget>> | undefined, workspace: string | null = null;
