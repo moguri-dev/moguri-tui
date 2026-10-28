@@ -218,12 +218,15 @@ test("actual native TUI qualifies the guest, prepares reviewed source, holds a q
     assert.equal(session().turnId, null); assert.equal(service.controller.snapshot().budgetEntries.length, 0);
     await slash(`/run ${held.id}`, "Write a prompt");
     await waitFor(() => session().pendingApproval?.call.name === "read_file", 20_000);
-    await frameUntil("read_file"); await frameUntil("Ctrl+Y approve");
+    await frameUntil("read_file"); await frameUntil("Ctrl+Y once");
     setup.mockInput.pressKey("y", { ctrl: true });
     await waitFor(() => session().pendingApproval?.call.name === "write_file", 20_000);
     await frameUntil("write_file");
     setup.mockInput.pressKey("y", { ctrl: true });
     await waitFor(() => !session().turnId && session().status === "completed", 20_000);
+    const decisions = service.controller.events(0).filter((event) => event.session_id === created.id && event.event_type === "tool.decided");
+    assert.equal(decisions.length, 2);
+    assert.ok(decisions.every((event) => event.event_type === "tool.decided" && event.payload.actor === "user" && event.payload.allow));
     assert.equal(await readFile(join(project, "fixture.txt"), "utf8"), "generated source original\n");
     const execution = service.controller.snapshot().sandboxExecutions!.find((value) => value.sessionId === created.id)!;
     const review = (await sdk.sandbox.publicationPreview(execution.id, ["fixture.txt"])).preview;
