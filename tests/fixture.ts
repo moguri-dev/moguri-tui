@@ -15,6 +15,12 @@ import { supportedThinking } from "../apps/service/src/model-controls.ts";
 import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
 import type { MoguriSdk } from "../packages/sdk/src/index.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
+export async function reviewNativeTools(fixture: { service: Awaited<ReturnType<typeof startService>> }, names = ["read_file", "write_file"]) {
+  const current = fixture.service.controller.snapshot().settings;
+  return fixture.service.controller.dispatch(envelope({ type: "settings.update", expectedRevision: current.revision, acknowledgePromptRisk: false,
+    settings: { ...current.values, permissions: { ...current.values.permissions,
+      tools: [...current.values.permissions.tools, ...names.map((tool) => ({ id: `generated-review-${tool}`, tool, pathPrefix: "", decision: "ask" as const }))] } } }));
+}
 
 export async function automaticHome(sdk: MoguriSdk, title: string) {
   const created = await sdk.sessions.create(null, title);

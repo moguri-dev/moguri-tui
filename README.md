@@ -8,14 +8,16 @@ Moguri is built from zero with borrowed libraries. The [implementation specifica
 
 The first executable checkpoint includes an **OpenTUI terminal client** and an
 **Electron desktop app** sharing one local service. It supports GitHub Copilot
-device sign-in, account-enabled model selection, streamed conversations, manual
-approval of project file and shell tools, persistent drafts and queues, distinct
+device sign-in, account-enabled model selection, streamed conversations, native
+file operations with script/unlisted-website approvals, persistent drafts and queues, distinct
 Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 
 The TUI uses Enter to send and Shift+Enter for newlines; Cmd/Ctrl+Enter still
 holds. Moguri includes its own verified [source setup instructions](docs/setup.md)
 in normal model context, including project-free chats.
+The [Local website allowlist](docs/architecture/native-network-policy.md) supports
+session, project and profile-wide grants through Guardrails and `/firewall`.
 
 The **importable Moguri SDK** now powers the CLI, TUI and desktop. It exposes
 shared editable/restorable system instructions and permissions, opt-in local
