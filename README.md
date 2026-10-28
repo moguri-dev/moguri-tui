@@ -116,8 +116,9 @@ and command tools, without creating a project. Browser control keeps its
 explicit user toggle; GitHub commands need an explicit repository target.
 Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
-Hold Ctrl+Space to dictate directly into the draft; release flushes the streamed
-transcript without an Insert step or automatic prompt submission. Side chat
+Click the microphone to record and click again to confirm, or hold Ctrl+Space
+and release to finish. Both stream into the draft without an Insert step or
+automatic prompt submission. Side chat
 opens immediately, read-only, with inherited controls and captured main context.
 
 [Chat activity](docs/setup.md#chat-activity-and-usage) uses small operation
@@ -305,7 +306,8 @@ commands, enforced read-only sessions and parallel question-only side chats.
 Opening Side chat immediately gives the same composer, model/thinking controls
 and voice input with captured main-chat context, permanently read-only.
 Hold **Ctrl+Space** to dictate locally: words stream into the textbox and release
-flushes them without sending. Session names and settings support fuzzy search.
+flushes them without sending. The microphone button instead uses click-to-record,
+click-again-to-confirm, never press-and-hold. Session names and settings support fuzzy search.
 Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
 isolated browser previews, linked PRs and Insights. Double-click a session to
 rename it. Sessions support pin/group/
