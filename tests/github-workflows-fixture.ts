@@ -66,7 +66,8 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
     sdk?.disconnect(); await service?.close(); await rm(directory, { recursive: true, force: true }); throw error;
   }
 }
-export async function githubApplicationFixture(options: { provider?: ProviderAdapter; ownedNetwork?: boolean; retentionKey?: Buffer; integrations?: IntegrationOptions } = {}) {
+export async function githubApplicationFixture(options: { provider?: ProviderAdapter; ownedNetwork?: boolean; retentionKey?: Buffer; integrations?: IntegrationOptions;
+  beforeRead?: (path: string) => Promise<void> } = {}) {
     const calls: { method: string; path: string }[] = [];
     const repository = { id: 41, name: "fixture", full_name: "generated-owner/fixture",
       owner: { login: "generated-owner", type: "User" }, description: "Generated application repository",
@@ -83,6 +84,7 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       if (executable !== "gh") return runProgram(executable, args, { ...request, env: { ...request.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
       const index = args.indexOf("--method"), method = args[index + 1]!, path = args[index + 2]!;
       calls.push({ method, path });
+      if (method === "GET") await options.beforeRead?.(path);
       const fields: Record<string, string> = {};
       for (let index = 0; index < args.length - 1; index++) if (args[index] === "--raw-field" || args[index] === "--field") {
         const value = args[index + 1]!, split = value.indexOf("="); fields[value.slice(0, split)] = value.slice(split + 1);
