@@ -52,6 +52,29 @@ test("actual TUI thinking, effort and exact context shortcuts share saved model 
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
 
+test("TUI /archive asks how to handle subsessions and remembers the selected cascade", { skip: process.platform !== "darwin" }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  const child = await client.sessions.spawn(fixture.sessionId, "agent", "Generated archive child");
+  const setup = await createTestRenderer({ width: 140, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI session archive did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/archive"); setup.mockInput.pressEnter({ ctrl: true });
+    await frameUntil("Archive all attached subsessions");
+    await setup.mockInput.pressArrow("down"); await setup.mockInput.pressArrow("down");
+    await frameUntil("Archive all and don't ask me again");
+    setup.mockInput.pressEnter();
+    await waitFor(() => client.getState().snapshot?.sessions.every((session) => session.status === "archived"));
+    assert.equal(client.getState().snapshot!.sessions.find((session) => session.id === child.id)?.status, "archived");
+    assert.equal(client.settings.get()?.values.retention.archiveChildren, "archive");
+    assert.equal(fixture.requests.length, 0);
+  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
 test("actual TUI model dropdown selects default automatic Kupo and runs its sole model without a classifier", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture({ responseMode: "text", maxOutputTokens: 128 }), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 150, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);

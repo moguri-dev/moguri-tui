@@ -4,16 +4,22 @@ import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@open
 import type { TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { attachmentStatus, compareSessions, progressBar } from "../../../packages/sdk/src/index.ts";
-import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope } from "../../../packages/sdk/src/index.ts";
+import { attachmentStatus, compareSessions, progressBar, sessionChildBindings, sessionSubtree } from "../../../packages/sdk/src/index.ts";
+import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
+type ArchiveReview = {
+  session: Pick<Session, "id" | "title" | "revision">;
+  children: Pick<Session, "id" | "title" | "parentSessionId" | "kind">[];
+  expected: ReturnType<typeof sessionChildBindings>;
+  canDetach: boolean;
+};
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
 export function TuiApp({ client: initialClient, onQuit, initialSessionId, native }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string; native?: TuiNativeActions }) {
@@ -27,6 +33,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [notice, setNotice] = useState("");
   const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
   const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
+  const [archiveReview, setArchiveReview] = useState<ArchiveReview | null>(null);
   const [otherQuestion, setOtherQuestion] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [detailed, setDetailed] = useState(false);
@@ -103,7 +110,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (githubOwner.current !== owner) return;
     setGithubItems({ scope, context, kind, items: result.items, nextPage: result.nextPage }); setMode("github-items");
   });
-  const chooseSession = async (id: string) => { if (editorModes.includes(mode)) throw new Error("Save or discard the local editor before selecting another session."); await editor?.flush(); setSelectedId(id); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
+  const chooseSession = async (id: string) => { if (editorModes.includes(mode)) throw new Error("Save or discard the local editor before selecting another session."); await editor?.flush(); setSelectedId(id); setArchiveReview(null); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
   const openProfiles = async () => { setProfiles((await client.profiles.list()).catalog); setMode("profiles"); };
   const chooseProfile = async (id: string) => {
     if (switchingProfile.current) throw new Error("A profile switch is already in progress.");
@@ -115,7 +122,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       const next = await client.profiles.open(id);
       for (const editor of editors.current.values()) editor.dispose(); editors.current.clear();
       client.disconnect(); clients.current.delete(client); clients.current.add(next); setClient(next);
-      setSelectedId(null); setMode("compose"); setTokenValue(""); setTokenServer(""); setSettingsText(""); setCapabilityOutput(""); setNotice("");
+      setSelectedId(null); setArchiveReview(null); setMode("compose"); setTokenValue(""); setTokenServer(""); setSettingsText(""); setCapabilityOutput(""); setNotice("");
       artifactEditor.current = null; issueEditor.current = { id: null, revision: 0 }; profileEditor.current = null;
       planEditor.current = null;
     } finally { switchingProfile.current = false; setProfilePending(false); }
@@ -136,6 +143,43 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (!session) throw new Error("Create a session first.");
     return client.command({ type: "session.configure", sessionId: session.id, expectedRevision: session.revision, controls,
       ...(rememberModelSelection ? { rememberModelSelection: true } : {}) });
+  };
+  const applyArchiveChoice = async (review: ArchiveReview, action: Extract<SessionChildrenAction, "archive" | "detach">, remember: boolean) => {
+    const check = () => {
+      const state = client.getState(), current = state.snapshot?.sessions.find((value) => value.id === review.session.id);
+      if (state.status !== "connected" || !state.snapshot || !current || current.revision !== review.session.revision ||
+        JSON.stringify(sessionChildBindings(state.snapshot.sessions, review.session.id)) !== JSON.stringify(review.expected)) {
+        throw new Error("The session or attached children changed after review. Run /archive again; no session was archived.");
+      }
+    };
+    check();
+    if (remember) {
+      const settings = client.settings.get();
+      if (!settings) throw new Error("Child-session preferences are unavailable. No archive was attempted.");
+      await client.settings.update({ ...settings.values, retention: { ...settings.values.retention, archiveChildren: action } }, settings.revision);
+    }
+    check();
+    await client.command({ type: "session.archive", sessionId: review.session.id, expectedRevision: review.session.revision,
+      children: { action, expected: review.expected } });
+    setArchiveReview(null); setMode("compose");
+  };
+  const requestArchive = async (target: Session) => {
+    const state = client.getState(), parent = state.snapshot?.sessions.find((value) => value.id === target.id);
+    if (!parent || !state.snapshot) throw new Error("The original session is no longer available.");
+    const tree = sessionSubtree(state.snapshot.sessions, parent.id), expected = sessionChildBindings(state.snapshot.sessions, parent.id);
+    if (!expected.length) {
+      await client.command({ type: "session.archive", sessionId: parent.id, expectedRevision: parent.revision });
+      return;
+    }
+    const children = tree.slice(1).map(({ id, title, parentSessionId, kind }) => ({ id, title, parentSessionId, kind }));
+    const canDetach = !children.some((child) => child.parentSessionId === parent.id && child.kind === "subagent");
+    const preference = state.snapshot.settings.values.retention.archiveChildren ?? "ask";
+    if (preference === "archive" || preference === "detach" && canDetach) {
+      await applyArchiveChoice({ session: parent, children, expected, canDetach }, preference, false);
+      return;
+    }
+    setArchiveReview({ session: parent, children, expected, canDetach });
+    setMode("session-action");
   };
   const requiredProject = () => { if (!session?.projectId) throw new Error("This operation needs a selected project. Use Ctrl+O or open a project chat."); return session.projectId; };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
@@ -289,6 +333,11 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     }
     if (shared?.name === "continue-work") {
       await editor.flush(); await slashResult(await client.slash(session.id, text, "tui")); return;
+    }
+    if (shared?.name === "archive" && !shared.argument) {
+      await editor.flush(); editor.edit(""); await editor.flush();
+      await requestArchive(session);
+      return;
     }
     if (shared?.name === "github" && /^(?:repos(?:\s|$)|issues$|pulls$)/.test(shared.argument)) {
       await editor.flush();
@@ -470,7 +519,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (!editor.getState().attachments.some((attachment) => attachment.path === argument || attachment.id === argument)) throw new Error("Use /detach with an attached project path or snapshot ID.");
         editor.edit("", editor.getState().attachments.filter((attachment) => attachment.path !== argument && attachment.id !== argument)); await editor.flush(); return;
       case "/stop": await client.command({ type: "session.stop", sessionId: session.id }); break;
-      case "/archive": await client.command({ type: "session.archive", sessionId: session.id }); break;
+      case "/archive": await requestArchive(session); break;
       case "/restore": await client.command({ type: "session.restore", sessionId: session.id }); break;
       case "/resume": await client.command({ type: "session.resume", sessionId: session.id }); break;
       case "/queue": setMode("queue"); break;
@@ -535,7 +584,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
-    if (key.name === "escape") { setContinueReview(null); setMode("compose"); return; }
+    if (key.name === "escape") { setContinueReview(null); setArchiveReview(null); setMode("compose"); return; }
     if (mode === "github-clone" && githubCloneJob && key.ctrl && key.name === "c") { key.preventDefault(); void perform(() => client.jobs.cancel(githubCloneJob)); return; }
     if (mode === "github-detail" && githubSelection && key.ctrl && ["n", "l", "b"].includes(key.name)) {
       key.preventDefault();
@@ -701,6 +750,28 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.accent} height={2}>{safe(`${githubSelection?.source.repository}#${githubSelection?.item.number} ${githubSelection?.item.title}`)}</text>
           <scrollbox focused={!githubBusy} flexGrow={1}><text fg={colors.foreground}>{safe(`${githubSelection?.item.state}\n\n${githubSelection?.item.body ?? ""}\n\nController source workspace: ${githubSelection?.binding.root.root}\nSource SHA-256: ${githubSelection?.digest}`)}</text></scrollbox>
           <text fg={colors.attention} height={3}>Ctrl+N starts a session with this exact source as an unsent draft. Ctrl+L links it here. Ctrl+B opens GitHub. No checkout or inference is started. Esc returns.</text></box> :
+        mode === "session-action" && archiveReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>Archive {safe(archiveReview.session.title)} and review its subsessions</text>
+          <text fg={colors.muted} height={3}>{safe(archiveReview.children.map((child) =>
+            `${child.parentSessionId === archiveReview.session.id ? "" : "  nested: "}${child.title}`).join("\n"))}</text>
+          <text fg={colors.attention} height={3}>Cascade archives this exact tree. Detach retains direct child sessions and their nested hierarchy after settling owned work. Model-owned subagents cannot be detached. Esc cancels.</text>
+          <select focused flexGrow={1} options={[
+            { name: "Archive all attached subsessions", description: "Archive every descendant in the reviewed tree.", value: "archive" },
+            ...(archiveReview.canDetach ? [{ name: "Detach direct children", description: "Settle owned work, preserve the sessions, and keep nested sessions attached.", value: "detach" }] : []),
+            { name: "Archive all and don't ask me again", description: "Save this profile's archive-child choice.", value: "archive:remember" },
+            ...(archiveReview.canDetach ? [{ name: "Detach direct children and don't ask me again", description: "Settle owned work and save this profile's detach-child choice.", value: "detach:remember" }] : []),
+            { name: "Cancel", description: "No session action.", value: "cancel" },
+          ]} selectedBackgroundColor={colors.panel} selectedTextColor={colors.accent} textColor={colors.foreground} descriptionColor={colors.muted}
+            onSelect={(_, option) => {
+              const choice = String(option?.value ?? "");
+              if (choice === "cancel") { setArchiveReview(null); setMode("compose"); return; }
+              const [action, memory] = choice.split(":");
+              if (action !== "archive" && action !== "detach") return;
+              if (action === "detach" && !archiveReview.canDetach) return;
+              const review = archiveReview;
+              void perform(() => applyArchiveChoice(review, action, memory === "remember"));
+            }} />
+        </box> :
         mode === "continue-work" && continueReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Continue work / choose for this request</text>
           <text fg={colors.muted} height={4}>Work from Kanban, or send this exact prompt to the model? Esc cancels and preserves the draft. No route is remembered.</text>

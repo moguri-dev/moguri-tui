@@ -69,6 +69,10 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
     event.event_type === "model.started" && event.payload.kupoPhase ||
     event.event_type === "model.completed" && event.payload.kupo)) throw new Error("Generate genuine pre-automatic-Kupo history; actual routing ownership and selected responses cannot become older state.");
   if (version < 60 && events.some((event) => event.event_type === "settings.updated" && event.payload.settings.interactions?.confirmSessionDetach === false)) throw new Error("Generate genuine pre-detach-preference history; remembered detachment choices cannot become older state.");
+  if (version < 76 && events.some((event) => event.event_type === "settings.updated" &&
+    (event.payload.settings.retention.archiveChildren !== undefined || event.payload.settings.retention.deleteChildren !== undefined))) {
+    throw new Error("Generate genuine pre-child-session-review history; remembered child dispositions cannot become older settings.");
+  }
   if (version < 59 && events.some((event) => event.event_type === "settings.updated" && event.payload.settings.skillSources?.length)) throw new Error("Generate genuine pre-gateway history; reviewed skill-source authority cannot become older state.");
   const desktop = lineage === "desktop";
   if (events.some((event) => event.event_type.startsWith("coordination.") ||
