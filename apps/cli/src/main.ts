@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { createInterface } from "node:readline/promises";
 import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, type ControlDefaults } from "../../../packages/sdk/src/index.ts";
+import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, sessionChildBindings, type ControlDefaults, type SessionChildrenReview } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
@@ -22,7 +22,7 @@ export async function main(argv: string[]): Promise<void> {
     help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" }, workspace: { type: "string" }, profile: { type: "string" }, color: { type: "string" },
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
-    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, "forward-access": { type: "boolean" }, digest: { type: "string" }, binding: { type: "string" },
+    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, "forward-access": { type: "boolean" }, children: { type: "string" }, digest: { type: "string" }, binding: { type: "string" },
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
@@ -181,9 +181,9 @@ moguri session spawn side|agent [NAME] --session ID
 moguri session organize changes.json --session ID --revision N
 moguri session model-settings options.json --session ID --revision N
 moguri session context --session ID
-moguri session archive|restore|stop|resume --session ID
-moguri session delete --session ID --revision N --confirm-remove
-  Permanently deletes originating candidates/proposals too; ordinary artifacts and Git resources survive.
+moguri session archive|restore|stop|resume --session ID [--children archive|detach]
+moguri session delete --session ID --revision N --confirm-remove [--children delete|detach]
+  Child-tree actions can also use the saved Settings / Retention preference. Deletion preserves ordinary artifacts and Git resources.
 moguri session from-pr URL|from-issue ID --project ID
 moguri project get|sources|diff|porto|repositories ID
 moguri project add PATH              Register an existing local folder
@@ -335,6 +335,23 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
   };
   try {
     const snapshot = sdk.getState().snapshot!;
+    const childrenReview = (sessionId: string, action: "archive" | "delete"): SessionChildrenReview | undefined => {
+      const expected = sessionChildBindings(sdk.getState().snapshot?.sessions ?? [], sessionId);
+      if (!expected.length) return undefined;
+      const preference = values.children ?? (action === "archive" ? snapshot.settings.values.retention.archiveChildren : snapshot.settings.values.retention.deleteChildren);
+      if (action === "archive") {
+        if (preference !== "archive" && preference !== "detach") throw new Error("This session has subsessions. Use --children archive|detach or save a choice in Settings / Retention.");
+        if (preference === "detach" && snapshot.sessions.some((session) => session.parentSessionId === sessionId && session.kind === "subagent")) {
+          throw new Error("Model-owned subagents cannot be detached. Choose --children archive or save a compatible Settings / Retention choice.");
+        }
+      } else {
+        if (preference !== "delete" && preference !== "detach") throw new Error("This session has subsessions. Use --children delete|detach or save a choice in Settings / Retention.");
+        if (preference === "detach" && snapshot.sessions.some((session) => session.parentSessionId === sessionId && session.kind === "subagent")) {
+          throw new Error("Model-owned subagents cannot be detached. Choose --children delete or save a compatible Settings / Retention choice.");
+        }
+      }
+      return { action: preference, expected };
+    };
     const projectId = args[0] ?? values.project;
     if (group === "runtime") {
       if (args.length || action && !["status", "power-retry"].includes(action)) throw new Error("Use runtime status or runtime power-retry. No model or execution environment is changed.");
@@ -702,9 +719,17 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           output(await sdk.sessions.modelOptions(values.session, options, expectedRevision(), Object.hasOwn(options, "thinkingEffort") || undefined));
         }
         else if (action === "context") output(await sdk.sessions.context(values.session));
-        else if (action === "delete" && values["confirm-remove"]) output(await sdk.sessions.delete(values.session, true, expectedRevision()));
-        else if (action && ["archive", "restore", "stop", "resume"].includes(action)) output(await sdk.command({ type: `session.${action}` as "session.archive" | "session.restore" | "session.stop" | "session.resume", sessionId: values.session }));
-        else throw new Error("Use session rename/mode/spawn/organize/archive/restore/stop/resume/delete. Deletion needs --confirm-remove and the observed --revision.");
+        else if (action === "delete" && values["confirm-remove"]) {
+          if (!snapshot.sessions.some((session) => session.id === values.session)) throw new Error("Choose an existing session for deletion.");
+          output(await sdk.sessions.delete(values.session, true, expectedRevision(), childrenReview(values.session, "delete")));
+        }
+        else if (action === "archive") {
+          if (!snapshot.sessions.some((session) => session.id === values.session)) throw new Error("Choose an existing session to archive.");
+          output(await sdk.command({ type: "session.archive", sessionId: values.session, expectedRevision: expectedRevision(),
+            ...(childrenReview(values.session, "archive") ? { children: childrenReview(values.session, "archive") } : {}) }));
+        }
+        else if (action && ["restore", "stop", "resume"].includes(action)) output(await sdk.command({ type: `session.${action}` as "session.restore" | "session.stop" | "session.resume", sessionId: values.session }));
+        else throw new Error("Use session rename/mode/spawn/organize/archive/restore/stop/resume/delete. Deletion needs --confirm-remove and the observed --revision; child actions need --children or a saved disposition.");
       }
     } else if (group === "project") {
       if (!args[0]) throw new Error("Choose the project ID from moguri status.");

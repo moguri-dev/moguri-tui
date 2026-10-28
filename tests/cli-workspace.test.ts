@@ -147,8 +147,11 @@ test("the CLI holds prompts without a model and shares session/project/plan life
     await execute(["slash", "/agent", ...selected]);
     const plan = JSON.parse((await execute(["plan", "save", path, "--digest", "absent", ...selected])).stdout);
     assert.ok(plan.id);
-    await execute(["session", "delete", ...selected, "--revision", String(fixture.session().revision), "--confirm-remove"]);
+    const revision = String(fixture.session().revision);
+    await assert.rejects(() => execute(["session", "delete", ...selected, "--revision", revision, "--confirm-remove"]), /--children/);
+    await execute(["session", "delete", ...selected, "--revision", revision, "--confirm-remove", "--children", "detach"]);
     assert.equal(fixture.service.controller.snapshot().sessions.some((session) => session.id === fixture.sessionId), false);
+    assert.equal(fixture.service.controller.snapshot().sessions.find((session) => session.id === side.id)?.parentSessionId, undefined);
     assert.equal(fixture.service.controller.snapshot().artifacts[0]?.id, plan.id);
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
