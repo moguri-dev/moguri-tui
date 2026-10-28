@@ -921,7 +921,7 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
   } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
 
-test("the actual TUI creates project-free chats, shows attention and reviews metachat changes without workspace authority", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI creates Home-backed chats, shows attention and keeps metachat changes separately reviewed without filesystem authority", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 46, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
@@ -936,7 +936,7 @@ test("the actual TUI creates project-free chats, shows attention and reviews met
     await frameUntil("Write a prompt");
     await slash("/new global");
     const session = await waitFor(() => fixture.service.controller.snapshot().sessions.find((session) => session.projectId === null));
-    await frameUntil("No project");
+    await frameUntil("Home (no project)");
     setup.mockInput.pressKey("m", { ctrl: true });
     await frameUntil("Generated Copilot model"); setup.mockInput.pressEnter();
     await waitFor(() => fixture.service.controller.snapshot().sessions.find((value) => value.id === session.id)?.controls.modelId === fixture.modelId);

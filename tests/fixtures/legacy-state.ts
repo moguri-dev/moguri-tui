@@ -1,7 +1,21 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import type { startService } from "../../apps/service/src/server.ts";
-import { PROTOCOL_VERSION } from "../../packages/protocol/src/index.ts";
+import { PROTOCOL_VERSION, resolveControls } from "../../packages/protocol/src/index.ts";
+import { randomUUID } from "node:crypto";
+import type { ControlPlane } from "../../apps/service/src/controller.ts";
+import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
+
+export async function appendLegacyProjectFreeSession(client: MoguriSdk, control: ControlPlane, title: string): Promise<{ id: string }> {
+  const snapshot = control.snapshot(), settings = snapshot.settings;
+  const startup = resolveControls([
+    { source: "global", values: settings.values.startup.global }, { source: "profile", values: settings.values.startup.profile },
+    { source: "project", values: {} }, { source: "session", values: {} },
+  ], { settingsRevision: settings.revision, projectRevision: null }, snapshot.lastModelSelection);
+  const id = randomUUID();
+  control.store.commit([{ event_type: "session.created", profile_id: snapshot.profileId, session_id: id, payload: { title, ...startup } }]);
+  control.refreshProfile(); await client.refresh(); return { id };
+}
 
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
