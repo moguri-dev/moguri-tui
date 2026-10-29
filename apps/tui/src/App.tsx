@@ -335,6 +335,18 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     setTokenValue((value) => (value + text).slice(0, 32768));
   });
   const slashResult = async (result: SlashResult) => {
+    if (result.kind === "client-view") {
+      if (result.name === "sidebar") {
+        if (result.argument && !["open", "close"].includes(result.argument)) throw new Error("Use /sidebar [open|close].");
+        setSidebar(result.argument === "open" ? true : result.argument === "close" ? false : !sidebarVisible);
+        setNavigationFocus(true); setNavigationIndex(Math.max(0, tuiTabs.findIndex((tab) => tab.id === activeTab))); return;
+      }
+      if (result.argument) throw new Error("This queued navigation action takes no arguments.");
+      if (result.name === "quit") { await quit(); return; }
+      const tab = tuiTabs.find((tab) => tab.id === result.name);
+      if (!tab) throw new Error(`This terminal has no handler for ${result.name}. No queued view was acknowledged.`);
+      await navigate(tab.id); return;
+    }
     if (result.kind === "continue-work") { setContinueReview(result.review); setMode("continue-work"); return; }
     if (result.kind === "profiles") { await openProfiles(); return; }
     if (result.kind === "profile") { await chooseProfile(result.profileId); return; }
