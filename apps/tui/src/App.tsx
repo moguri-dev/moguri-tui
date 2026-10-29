@@ -1,18 +1,25 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@opentui/react";
-import type { TextareaRenderable } from "@opentui/core";
+import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
+import type { InputRenderable, TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { attachmentStatus, compareSessions, progressBar, sessionChildBindings, sessionSubtree } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessions, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
-import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, slashCommands, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 type MoguriClient = MoguriSdk;
 
-const colors = { background: "#172027", panel: "#1e2a32", foreground: "#dce4e8", muted: "#a1b0ba", accent: "#99c4ae", border: "#40515d", error: "#f0b3a7", attention: "#e8c785" };
+function terminalColors(appearance: Appearance, mode: ThemeMode) {
+  const value = appearanceColors(appearance, mode);
+  return { background: value.canvas, surface: value.surface, sidebar: value.sidebar, panel: value.selected, selection: value.selectionText,
+    foreground: value.text, muted: value.muted, accent: value.accent, border: value.controlLine, error: value.danger, attention: value.warningText };
+}
+const ThemeContext = React.createContext(terminalColors({ theme: "dark" }, "dark"));
+const NavigationContext = React.createContext(false);
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 type ArchiveReview = {
   session: Pick<Session, "id" | "title" | "revision">;
@@ -27,9 +34,24 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const clients = useRef(new Set([initialClient]));
   const { snapshot, status, error, events } = useMoguri(client);
   const renderer = useRenderer();
-  const { width } = useTerminalDimensions();
+  const { width, height } = useTerminalDimensions();
+  const [terminalMode, setTerminalMode] = useState<ThemeMode>(renderer.themeMode ?? "dark");
+  useEffect(() => { renderer.on("theme_mode", setTerminalMode); return () => { renderer.off("theme_mode", setTerminalMode); }; }, [renderer]);
+  const appearance = snapshot?.settings.values.appearance ?? { theme: "dark" };
+  const colors = terminalColors(appearance, appearance.theme === "system" ? terminalMode : appearance.theme);
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null);
-  const [mode, setMode] = useState<Mode>("compose");
+  const [mode, renderMode] = useState<Mode>("compose");
+  const modeRef = useRef<Mode>("compose");
+  const setMode = (value: Mode) => { modeRef.current = value; renderMode(value); };
+  const [sidebar, setSidebar] = useState<boolean | null>(null);
+  const [navigationFocus, renderNavigationFocus] = useState(false), [navigationIndex, renderNavigationIndex] = useState(0);
+  // One terminal packet can contain navigation and Enter before React commits focus.
+  const navigationFocusRef = useRef(false), navigationIndexRef = useRef(0);
+  const setNavigationFocus = (value: boolean) => { navigationFocusRef.current = value; renderNavigationFocus(value); };
+  const setNavigationIndex = (value: number) => { navigationIndexRef.current = value; renderNavigationIndex(value); };
+  const sidebarVisible = sidebar ?? width >= 100, sidebarOnly = sidebarVisible && width < 80;
+  const compact = width < 80 || height < 30;
+  const activeTab: TuiTab = mode === "sessions" ? "sessions" : mode === "work-items" || mode === "issues" ? "work-items" : mode === "code-requests" ? "code-requests" : "session";
   const [notice, setNotice] = useState("");
   const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
   const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
@@ -38,6 +60,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [showArchived, setShowArchived] = useState(false);
   const [detailed, setDetailed] = useState(false);
   const [projectPath, setProjectPath] = useState("");
+  const [startupCommand, setStartupCommand] = useState("");
   const [settingsText, setSettingsText] = useState("");
   const settingsRevision = useRef(0);
   const [capabilityOutput, setCapabilityOutput] = useState("");
@@ -67,6 +90,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const taskProgress = useTaskProgress(client, session, status === "connected");
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
+  const compactDecision = compact && Boolean(session?.pendingApproval || pendingQuestion);
   useEffect(() => { setOtherQuestion(null); }, [client.profileId, pendingQuestion?.id, pendingQuestion?.revision]);
   const recommendation = pendingQuestion?.recommendation;
   const questionDetails = pendingQuestion ? `${pendingQuestion.question}${recommendation ? `\n\nModel recommends: ${recommendation.choice}\n${recommendation.reason}\nFrom ${recommendation.modelId}. Untrusted advice; you still decide.` : ""}` : "";
@@ -91,6 +115,26 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
   };
   const command = (command: Command) => perform(() => client.command(command));
+  const requireNavigation = () => {
+    if (editorModes.includes(modeRef.current) || modeRef.current === "mcp-token" || planSaving.current || switchingProfile.current || githubPending.current) {
+      throw new Error("Save or discard this editor and let the owned operation settle before navigating. Your input is preserved.");
+    }
+  };
+  const navigate = async (tab: TuiTab) => {
+    requireNavigation();
+    setNavigationFocus(true); setNavigationIndex(tuiTabs.findIndex((entry) => entry.id === tab));
+    try {
+      await editor?.flush();
+      setMode(tab === "session" ? "compose" : tab);
+      if (sidebarOnly) setSidebar(false);
+    } finally { setNavigationFocus(false); }
+  };
+  const quit = async () => {
+    for (const editor of editors.current.values()) await editor.flush();
+    for (const editor of editors.current.values()) editor.dispose();
+    client.disconnect();
+    if (onQuit) onQuit(); else renderer.destroy();
+  };
   const githubAction = async (action: () => Promise<void>) => {
     if (githubPending.current) return;
     githubPending.current = true; setGithubBusy(true);
@@ -110,7 +154,15 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (githubOwner.current !== owner) return;
     setGithubItems({ scope, context, kind, items: result.items, nextPage: result.nextPage }); setMode("github-items");
   });
-  const chooseSession = async (id: string) => { if (editorModes.includes(mode)) throw new Error("Save or discard the local editor before selecting another session."); await editor?.flush(); setSelectedId(id); setArchiveReview(null); setMode("compose"); if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false }); const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? []; if (ids.length) await client.attention.acknowledge(ids.slice(-100)); };
+  const chooseSession = async (id: string) => {
+    requireNavigation(); setNavigationFocus(true);
+    try {
+      await editor?.flush(); setSelectedId(id); setArchiveReview(null); setMode("compose");
+      if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false });
+      const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? [];
+      if (ids.length) await client.attention.acknowledge(ids.slice(-100));
+    } finally { setNavigationFocus(false); }
+  };
   const openProfiles = async () => { setProfiles((await client.profiles.list()).catalog); setMode("profiles"); };
   const chooseProfile = async (id: string) => {
     if (switchingProfile.current) throw new Error("A profile switch is already in progress.");
@@ -181,7 +233,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     setArchiveReview({ session: parent, children, expected, canDetach });
     setMode("session-action");
   };
-  const requiredProject = () => { if (!session?.projectId) throw new Error("This operation needs a selected project. Use Ctrl+O or open a project chat."); return session.projectId; };
+  const requiredProject = () => { if (!session?.projectId) throw new Error("This operation needs a selected project. Use /open ABSOLUTE_PATH or open a project chat."); return session.projectId; };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
   const openSettingsEditor = (prompt: boolean) => {
     if (!snapshot) { setNotice("Connect before editing settings."); return; }
@@ -310,10 +362,22 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     else throw new Error("This panel is available only in the desktop app.");
   };
   const submit = async (text: string, held = false) => {
-    if (!session || !editor) throw new Error("Create a chat with Ctrl+N, or open a project with Ctrl+O. /new global starts without a project.");
     const firstSpace = text.indexOf(" ");
     const name = (firstSpace < 0 ? text : text.slice(0, firstSpace)).trim();
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
+    if (!session || !editor) {
+      if (name === "/new" && (!argument || argument === "global")) await newSession(true);
+      else if (name === "/open" && argument) await openProject(argument);
+      else if (name === "/connect" && !argument) await client.command({ type: "provider.login" });
+      else if (name === "/profiles" && !argument) await openProfiles();
+      else if (name === "/settings" && !argument) setMode("settings");
+      else if (name === "/theme" && !argument) setMode("themes");
+      else if (name === "/help" && !argument) setMode("help");
+      else if (name === "/sessions" && !argument) setMode("sessions");
+      else if (name === "/quit" && !argument) await quit();
+      else throw new Error("No current chat. Use /new global, /open ABSOLUTE_PATH, /connect, /profiles, /theme, /settings or /help. Nothing was sent.");
+      setStartupCommand(""); return;
+    }
     if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
       if (documentCapture.current?.sessionId === session.id) throw new Error("Document extraction is still active. Wait or use Ctrl+C to cancel this capture before sending or holding its prompt.");
       if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
@@ -325,6 +389,29 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       return;
     }
     const shared = parseSlash(text);
+    if (shared && ["session", "sessions", "work-items", "code-requests", "sidebar", "theme", "quit"].includes(shared.name)) {
+      const current = client.getState().snapshot?.sessions.find((value) => value.id === session.id);
+      if (!current) throw new Error("The original command session is unavailable. The draft was not consumed.");
+      if (held || current.turnId || current.queue.length) {
+        await editor.flush();
+        throw new Error("Queued actions need the shared command intake update. This command remains in your draft; it was not run or sent to a model.");
+      }
+    }
+    if (shared && ["session", "sessions", "work-items", "code-requests", "sidebar", "quit"].includes(shared.name)) {
+      if (shared.name === "sidebar" && shared.argument && !["open", "close"].includes(shared.argument) ||
+        shared.name !== "sidebar" && shared.argument) throw new Error("Navigation takes no arguments; use /sidebar [open|close].");
+      await editor.flush();
+      if (shared.name === "sidebar") {
+        setSidebar(shared.argument === "open" ? true : shared.argument === "close" ? false : !sidebarVisible);
+        setNavigationFocus(true); setNavigationIndex(Math.max(0, tuiTabs.findIndex((tab) => tab.id === activeTab)));
+      } else if (shared.name !== "quit") {
+        const tab = tuiTabs.find((tab) => tab.id === shared.name);
+        if (tab) await navigate(tab.id);
+      }
+      editor.edit(""); await editor.flush();
+      if (shared.name === "quit") await quit();
+      return;
+    }
     if (shared?.name === "side" && shared.argument) {
       await editor.flush();
       const result = await client.slash(session.id, text, "tui"), saved = client.getState().snapshot?.sessions.find((entry) => entry.id === session.id)?.draft;
@@ -543,7 +630,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (argument && argument !== "global") throw new Error("Use /new or /new global for a project-free chat.");
         await newSession(argument === "global"); break;
       case "/open": await openProject(argument); break;
-      case "/sessions": setMode("sessions"); break;
       case "/trace": setMode("trace"); break;
       case "/details": setDetailed((value) => !value); break;
       case "/help": {
@@ -564,6 +650,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     editor.edit(""); await editor.flush();
   };
   useKeyboard((key) => {
+    if (key.defaultPrevented) return;
+    if (["return", "kpenter"].includes(key.name) && modeRef.current !== mode) { key.preventDefault(); key.stopPropagation(); return; }
     if (switchingProfile.current) { key.preventDefault(); key.stopPropagation(); return; }
     if (mode === "plan-editor" && planSaving.current) {
       if (key.name === "escape" || key.ctrl && ["q", "c"].includes(key.name)) {
@@ -584,7 +672,18 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
-    if (key.name === "escape") { setContinueReview(null); setArchiveReview(null); setMode("compose"); return; }
+    if (navigationFocusRef.current && (!key.ctrl && !key.meta && !key.super || ["return", "kpenter"].includes(key.name))) {
+      if (["left", "right", "up", "down", "return", "kpenter", "tab", "escape"].includes(key.name)) {
+        key.preventDefault(); key.stopPropagation();
+        if (key.ctrl || key.meta || key.super) return;
+        if (key.name === "left" || key.name === "right") setSidebar(key.name === "right");
+        else if (key.name === "up" || key.name === "down") setNavigationIndex((navigationIndexRef.current + (key.name === "up" ? -1 : 1) + tuiTabs.length) % tuiTabs.length);
+        else if (key.name === "return" || key.name === "kpenter") void perform(() => navigate(tuiTabs[navigationIndexRef.current]!.id));
+        else { setNavigationFocus(false); if (sidebarOnly) setSidebar(false); if (key.name === "escape") setMode("compose"); }
+      }
+      return;
+    }
+    if (key.name === "escape") { setContinueReview(null); setArchiveReview(null); setMode("compose"); if (sidebarOnly) setSidebar(false); return; }
     if (mode === "github-clone" && githubCloneJob && key.ctrl && key.name === "c") { key.preventDefault(); void perform(() => client.jobs.cancel(githubCloneJob)); return; }
     if (mode === "github-detail" && githubSelection && key.ctrl && ["n", "l", "b"].includes(key.name)) {
       key.preventDefault();
@@ -604,11 +703,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         show({ selectedType: attachmentTriggers[trigger.prefix], query: trigger.query, guidance: "Choose explicit /attach-file, /attach-image, /attach-folder, /attach-github, /attach-session or /attach for project files. Preview/confirm source snapshots before sending. Terminal clipboard images use a path fallback. The current prefix text has not attached or executed anything." });
         return;
       }
+      if (tuiCommandSuggestions(editor.getState().text).length) return;
     }
     if (key.ctrl && key.name === "q" && editorModes.includes(mode)) { key.preventDefault(); setNotice("Save with Ctrl+Enter or cancel with Esc before leaving this editor."); return; }
     if (editorModes.includes(mode)) {
       if (key.ctrl && key.name === "r" && ["prompt-editor", "settings-editor"].includes(mode)) { key.preventDefault(); void perform(async () => { await client.settings.reset(mode === "prompt-editor" ? "systemPrompt" : "all", settingsRevision.current); setMode("settings"); }); }
       return;
+    }
+    if (key.name === "tab" && !key.ctrl && !key.meta && !key.super) {
+      key.preventDefault(); key.stopPropagation(); setNavigationFocus(true);
+      setNavigationIndex(Math.max(0, tuiTabs.findIndex((tab) => tab.id === activeTab))); return;
     }
     if (key.name === "f5") { key.preventDefault(); setMode("artifacts"); return; }
     if (key.name === "f7") {
@@ -619,7 +723,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     }
     if (key.name === "f8") { key.preventDefault(); void perform(openProfiles); return; }
     if (key.name === "f6") { key.preventDefault(); if (pendingQuestion) setMode("question"); else setNotice("No actual pending question is owned by this turn."); return; }
-    if (mode === "compose" && ["return", "kpenter"].includes(key.name) && (key.ctrl || key.meta || key.super) && !session?.pendingApproval) {
+    if (mode === "compose" && ["return", "kpenter"].includes(key.name) && (key.ctrl || key.meta || key.super)) {
       key.preventDefault(); key.stopPropagation();
       if (editor) void perform(() => submit(editor.getState().text, !key.shift));
       return;
@@ -629,12 +733,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (["q", "c", "o", "n", "l", "m", "p", "k", "b", "y", "d", "a", "r", "s", "v", "g", "space"].includes(key.name)) key.preventDefault();
     if (key.name === "g") { setMode("settings"); return; }
     if (key.name === "space") { void dictate(); return; }
-    if (key.name === "q") void perform(async () => {
-      for (const editor of editors.current.values()) await editor.flush();
-      for (const editor of editors.current.values()) editor.dispose();
-      client.disconnect();
-      if (onQuit) onQuit(); else renderer.destroy();
-    });
+    if (key.name === "q") void perform(quit);
     else if (key.name === "c" && documentCapture.current?.sessionId === session?.id) {
       const capture = documentCapture.current;
       if (capture) void perform(() => client.attachments.cancelDocument(capture.sessionId, capture.id));
@@ -661,22 +760,40 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
     return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home (no project)" : "No project")} / ${item.status}`, value: item.id };
   }) ?? [];
-  return <box width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
-    <box height={3} paddingLeft={2} paddingRight={2} alignItems="center" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
-      <text fg={colors.accent}><strong>moguri</strong></text><text fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}  /  {safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session?.controls.env === "Local" && session.homeRoot ? "Home (no project)" : session ? "No project" : "Workspace"))}  /  {profilePending ? "Updating profile..." : status}</text>
+  return <ThemeContext.Provider value={colors}><NavigationContext.Provider value={navigationFocus}><box width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
+    <box height={3} paddingLeft={2} paddingRight={2} paddingTop={1} alignItems="flex-start" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
+      <box id="tui-sidebar-toggle" width={10} height={1} onMouseDown={(event) => {
+        if (event.button !== 0) return; event.preventDefault(); event.stopPropagation();
+        void perform(async () => { requireNavigation(); setSidebar(!sidebarVisible); setNavigationFocus(true); });
+      }}><text fg={colors.accent}>{sidebarVisible ? "[-] Menu" : "[+] Menu"}</text></box>
+      <text height={1} wrapMode="none" truncate fg={colors.accent}><strong>{"<> moguri"}</strong></text><text height={1} wrapMode="none" truncate fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}{width >= 80 ? ` / ${safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session?.controls.env === "Local" && session.homeRoot ? "Home (no project)" : session ? "No project" : "Workspace"))}` : ""}  /  {profilePending ? "Updating profile..." : status}</text>
+    </box>
+    <box id="tui-navigation" height={width < 80 ? 4 : 3} flexShrink={0} flexDirection="row" flexWrap="wrap" border borderStyle="double" borderColor={navigationFocus ? colors.accent : colors.border}
+      title={navigationFocus ? "Navigation / arrows: sidebar, up/down: tabs" : "Navigation / click or /help"} titleColor={colors.muted}>
+      {tuiTabs.map((tab, index) => <box id={`tui-tab-${tab.id}`} key={tab.id} width={width < 80 ? "50%" : "25%"} height={1} paddingLeft={1}
+        backgroundColor={activeTab === tab.id || navigationFocus && navigationIndex === index ? colors.panel : colors.background}
+        onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); void perform(() => navigate(tab.id)); }}>
+        <text fg={activeTab === tab.id || navigationFocus && navigationIndex === index ? colors.selection : colors.muted}>
+          {navigationFocus && navigationIndex === index ? "> " : activeTab === tab.id ? "* " : "  "}{tab.label}
+        </text>
+      </box>)}
     </box>
     <box flexGrow={1} minHeight={0} flexDirection="row">
-      {width >= 100 && <box width={26} border={["right"]} borderColor={colors.border} padding={1} flexDirection="column">
-        <text fg={colors.muted}>{showArchived ? "ARCHIVED" : "SESSIONS"}  Ctrl+P</text>
-        {options.length ? <select flexGrow={1} options={options} focused={mode === "sessions"} selectedBackgroundColor={colors.panel} selectedTextColor={colors.accent} textColor={colors.foreground} descriptionColor={colors.muted}
-          onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> : <text fg={colors.muted}>{"\nNo sessions yet.\n\nCtrl+O open project\nCtrl+L connect Copilot"}</text>}
-        <text fg={colors.muted}>{"Ctrl+N new session\nCtrl+A active/archive\nF8 profiles\nCtrl+Q save and leave"}</text>
-      </box>}
-      <box flexGrow={1} minWidth={0} flexDirection="column" paddingLeft={2} paddingRight={2}>
+      <box id="tui-sidebar" visible={sidebarVisible} width={sidebarOnly ? "100%" : 26} border borderStyle="double" borderColor={navigationFocus ? colors.accent : colors.border} backgroundColor={colors.sidebar} paddingX={1} flexDirection="column" title="Sessions" titleColor={colors.accent}>
+        <text fg={colors.muted}>{showArchived ? "Archived / /sessions" : "Active / /sessions"}</text>
+        <scrollbox flexGrow={1} minHeight={0}>{options.map((option) => <box key={option.value} flexDirection="column" paddingY={1}
+          backgroundColor={option.value === selectedId ? colors.panel : colors.sidebar}
+          onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); void perform(async () => { await chooseSession(option.value); setNavigationFocus(false); if (sidebarOnly) setSidebar(false); }); }}>
+          <text height={1} wrapMode="none" truncate fg={option.value === selectedId ? colors.selection : colors.foreground}>{option.value === selectedId ? "> " : "  "}{option.name}</text>
+          <text height={1} wrapMode="none" truncate fg={colors.muted}>{safe(option.description)}</text>
+        </box>)}{!options.length && <text fg={colors.muted}>{"No sessions yet.\n/new global\n/open PATH\n/connect"}</text>}</scrollbox>
+        <text fg={colors.muted}>{"/new  /profiles\n/sidebar close\nTab: navigation\nLeft closes / Right opens"}</text>
+      </box>
+      <box visible={!sidebarOnly} flexGrow={1} minWidth={0} minHeight={0} overflow="hidden" flexDirection="column" paddingX={compact ? 1 : 2} backgroundColor={colors.background}>
         {mode === "profiles" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Profiles / {safe(snapshot?.profile?.name ?? client.profileId)}</text>
           <text fg={colors.muted} height={3}>Accounts, projects, drafts and memory stay separate. Switching does not stop owned work. New profiles copy no private data or model selection.</text>
-          <select focused={!profilePending} flexGrow={1} options={[
+          <ThemedSelect focused={!profilePending} flexGrow={1} options={[
             { name: "+ Create isolated profile", description: "Edit display name and optional #RRGGBB accent.", value: "create" },
             { name: "Rename / color current profile", description: "Immutable identity and credentials are preserved.", value: "edit" },
             ...(profiles?.profiles ?? []).map((profile) => ({ name: `${profile.id === client.profileId ? "* " : ""}${safe(profile.name)}`, description: `${profile.status} / ${profile.id}${profile.diagnostic ? ` / ${safe(profile.diagnostic)}` : ""}`, value: `profile:${profile.id}` })),
@@ -695,7 +812,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.attention} height={2}>Owned profile setup / {safe(profileEditor.current?.name ?? "Refresh with F8")}</text>
           <scrollbox height={10}><text fg={colors.foreground}>{safe(JSON.stringify(profileEditor.current, null, 2))}</text></scrollbox>
           <text fg={colors.muted} height={4}>Inspect the actual state-directory profiles/ID resource directory before retrying. A retry never adopts unsafe paths, copies accounts, or silently switches the client.</text>
-          <select focused={!profilePending} flexGrow={1} options={[{ name: profileEditor.current?.status === "creating" ? "Stop this owned profile setup" : "I inspected owned resources: retry setup", description: "Explicit user action; partial effects are preserved.", value: "recover" }, { name: "Return without changing setup", description: "No retry or cancellation is inferred.", value: "return" }]} onSelect={(_, option) => { if (!option || switchingProfile.current) return; void perform(async () => {
+          <ThemedSelect focused={!profilePending} flexGrow={1} options={[{ name: profileEditor.current?.status === "creating" ? "Stop this owned profile setup" : "I inspected owned resources: retry setup", description: "Explicit user action; partial effects are preserved.", value: "recover" }, { name: "Return without changing setup", description: "No retry or cancellation is inferred.", value: "return" }]} onSelect={(_, option) => { if (!option || switchingProfile.current) return; void perform(async () => {
             const profile = profileEditor.current;
             if (option.value === "return") { await openProfiles(); return; }
             if (!profile) throw new Error("Refresh the actual profile catalog with F8.");
@@ -709,7 +826,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "github-repositories" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>GitHub repositories / {safe(githubRepositories?.account ?? "")}</text>
           <text fg={colors.muted} height={3}>Your repositories and organizations come first on each page. Public visibility is not proof of an open-source license. SSH cloning uses your existing keys, not a copied gh token.</text>
-          <select focused={!githubBusy} flexGrow={1} options={[...(githubRepositories?.repositories ?? []).map((repository) => ({ name: safe(repository.fullName), description: `${repository.relationship} / ${repository.visibility}`, value: String(repository.id) })),
+          <ThemedSelect focused={!githubBusy} flexGrow={1} options={[...(githubRepositories?.repositories ?? []).map((repository) => ({ name: safe(repository.fullName), description: `${repository.relationship} / ${repository.visibility}`, value: String(repository.id) })),
             ...(githubRepositories?.nextPage ? [{ name: "Load next repository page", description: "Explicit bounded page, same account.", value: "next" }] : [])]} onSelect={(_, option) => {
             if (!option || githubBusy) return;
             if (option.value === "next" && githubRepositories?.nextPage) { void perform(() => openGithubRepositories(githubSearch.current.source, githubSearch.current.query, githubRepositories.nextPage!, githubRepositories.account, githubRepositories.accountId)); return; }
@@ -719,7 +836,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "github-clone" ? <box flexDirection="column" flexGrow={1} paddingTop={1} gap={1}>
           <text fg={colors.accent}>Clone {safe(githubRepository?.fullName ?? "")}</text>
           <text fg={colors.muted} height={4}>Enter a new absolute destination in an existing parent folder. Enter explicitly clones and starts an idle session. No hooks, submodules, model call or automatic authentication. Cancellation preserves partial files.</text>
-          <input focused={!githubBusy && !githubCloneJob} placeholder="/absolute/path/to/new-checkout" value={projectPath} onInput={setProjectPath} onSubmit={() => {
+          <ThemedInput focused={!githubBusy && !githubCloneJob} placeholder="/absolute/path/to/new-checkout" value={projectPath} onInput={setProjectPath} onSubmit={() => {
             if (!githubRepository || githubCloneJob || githubBusy) return;
             void perform(() => githubAction(async () => {
               const job = await client.projects.clone(githubRepository.sshUrl, projectPath, true); if (!job.id) throw new Error("Original clone was not acknowledged. Inspect jobs before retrying.");
@@ -734,7 +851,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "github-items" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>{safe(githubItems?.context.repository ?? "")} / {githubItems?.kind === "pull" ? "Pull requests" : "Issues"}</text>
           <text fg={colors.muted} height={2}>Controller GitHub CLI account: {safe(githubItems?.context.account ?? "")}. Enter reviews the exact full source before starting a session.</text>
-          <select focused={!githubBusy} flexGrow={1} options={[...(githubItems?.items ?? []).map((item) => ({ name: safe(`#${item.number} ${item.title}`), description: item.draft ? "draft" : safe(item.state), value: String(item.number) })),
+          <ThemedSelect focused={!githubBusy} flexGrow={1} options={[...(githubItems?.items ?? []).map((item) => ({ name: safe(`#${item.number} ${item.title}`), description: item.draft ? "draft" : safe(item.state), value: String(item.number) })),
             ...(githubItems?.nextPage ? [{ name: "Load next page", description: "Same repository and account.", value: "next" }] : [])]} onSelect={(_, option) => {
             if (!option || !githubItems || githubBusy) return;
             if (option.value === "next" && githubItems.nextPage) { void perform(() => openGithubItems(githubItems.kind, githubItems.nextPage!)); return; }
@@ -756,7 +873,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
             `${child.parentSessionId === archiveReview.session.id ? "" : "  nested: "}${child.title}`),
           ...(archiveReview.children.length > 12 ? [`... and ${archiveReview.children.length - 12} more`] : [])].join("\n"))}</text>
           <text fg={colors.attention} height={3}>Cascade archives this exact tree. Detach retains direct child sessions and their nested hierarchy after settling owned work. Model-owned subagents cannot be detached. Esc cancels.</text>
-          <select focused flexGrow={1} options={[
+          <ThemedSelect focused flexGrow={1} options={[
             { name: "Archive all attached subsessions", description: "Settle owned work and archive every descendant in the reviewed tree.", value: "archive" },
             ...(archiveReview.canDetach ? [{ name: "Detach direct children", description: "Settle owned work, preserve the sessions, and keep nested sessions attached.", value: "detach" }] : []),
             { name: "Archive all and don't ask me again", description: "Save this profile's archive-child choice.", value: "archive:remember" },
@@ -776,7 +893,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "continue-work" && continueReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Continue work / choose for this request</text>
           <text fg={colors.muted} height={4}>Work from Kanban, or send this exact prompt to the model? Esc cancels and preserves the draft. No route is remembered.</text>
-          <select flexGrow={1} focused options={[
+          <ThemedSelect flexGrow={1} focused options={[
             { name: "Work from Kanban", description: "One actual project item in an isolated Local checkout, through its PR", value: "kanban" },
             { name: "Send to model", description: "Send the unchanged prompt through the normal chat and permissions", value: "prompt" },
           ]} selectedBackgroundColor={colors.panel} selectedTextColor={colors.accent} textColor={colors.foreground} descriptionColor={colors.muted}
@@ -791,8 +908,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         </box> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
-          {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
-            <select focused flexGrow={1} options={[...pendingQuestion.choices.flatMap((choice, index) => choice === "Other, please specify" ? [] : [{ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` }]), { name: "Other, please specify", description: "Type a custom answer in the saved composer. Enter submits; Cmd/Ctrl+Enter still holds.", value: "other" }, ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
+          {pendingQuestion ? <><scrollbox height={compact ? 4 : 10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
+            <ThemedSelect focused flexGrow={1} options={[...pendingQuestion.choices.flatMap((choice, index) => choice === "Other, please specify" ? [] : [{ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` }]), { name: "Other, please specify", description: "Type a custom answer in the saved composer. Enter submits; Cmd/Ctrl+Enter still holds.", value: "other" }, ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
               if (!option) return;
               if (option.value === "other" || option.value === "freeform") { setOtherQuestion(option.value === "other" ? pendingQuestion.id : null); setMode("compose"); setNotice("Type your actual answer. Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues."); return; }
               const index = Number(String(option.value).slice(7)), choice = pendingQuestion.choices[index];
@@ -800,10 +917,21 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               void perform(async () => { await client.questions.answer(pendingQuestion.id, choice, pendingQuestion.revision); setMode("compose"); });
             }} /></> : <text fg={colors.muted}>This question was answered or cancelled. Esc returns without inventing an answer.</text>}
           <text fg={colors.muted} height={3}>Never enter credentials. Use connection settings. Source provenance is retained; model confidence cannot grant policy. Esc returns.</text></box> :
+        mode === "themes" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>Shared color palettes / {appearance.palette ?? "moguri"} / {appearance.theme}</text>
+          <ThemedSelect focused flexGrow={1} options={themePalettes.map((palette) => ({ name: `${palette.id === (appearance.palette ?? "moguri") ? "* " : ""}${palette.name}`, description: palette.description, value: palette.id }))}
+            onSelect={(_, option) => { const palette = themePalettes.find((palette) => palette.id === option?.value); if (!palette) return;
+              void perform(async () => { const current = client.settings.get(); if (!current) throw new Error("Shared settings are unavailable.");
+                await client.settings.update({ ...current.values, appearance: { ...current.values.appearance, palette: palette.id } }, current.revision);
+                setNotice(`Shared palette set to ${palette.name}. Mode and custom colors are preserved.`);
+              }); }} />
+          <text fg={colors.muted} height={3}>Enter selects. /theme PALETTE dark|light|system changes mode explicitly. Desktop resolves System from the OS; TUI uses terminal theme reports, or Dark when unavailable. Esc returns.</text>
+        </box> :
         mode === "settings" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent}><strong>Shared Moguri SDK settings</strong></text><text fg={colors.muted}>Same settings and APIs as desktop. Optional subagents/evolution start off.</text>
-          <select focused flexGrow={1} options={[
+          <ThemedSelect focused flexGrow={1} options={[
             { name: "System prompt: view, edit, restore", value: "prompt" },
+            { name: "Appearance: shared color palettes", value: "appearance" },
             { name: "All shared settings (JSON): dark theme, guardrails, memory, MCP, optional modes", value: "json" },
             { name: "Project settings (JSON): repo, folders, scripts, preview port, instructions and MCP", value: "project" },
             { name: "View effective committed system prompt", value: "preview" },
@@ -818,6 +946,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
             { name: "Command help: skill imports, review, MCP auth and subagents", value: "help" },
           ].map((option) => ({ ...option, description: "" }))} onSelect={(_, option) => { void perform(async () => {
             switch (option?.value) {
+              case "appearance": setMode("themes"); break;
               case "prompt": openSettingsEditor(true); break;
               case "json": openSettingsEditor(false); break;
               case "project": await openProjectEditor(); break;
@@ -850,10 +979,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           {planPending ? <box flexDirection="column" flexGrow={1}><text fg={colors.attention} height={3}>Saving exact owned plan. Ctrl+C requests this save's stop; the editor stays preserved until settlement.</text><scrollbox flexGrow={1}><text fg={colors.foreground}>{safe(settingsText)}</text></scrollbox></box> : <SettingsTextEditor value={settingsText} change={setSettingsText} submit={(text) => void saveSettings(text)} />}
         </box> :
         mode === "artifacts" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Independent retained documents</text><text fg={colors.muted} height={3}>Ordinary artifacts survive session deletion. Candidates and generation proposals are deleted with their origin session or verified exact PR merge. Archiving alone preserves them. Provenance never grants permission.</text>
-          <select focused flexGrow={1} options={[{ name: "+ New retained document", description: "Plan, decision, answer, research note or report.", value: "" }, ...(snapshot?.artifacts ?? []).map((artifact) => ({ name: safe(artifact.name), description: `${artifact.kind} / ${artifact.status} / revision ${artifact.revision} / ${artifact.projectId ? snapshot?.projects.find((project) => project.id === artifact.projectId)?.name ?? "Former project" : "Profile"}`, value: artifact.id }))]} onSelect={(_, option) => { if (option) void perform(() => openArtifact(String(option.value) || undefined)); }} />
+          <ThemedSelect focused flexGrow={1} options={[{ name: "+ New retained document", description: "Plan, decision, answer, research note or report.", value: "" }, ...(snapshot?.artifacts ?? []).map((artifact) => ({ name: safe(artifact.name), description: `${artifact.kind} / ${artifact.status} / revision ${artifact.revision} / ${artifact.projectId ? snapshot?.projects.find((project) => project.id === artifact.projectId)?.name ?? "Former project" : "Profile"}`, value: artifact.id }))]} onSelect={(_, option) => { if (option) void perform(() => openArtifact(String(option.value) || undefined)); }} />
           <text fg={colors.muted} height={3}>Enter edits text, folderId and workItemId. /artifact ID reads provenance. /project-removal materialize-preview reviews a repository copy. F5 works without a session. Esc returns.</text></box> :
         mode === "work-items" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Project work item / {safe(project?.name ?? "Choose a project")}</text>
-          <select focused flexGrow={1} options={[{ name: "GitHub issues", description: "Read this project's actual signed-in account.", value: "github" },
+          <ThemedSelect focused flexGrow={1} options={[{ name: "GitHub issues", description: "Read this project's actual signed-in account.", value: "github" },
             { name: "Clear Kanban work item", description: "Metadata only; no card is deleted.", value: "" }, ...localIssues.map((issue) => ({ name: `#${issue.number} ${safe(issue.title)}`,
               description: issue.linear ? `Linear ${safe(issue.linear.identifier)} / retained local card` : "Project Kanban card / no inference", value: issue.id }))]}
             onSelect={(_, option) => { if (!option || !session) return; void perform(async () => {
@@ -863,16 +992,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.muted} height={3}>Enter links a card, or opens the GitHub picker. /continue-work [CARD_ID] asks Kanban or model for this request. Esc returns.</text></box> :
         mode === "issues" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Local project Kanban / {safe(project?.name ?? "Open a project first")}</text>
           <text fg={colors.muted} height={3}>{board?.columns.map((column) => `${safe(column.name)}: ${localIssues.filter((issue) => issue.phaseId === column.id).length}`).join("  |  ") ?? "No project selected."}</text>
-          <select focused flexGrow={1} options={[{ name: "+ New local issue", description: "Feature, bug or misc. No assignee.", value: "" }, ...localIssues.map((issue) => ({
+          <ThemedSelect focused flexGrow={1} options={[{ name: "+ New local issue", description: "Feature, bug or misc. No assignee.", value: "" }, ...localIssues.map((issue) => ({
             name: `#${issue.number} ${safe(issue.title)}`, description: `${issue.kind} / ${safe(board?.columns.find((column) => column.id === issue.phaseId)?.name ?? issue.phaseId)}${issue.pullRequest ? ` / PR ${issue.pullRequest.state}` : ""}`, value: issue.id,
           }))]} onSelect={(_, option) => { if (option) void perform(async () => openIssueEditor(String(option.value) || undefined)); }} />
           <text fg={colors.muted} height={4}>Enter edits JSON. /continue-work [CARD_ID] asks Kanban or model each time. /work-item picks a card. /kanban source selects open GitHub work. /board edit configures phases/sync/Linear. Esc opens this board's chat.</text></box> :
-        mode === "capability-output" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
+        mode === "capability-output" ? <scrollbox key="command-output" flexGrow={1} minHeight={0} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
         mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
-          <input focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
+          <ThemedInput focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
-          {availableModels.length ? <select focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
+          {availableModels.length ? <ThemedSelect focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
             model.environments && !model.environments.includes(session?.controls.env ?? "Local") ? `Unavailable: ${snapshot?.routingDiagnostics?.join(" ") ?? "No eligible model in this environment."}` :
               snapshot?.settings.values.kupo.workflow === "auto" ? "Automatic Single / Cascade / eligible Critique; every actual role is metered" :
                 snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
@@ -884,22 +1013,52 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
             }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
           <text fg={colors.muted} height={4} flexShrink={0}>Kupo uses configured models by default. One eligible model runs directly; multiple models support automatic Single, gated Cascade or eligible Critique. /kupo status shows capabilities and policy. Normal approvals remain authoritative. /compound keeps separate worktree/test review.</text></box> :
-        mode === "sessions" && width < 100 ? <select focused flexGrow={1} options={options} onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} /> :
-        mode === "help" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{`Commands
+        mode === "sessions" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Choose a session</text>
+          <ThemedSelect focused={!navigationFocus} flexGrow={1} options={options}
+            onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} />
+          <text fg={colors.muted} height={2}>Enter opens a saved session. /new creates one. Esc returns without sending your draft.</text></box> :
+        mode === "code-requests" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
+          <text fg={colors.accent} height={2}>Session code requests</text>
+          <text fg={colors.muted} height={compact ? 3 : 2}>Pull requests and code-change review for this project. Listing retained links does not contact GitHub or run a model.</text>
+          <ThemedSelect focused={!navigationFocus} flexGrow={1}
+            options={[
+              { name: "Review current code changes", description: "Read the actual session-bound diff; no write or inference.", value: "diff" },
+              { name: "Browse project pull requests", description: session?.projectId && session.controls.env === "Local" ? "Explicit GitHub lookup using this project's configured account." : "Blocked: needs an individual Local project; no fallback.", value: "browse" },
+              ...(snapshot?.sessions.filter((value) => value.projectId === session?.projectId && (!value.repositories && (session?.projectId !== null || value.id === session?.id)) && sessionPullRequestUrl(value, snapshot)) ?? []).map((value) => ({
+                name: safe(value.title), description: safe(`${sessionPullRequest(value, snapshot!)?.state ?? "unverified"} / ${sessionPullRequestUrl(value, snapshot!)}`), value: value.id,
+              })),
+            ]} onSelect={(_, option) => {
+              if (!option) return;
+              void perform(async () => {
+                if (!session) throw new Error("Choose an existing session first.");
+                if (option.value === "diff") { await slashResult(await client.slash(session.id, "/diff", "tui")); return; }
+                if (option.value === "browse") { await openGithubItems("pull"); return; }
+                const owner = snapshot?.sessions.find((value) => value.id === option.value);
+                if (!owner || !snapshot) throw new Error("This retained code request is no longer available.");
+                show({ sessionId: owner.id, title: owner.title, url: sessionPullRequestUrl(owner, snapshot), observation: sessionPullRequest(owner, snapshot),
+                  note: "Retained observation, not a fresh lookup. /github pulls explicitly browses this project; /pr explicitly opens the current session's linked PR." });
+              });
+            }} />
+          <text fg={colors.muted} height={2}>Enter reviews a selection. /github pulls browses; /diff reads changes. Esc returns.</text>
+        </box> :
+        mode === "help" ? <scrollbox flexGrow={1} focused><text fg={colors.foreground}>{`Commands / no shortcut chords required for navigation
 
-Ctrl+O open project    Ctrl+N new session    Ctrl+P sessions
-Ctrl+L Copilot login   Ctrl+M model picker   Cmd/Ctrl+Enter held queue
-Shift+Cmd/Ctrl+Enter send now
-Ctrl+C stop turn      Ctrl+Y approve tool   Ctrl+D deny tool
-Ctrl+B event trace    Ctrl+A archive view   Ctrl+Q save and leave
-Ctrl+R reload draft  Ctrl+S save/keep my draft after a conflict
-Ctrl+V scroll full approval arguments
-Ctrl+G shared SDK settings  Ctrl+Space local dictation  F4 insert transcript
-F5 retained documents / artifact editor (also without a session)
-F7 profile usage dashboard (also without a session)
-F8 isolated profile picker, create, rename and setup inspection
-F6 actual pending question choices. Shift+Cmd/Ctrl+Enter answers from saved text.
-Esc composer
+/session  /sessions  /work-items  /code-requests
+/sidebar open|close  /theme list  /theme crystal dark
+/new [global]  /open PATH  /models  /profiles  /settings
+/approve once  /question  /queue  /stop  /quit
+
+Click any navigation tab. Tab focuses navigation; Up/Down chooses a tab,
+Enter opens it. Left closes the sidebar; Right opens it only in navigation.
+Tab or Esc returns. Composer arrows always edit text.
+Type / for commands. Up/Down selects; Tab or click fills without execution.
+Idle Enter executes the exact command when no earlier work exists.
+Held/ordered new view/theme commands stay unsent until shared intake integration.
+Esc returns to the current saved prompt.
+
+Enter sends; Shift+Enter is newline; Cmd/Ctrl+Enter holds without running.
+Shift+Cmd/Ctrl+Enter sends now. Ctrl+C remains the emergency stop.
+Existing shortcut aliases remain available for compatibility.
 
 /connect | /cancel-login | /disconnect | /models | /model ID
 /model-settings [JSON|reset] configures working context/thinking via the shared SDK
@@ -947,7 +1106,7 @@ Esc composer
 /cache install MANAGER SHA256 accept-metadata replace-node-modules
 /linear status|token|clear-token|import CURSOR (optional, off by default)
 
-${slashCommands.map((entry) => `/${entry.name}${"argument" in entry ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
+${tuiCommands.map((entry) => `/${entry.name}${entry.argument ? ` ${entry.argument}` : ""}  ${entry.description}`).join("\n")}
 ${skillHelp?.profileId === client.profileId ? safe(skillHelp.text) : ""}
 
 Native Sandbox uses /sandbox setup for bundled runtime/image review, followed
@@ -977,8 +1136,10 @@ model policies. Moguri is not an official Copilot partner.
 Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         mode === "trace" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Recent events (last 200 received)</text>{events.filter((event) => !session || event.session_id === session.id).map((event) => <text key={event.id} fg={colors.muted}>{safe(`#${event.seq} ${event.event_type}\n${JSON.stringify(event.payload)}\n`)}</text>)}</scrollbox> :
         mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Held prompts do not run. /run ID releases one. /edit, /remove, /reorder and /copy ID manage prompts.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.held ? "held" : item.delivery}]\n${item.text}\n${item.attachments.map((attachment) => `${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`).join("\n")}\n`)}</text>)}</scrollbox> :
-          <scrollbox flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom">
-            {!session?.messages.length && <box flexDirection="column" paddingTop={1} paddingBottom={1} gap={1}><text fg={colors.accent}>{MOGURI_ASCII}</text><text fg={colors.accent}><strong>What are we working on?</strong></text><text fg={colors.muted}>{session ? "Choose a model with Ctrl+M, then write a prompt below.\nYou approve each tool before it runs." : "Ctrl+O opens a project. Ctrl+L connects GitHub Copilot.\nSessions and drafts are shared with the desktop app."}</text></box>}
+          <scrollbox key={`conversation-${session?.id ?? "empty"}`} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom">
+            {!session?.messages.length && <box flexDirection="column" paddingY={1} gap={1}>
+              {height >= 44 && width >= 90 ? <text fg={colors.accent}>{MOGURI_ASCII}</text> : <text fg={colors.accent}><strong>{"<> M O G U R I"}</strong></text>}
+              <text fg={colors.accent}><strong>What are we working on?</strong></text><text fg={colors.muted}>{session ? "Choose /models, then write a prompt.\nYour tools still need their actual approval." : "/new global starts a chat. /open PATH adds a project.\n/connect starts Copilot login. /help shows commands."}</text></box>}
             {session?.messages.slice(detailed ? 0 : -150).map((message) => <box key={message.id} flexDirection="column" paddingTop={1} paddingBottom={1}>
               <text fg={message.role === "user" ? colors.accent : message.role === "notice" ? colors.attention : colors.muted}><strong>{message.role === "user" ? "You" : message.role === "assistant" ? "Moguri" : message.role === "tool" ? message.toolCalls?.[0]?.name ?? "Tool" : "Session"}</strong>{message.outcome ? ` / ${message.outcome}` : ""}</text>
               <text fg={colors.foreground}>{safe((detailed ? message.text : message.text.slice(-4000)) || (message.toolCalls?.length ? "Requesting tool access." : "Working..."))}</text>
@@ -994,9 +1155,10 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <text fg={colors.accent}>GitHub Copilot sign-in: {snapshot.provider.login.code}</text><text fg={colors.foreground}>{snapshot.provider.login.url}</text><text fg={colors.muted}>Authorize in your browser. /cancel-login cancels. Account model policies may be enabled.</text>
         </box>}
         {snapshot?.provider.diagnostic && <text fg={colors.attention}>{safe(snapshot.provider.diagnostic)}</text>}
-        {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={mode === "approval-choices" ? 17 : 10} flexShrink={0}>
-          <text fg={colors.attention}><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
-          {mode === "approval-choices" ? <select focused flexGrow={1} options={[
+        {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1}
+          height={compact ? mode === "approval" || mode === "approval-choices" ? 10 : 6 : mode === "approval-choices" ? 17 : 10} flexShrink={0}>
+          <text fg={colors.attention} height={1} wrapMode="none" truncate><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
+          {mode === "approval-choices" ? <ThemedSelect focused flexGrow={1} options={[
             { name: "Approve only this action", description: "No remembered grant.", value: "once" },
             { name: "Approve for this session", description: "Same exact command/arguments or MCP tool.", value: "session:exact" },
             ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: "Approve for this project", description: "All sessions of the selected repository, current environment.", value: "project:exact" }] : []),
@@ -1016,29 +1178,56 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             const [scope, match] = String(option.value).split(":");
             void perform(async () => { await client.approvals.respond(session.id, session.pendingApproval!.id, true, scope === "once" ? undefined : parse(RememberApprovalSchema, { scope, match })); setMode("compose"); });
           }} /> : <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>}
-          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}Ctrl+Y once | Ctrl+Shift+Y remember | Ctrl+D deny | Ctrl+V args</text>
+          <text fg={colors.attention} height={compact ? 2 : undefined}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}{compact ? "\nCtrl+Y approve | Ctrl+D deny | Ctrl+V args" : "/approve once | Ctrl+D deny | Ctrl+V args | Ctrl+Y approve"}</text>
         </box>}
-        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
+        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1} height={compact ? 6 : recommendation ? 11 : 9} flexShrink={0}>
+          <text fg={colors.attention} height={1} wrapMode="none" truncate flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text>
+          <text fg={colors.foreground} height={2} truncate flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>
+          {recommendation && !compact && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}
+          <text fg={colors.muted} height={compact ? 1 : 2} wrapMode={compact ? "none" : "word"} truncate flexShrink={0}>{compact ? "Enter answers | Cmd/Ctrl+Enter holds" : "Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted."}</text>
+        </box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
         {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}
         {latestTranscript && <text fg={colors.accent}>Local transcript ready. F4 inserts it into the draft; it is never sent automatically.</text>}
-        {mode === "compose" && session && editor && <TuiComposer key={session.id} editor={editor} session={session} focused={!session.pendingApproval}
-          submit={() => void perform(() => submit(editor.getState().text))} run={perform} />}
-        <box height={taskProgress.progress?.longRunning && taskProgress.progress.model ? 5 : 4} flexShrink={0} flexDirection="column">
-          <text fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (Ctrl+M)"}` : "Env Local | Model not set"}</text>
-          <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
-          <text fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls${session.kind === "side" ? " | main context per question" : ""}` : "Factory defaults. Ctrl+K commands."}</text>
-          {session && <text fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : taskProgress.progress?.checklist.total ? `${taskProgress.progress.checklist.completed}/${taskProgress.progress.checklist.total}` : "no checklist"} / estimate, 15s`)}</text>}
-          {taskProgress.progress?.longRunning && taskProgress.progress.model && <text fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent, 8)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
+        {mode === "compose" && session && editor && <TuiComposer key={session.id} editor={editor} session={session} focused={!navigationFocus && !sidebarOnly} compact={compact}
+          focus={() => setNavigationFocus(false)} submit={() => void perform(() => submit(editor.getState().text))} run={perform} />}
+        {mode === "compose" && !session && <box border borderStyle="double" borderColor={colors.accent} paddingX={1} flexShrink={0} title="Commands">
+          <ThemedInput id="tui-startup-command" focused value={startupCommand} placeholder="/new global  /open PATH  /connect  /help" onInput={setStartupCommand} onSubmit={(text) => void perform(() => submit(text))} />
+        </box>}
+        <box height={compactDecision ? 3 : taskProgress.progress?.longRunning && taskProgress.progress.model ? 5 : 4} flexShrink={0} flexDirection="column" backgroundColor={colors.background}>
+          <text id="tui-status-env" height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (/models)"}` : "Env Local | Model not set"}</text>
+          <text id="tui-status-budget" height={1} wrapMode="none" truncate fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
+          <text height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls${session.kind === "side" ? " | main context per question" : ""}` : "Factory defaults. /help commands."}</text>
+          {session && !compactDecision && <text height={1} wrapMode="none" truncate fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : taskProgress.progress?.checklist.total ? `${taskProgress.progress.checklist.completed}/${taskProgress.progress.checklist.total}` : "no checklist"} / estimate, 15s`)}</text>}
+          {!compactDecision && taskProgress.progress?.longRunning && taskProgress.progress.model && <text height={1} wrapMode="none" truncate fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent, 8)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>
       </box>
     </box>
-    <box height={3} paddingLeft={2} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>Enter send | Shift+Enter newline | Cmd/Ctrl+Enter hold | Ctrl+C stop | Ctrl+K commands</text></box>
-  </box>;
+    <box height={compact ? 2 : 3} paddingLeft={1} flexShrink={0} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>{navigationFocus ? "Left/Right sidebar | Up/Down tabs | Enter choose | Tab/Esc back" :
+      compact ? "/help commands | Tab navigation | Esc prompt" : "/help commands | Tab navigation | /sidebar | Enter send | Shift+Enter newline | Cmd/Ctrl+Enter hold"}</text></box>
+  </box></NavigationContext.Provider></ThemeContext.Provider>;
 }
-function TuiComposer({ editor, session, focused, submit, run }: { editor: DraftEditor; session: Session; focused: boolean; submit: () => void; run: (operation: () => Promise<void>) => Promise<void> }) {
+function TuiComposer({ editor, session, focused, compact, focus, submit, run }: { editor: DraftEditor; session: Session; focused: boolean; compact: boolean; focus: () => void; submit: () => void; run: (operation: () => Promise<void>) => Promise<void> }) {
+  const colors = React.useContext(ThemeContext);
   const draft = useSyncExternalStore(editor.subscribe, editor.getState, editor.getState);
+  const limitedSuggestions = compact && Boolean(session.pendingApproval || session.pendingQuestionId);
+  const [suggestionIndex, renderSuggestionIndex] = useState(0), suggestions = tuiCommandSuggestions(draft.text).slice(0, limitedSuggestions ? 1 : compact ? 3 : 6);
+  const suggestionIndexRef = useRef(0);
+  const setSuggestionIndex = (value: number) => { suggestionIndexRef.current = value; renderSuggestionIndex(value); };
+  useEffect(() => { setSuggestionIndex(0); }, [draft.text]);
+  const complete = (index: number) => {
+    const suggestion = suggestions[index];
+    if (suggestion) editor.edit(`/${suggestion.name} `);
+  };
+  useKeyboard((key) => {
+    if (!focused || !suggestions.length || key.ctrl || key.meta || key.super) return;
+    if (key.name === "tab" || key.name === "up" || key.name === "down") {
+      key.preventDefault(); key.stopPropagation();
+      if (key.name === "tab") complete(suggestionIndexRef.current);
+      else setSuggestionIndex((suggestionIndexRef.current + (key.name === "up" ? -1 : 1) + suggestions.length) % suggestions.length);
+    }
+  });
   const ref = useRef<TextareaRenderable>(null);
   const mirror = useRef<{ setting: boolean; text: string | null }>({ setting: false, text: null });
   useEffect(() => {
@@ -1048,9 +1237,10 @@ function TuiComposer({ editor, session, focused, submit, run }: { editor: DraftE
       finally { mirror.current.setting = false; }
     }
   }, [draft.text]);
-  return <box flexDirection="column" border borderColor={focused ? colors.accent : colors.border} padding={1} marginTop={1} flexShrink={0}>
+  return <box flexDirection="column" border borderStyle="double" borderColor={focused ? colors.accent : colors.border} backgroundColor={colors.surface} paddingX={1} paddingY={compact ? 0 : 1} marginTop={compact ? 0 : 1} overflow="hidden" flexShrink={0} title={`Prompt / ${safe(session.title).slice(0, 40)}`} titleColor={colors.accent}>
     {/^\/budget\s+(?:set|profile|global)\b/.test(draft.text) && <text fg={colors.attention} height={3} flexShrink={0}>{BUDGET_WARNING} Input reservations use an explicit estimate-based policy, not a billing guarantee.</text>}
-    <textarea ref={ref} focused={focused} initialValue={draft.text} height={4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.background}
+    <textarea id="tui-composer" ref={ref} focused={focused} initialValue={draft.text} height={limitedSuggestions ? 1 : compact ? 2 : 4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.surface}
+      onMouseDown={focus}
       placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Enter sends; Shift+Enter newline. /help for commands."}
       keyBindings={[{ name: "return", action: "submit" }, { name: "return", shift: true, action: "newline" },
         { name: "kpenter", action: "submit" }, { name: "kpenter", shift: true, action: "newline" },
@@ -1079,10 +1269,31 @@ function TuiComposer({ editor, session, focused, submit, run }: { editor: DraftE
       }} />
     {draft.attachments.length > 0 && <text fg={colors.accent}>{safe(draft.attachments.map((attachment) => `@${attachment.path}${attachment.kind === "document" ? ` [${attachmentStatus(attachment)}] ${attachment.id}` : ""}`).join("  "))}</text>}
     <text fg={draft.error ? colors.error : colors.muted}>{draft.error ?? (draft.saving ? "Saving draft..." : draft.dirty ? "Unsent edits" : "Draft saved")}</text>
-    {draft.text.startsWith("/") && !/\s/.test(draft.text) && <text fg={colors.accent}>{slashCommands.filter((entry) => entry.name.startsWith(draft.text.slice(1))).slice(0, 4).map((entry) => `/${entry.name}`).join("  ")}</text>}
+    {focused && suggestions.length > 0 && <box id="tui-slash-suggestions" flexDirection="column" border={limitedSuggestions ? false : ["top"]} borderColor={colors.border}>
+      {!limitedSuggestions && <text fg={colors.muted}>Commands / Up/Down choose / Tab or click fills / Enter runs</text>}
+      {suggestions.map((entry, index) => <box id={`tui-command-${entry.name}`} key={entry.name} height={1}
+        backgroundColor={index === suggestionIndex ? colors.panel : colors.surface}
+        onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); complete(index); }}>
+        <text height={1} wrapMode="none" truncate fg={index === suggestionIndex ? colors.selection : colors.foreground}>{index === suggestionIndex ? "> " : "  "}/{entry.name}  {entry.description}</text>
+      </box>)}
+    </box>}
   </box>;
 }
+function ThemedSelect(props: SelectProps) {
+  const colors = React.useContext(ThemeContext), navigation = React.useContext(NavigationContext);
+  return <select {...props} focused={props.focused && !navigation} backgroundColor={colors.surface} textColor={colors.foreground}
+    focusedBackgroundColor={colors.surface} focusedTextColor={colors.foreground} descriptionColor={colors.muted}
+    selectedBackgroundColor={colors.panel} selectedTextColor={colors.selection} selectedDescriptionColor={colors.selection} />;
+}
+function ThemedInput({ onSubmit, ...props }: Omit<InputProps, "onSubmit" | "ref"> & { onSubmit?: (text: string) => void }) {
+  const colors = React.useContext(ThemeContext), navigation = React.useContext(NavigationContext);
+  const ref = useRef<InputRenderable>(null);
+  return <input {...props} ref={ref} focused={props.focused && !navigation} textColor={colors.foreground} backgroundColor={colors.surface}
+    onSubmit={() => { if (!ref.current) throw new Error("The terminal input is no longer mounted. Nothing was submitted."); onSubmit?.(ref.current.plainText); }}
+    focusedTextColor={colors.foreground} focusedBackgroundColor={colors.surface} placeholderColor={colors.muted} />;
+}
 function SettingsTextEditor({ value, change, submit }: { value: string; change: (value: string) => void; submit: (value: string) => void }) {
+  const colors = React.useContext(ThemeContext);
   const ref = useRef<TextareaRenderable>(null);
   return <box flexGrow={1} minHeight={0} border borderColor={colors.border} padding={1}>
     <textarea ref={ref} initialValue={value} focused flexGrow={1} textColor={colors.foreground} backgroundColor={colors.background}

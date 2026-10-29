@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
+import { Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
@@ -34,6 +35,24 @@ test("native TUI pickers discover repositories and review complete project issue
     assert.equal(session.workItemUrl, "https://github.com/generated-owner/fixture/issues/7");
     assert.ok(session.draft.text.includes("Generated **issue body**.")); assert.equal(session.turnId, null);
     assert.equal(fixture.git(["branch", "--show-current"]), "generated-feature"); assert.deepEqual(fixture.writes(), { issues: 0, pulls: 0 });
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
+test("the actual Code requests tab explicitly browses project PRs and reviews a complete source without writes or session creation", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+  const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 140, height: 55, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk }))); await frameUntil(setup, "Write a prompt");
+    const tab = setup.renderer.root.findDescendantById("tui-tab-code-requests");
+    assert.ok(tab instanceof Renderable);
+    await setup.mockMouse.click(tab.x + 5, tab.y); await frameUntil(setup, "Session code requests");
+    assert.deepEqual(fixture.writes(), { issues: 0, pulls: 0 });
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter();
+    await frameUntil(setup, "generated-owner/fixture / Pull requests");
+    setup.mockInput.pressEnter(); await frameUntil(setup, "Generated **pull request body**.");
+    assert.deepEqual(fixture.writes(), { issues: 0, pulls: 0 });
+    assert.equal(fixture.service.controller.snapshot().sessions.length, 1);
+    assert.equal(fixture.service.controller.snapshot().sessions[0]?.turnId, null);
+    assert.equal(fixture.service.controller.snapshot().sessions[0]?.usage.length, 0);
   } finally { flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });
 

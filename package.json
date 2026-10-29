@@ -80,6 +80,7 @@
     "docs/architecture/agent-terminal.md",
     "docs/architecture/agent-browser.md",
     "docs/architecture/settings-platform.md",
+    "docs/architecture/themes-and-tui.md",
     "docs/architecture/workspace-experience.md",
     "docs/architecture/cli-launcher.md",
     "docs/architecture/lean-tooling.md"
