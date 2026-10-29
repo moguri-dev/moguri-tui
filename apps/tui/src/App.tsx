@@ -630,7 +630,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (argument && argument !== "global") throw new Error("Use /new or /new global for a project-free chat.");
         await newSession(argument === "global"); break;
       case "/open": await openProject(argument); break;
-      case "/sessions": setMode("sessions"); break;
       case "/trace": setMode("trace"); break;
       case "/details": setDetailed((value) => !value); break;
       case "/help": {
