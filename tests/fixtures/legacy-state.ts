@@ -31,8 +31,18 @@ export function assertPreWorkspaceHistory(events: readonly StoredEvent[]): void 
 export function assertPreCombinedHistory(events: readonly StoredEvent[]): void {
   if (hasCombinedWorkspaceHistory(events)) throw new Error("Generate genuine pre-combined80 history; actual queue/native runtime cannot become standalone79.");
 }
+export function removeRecoveryFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "session.configured" && event.payload.autonomySelection ||
+    event.event_type === "tool.started" && ["git_read", "git_write"].includes(event.payload.call.name) ||
+    event.event_type === "github.operation_recorded" && (event.payload.operation.toolCallDigest ||
+      ["git.branch.create", "git.branch.rename", "git.switch", "git.revert", "git.commit", "git.stage", "git.unstage"].includes(event.payload.operation.kind)))) {
+    throw new Error("Generate genuine pre-recovery history; explicit autonomy and built-in Git intent cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('session_request_recovery_schema','builtin_git_schema')");
+}
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);
+  removeRecoveryFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('queued_slash_schema','project_folder_actions_schema','sandbox_multi_root_schema','theme_model_workspace_convergence_schema')");
 }
 export function assertPreThemeHistory(events: readonly StoredEvent[]): void {

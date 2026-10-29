@@ -8,6 +8,7 @@ import { MoguriSdk } from "../packages/sdk/src/index.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { appendLegacyAutopilot } from "./fixtures/legacy-state.ts";
 
 test("actual TUI keys share knowledge promotion, disabled hooks and exact reviewed Git actions without inference", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
@@ -52,6 +53,19 @@ test("actual TUI keys share knowledge promotion, disabled hooks and exact review
     await slash("/agent-terminal", '"activity.list"');
     setup.mockInput.pressEscape();
     await slash("/containment status", "native-process-groups-only");
+    setup.mockInput.pressEscape();
+    await slash("/git status", '"git.read"');
+    setup.mockInput.pressEscape();
+    const branchAction = { kind: "git.branch.create" as const, branch: "generated/native-built-in", start: git(["rev-parse", "HEAD"]), checkout: false };
+    await slash(`/git preview ${JSON.stringify(branchAction)}`, '"github.preview"'); setup.mockInput.pressEscape();
+    const branchReview = (await sdk.git.preview(fixture.sessionId, branchAction)).preview;
+    await slash(`/git execute confirm-write ${JSON.stringify({ action: branchAction, expectedDigest: branchReview.digest, confirmations: branchReview.document.confirmations })}`, '"id":');
+    await waitFor(() => fixture.service.controller.snapshot().githubOperations.some((operation) => operation.kind === "git.branch.create" && operation.status === "completed"));
+    assert.equal(git(["rev-parse", "refs/heads/generated/native-built-in"]), git(["rev-parse", "HEAD"]));
+    setup.mockInput.pressEscape();
+    appendLegacyAutopilot(fixture.service, fixture.sessionId); await sdk.refresh();
+    await slash("/autonomy Autopilot", "Session autonomy set to Autopilot");
+    assert.equal(fixture.session().controls.automaticApprovals, true);
     assert.equal(fixture.requests.length, 0);
     assert.equal(fixture.session().queue.length, 0);
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }

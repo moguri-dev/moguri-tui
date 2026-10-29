@@ -48,6 +48,9 @@ repository-backed marketplace bundles. Imports/updates/rollbacks stay disabled;
 knowledge injection has a separate default-off consent. Nothing self-approves
 or starts a model merely because it was installed.
 
+**Local Git built-ins** cover status/history/diff, branch creation/switch/rename,
+exact staging, selected staged commits, history-preserving rollback and new-branch
+pushes through the same SDK and agent tools. [Usage and boundaries](docs/setup.md#reliable-session-controls-and-built-in-git).
 **GitHub workflows** expose exact-root reviewed main/force-with-lease pushes,
 rebases, tags, two-way issue/PR/review work, pinned CI watching, releases and
 exact-head PR merges. **Linear workflows** add team-scoped issue/project/comment
@@ -55,7 +58,7 @@ operations and explicit conflict-checked ticket pull/push. Both retain original
 intent/results without replaying ambiguous writes. Dependency caching extends
 to explicit private npm registries, npm/pnpm workspaces, Python, Rust/Cargo and
 Go; mutable installs remain private and executable builds are not implied.
-Desktop exposes the same APIs under Settings; shared `/github`, `/linear`,
+Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
 Whole-descendant containment can be required explicitly through **Guardrails /
