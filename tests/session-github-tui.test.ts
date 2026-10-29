@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
-import { Renderable } from "@opentui/core";
+import { Renderable, TextareaRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { isRecord, MoguriSdk } from "../packages/sdk/src/index.ts";
 import { githubApplicationFixture } from "./github-workflows-fixture.ts";
 import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
@@ -95,4 +95,33 @@ test("native TUI continuation asks for a route each time and sends the slash lit
     assert.ok(fixture.session().messages.some((message) => message.role === "user" && message.text === "/continue-work"));
     assert.equal(fixture.service.controller.snapshot().projectWorkRuns.length, 0);
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
+});
+
+test("native continuation cancellation waits for canonical draft restoration before allowing another Enter", { skip: process.platform !== "darwin", timeout: 15000 }, async (t) => {
+  const fixture = await setupFixture({ responseMode: "text" }), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 140, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const gate = Promise.withResolvers<void>(); let received = false;
+  const dispatch = fixture.service.controller.dispatch.bind(fixture.service.controller);
+  t.mock.method(fixture.service.controller, "dispatch", async (...args: Parameters<typeof dispatch>) => {
+    const request = args[0];
+    if (isRecord(request) && isRecord(request.command) && request.command.type === "slash.client.complete" && request.command.restoreInput === true) {
+      received = true; await gate.promise;
+    }
+    return dispatch(...args);
+  });
+  try {
+    await fixture.configure(); flushSync(() => root.render(createElement(TuiApp, { client: sdk })));
+    await frameUntil(setup, "Write a prompt"); await setup.mockInput.typeText("/continue-work"); setup.mockInput.pressEnter();
+    await frameUntil(setup, "choose for this request"); setup.mockInput.pressEscape(); await waitFor(() => received);
+    await setup.flush(); assert.match(setup.captureCharFrame(), /Restoring the original draft/);
+    setup.mockInput.pressEnter(); setup.mockInput.pressEscape();
+    assert.equal(fixture.requests.length, 0); assert.equal(fixture.service.controller.snapshot().commandExecutions.length, 1);
+    gate.resolve();
+    await frameUntil(setup, "Commands / Up/Down choose"); await frameUntil(setup, "Draft saved");
+    const input = setup.renderer.root.findDescendantById("tui-composer");
+    assert.ok(input instanceof TextareaRenderable); assert.equal(input.plainText, "/continue-work");
+    setup.mockInput.pressEnter(); await frameUntil(setup, "choose for this request");
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter(); await fixture.terminal();
+    assert.equal(fixture.requests.length, 1); assert.equal(fixture.service.controller.snapshot().commandExecutions.length, 2);
+  } finally { gate.resolve(); t.mock.restoreAll(); await closeTui(root, setup, sdk, () => fixture.close()); }
 });

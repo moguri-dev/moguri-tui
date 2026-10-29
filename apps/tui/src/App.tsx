@@ -5,7 +5,7 @@ import type { InputRenderable, TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessions, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessions, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
@@ -77,7 +77,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [notice, setNotice] = useState("");
   const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
   const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
-  const queuedContinue = useRef<{ context: CommandViewContext; pending: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
+  const queuedContinue = useRef<{ context: CommandViewContext; pending: boolean; cancelling?: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
   const [continuePending, setContinuePending] = useState(false);
   const [archiveReview, setArchiveReview] = useState<ArchiveReview | null>(null);
   const queuedArchive = useRef<{ context: CommandViewContext; pending: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
@@ -135,6 +135,19 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (snapshot) for (const [id, editor] of editors.current) if (!snapshot.sessions.some((session) => session.id === id)) { editor.dispose(); editors.current.delete(id); }
   }, [snapshot, selectedId]);
   useEffect(() => { if (session && editor) editor.receive(session.draft); }, [session?.draft.revision, editor]);
+  const settleContinuationCancellation = () => {
+    const owned = queuedContinue.current;
+    if (!owned?.cancelling || owned.context.sdk !== client) return;
+    const source = client.getState().snapshot?.sessions.find((session) => session.id === owned.context.sessionId);
+    if (source) editors.current.get(source.id)?.receive(source.draft);
+    queuedContinue.current = null; setContinueReview(null); setContinuePending(false); setMode("compose");
+  };
+  useEffect(() => {
+    const owned = queuedContinue.current;
+    if (!owned?.cancelling || owned.context.sdk !== client) return;
+    const actual = snapshot?.commandExecutions.find((entry) => entry.id === owned.context.execution.id);
+    if (!actual || terminalCommandExecution(actual.status)) settleContinuationCancellation();
+  }, [client, snapshot]);
   const perform = async (action: () => Promise<unknown>) => {
     setNotice("");
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
@@ -497,7 +510,14 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
             if (queuedContinue.current?.context.execution.id === context.execution.id) { queuedContinue.current = null; setContinueReview(null); setContinuePending(false); setMode("compose"); }
           };
           const abort = () => { clear(); reject(context.signal.reason ?? new Error("The exact queued continuation owner ended.")); };
-          const settle = (outcome: CommandViewOutcome) => { context.signal.removeEventListener("abort", abort); clear(); resolve(outcome); };
+          const settle = (outcome: CommandViewOutcome) => {
+            context.signal.removeEventListener("abort", abort);
+            const owned = queuedContinue.current;
+            if (outcome.outcome === "cancelled" && outcome.restoreInput && owned?.context.execution.id === context.execution.id) {
+              owned.cancelling = true; owned.pending = true; setContinuePending(true);
+            } else clear();
+            resolve(outcome);
+          };
           queuedContinue.current = { context, pending: false, settle };
           context.signal.addEventListener("abort", abort, { once: true });
           setContinueReview(result.review); setContinuePending(false); setMode("continue-work");
@@ -531,7 +551,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       "project-settings", "prompt", "trace", "details", "reload-draft", "keep-draft", "cache", "linear", "mcp", "model-token", "remote-model-token", "help", "archive", "commands"];
     const handlers = Object.fromEntries(views.map((name) => [`client-view:${name}`, apply]));
     void client.commands.attach("tui", { ...handlers, panel: apply, session: apply, profile: apply, profiles: apply, copy: apply, export: apply, "artifact-editor": apply, "continue-work": apply, "github-view": apply },
-      { canApply: (execution) => !closed && (commandUi.current?.canApply(execution) ?? false), onError: (error) => { if (!closed) setNotice(error.message); } })
+      { canApply: (execution) => !closed && (commandUi.current?.canApply(execution) ?? false), onError: (error) => {
+        if (!closed) { settleContinuationCancellation(); setNotice(error.message); }
+      } })
       .then((value) => { attached = value; if (closed) return value.dispose(); commandAttachment.current = value; })
       .catch((error: unknown) => { if (!closed) setNotice(error instanceof Error ? error.message : "The actual terminal command client could not attach."); });
     return () => {
@@ -608,7 +630,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (key.name === "escape") {
       if (queuedContinue.current?.pending) { setNotice("The original choice is still settling. Ctrl+C requests its owned stop; no replacement route will be sent."); return; }
       if (queuedArchive.current?.pending) { setNotice("The original archive is still settling. Ctrl+C stops owned work; it cannot promise to undo an admitted archive."); return; }
-      queuedContinue.current?.settle({ outcome: "cancelled", restoreInput: true, diagnostic: "The actual user cancelled this original continuation before choosing a route." });
+      if (queuedContinue.current) {
+        queuedContinue.current.settle({ outcome: "cancelled", restoreInput: true, diagnostic: "The actual user cancelled this original continuation before choosing a route." });
+        return;
+      }
       queuedArchive.current?.settle({ outcome: "cancelled", diagnostic: "The actual user cancelled this exact archive review. No archive was requested." });
       setContinueReview(null); setArchiveReview(null); setMode("compose"); if (sidebarOnly) setSidebar(false); return;
     }
@@ -822,7 +847,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         </box> :
         mode === "continue-work" && continueReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Continue work / choose for this request</text>
-          <text fg={colors.muted} height={4}>Work from Kanban, or send this exact prompt to the model? Esc cancels and preserves the draft. No route is remembered.</text>
+          <text fg={colors.muted} height={4}>{queuedContinue.current?.cancelling ? "Restoring the original draft. Wait for its actual service acknowledgement before another input." :
+            "Work from Kanban, or send this exact prompt to the model? Esc cancels and preserves the draft. No route is remembered."}</text>
           <ThemedSelect flexGrow={1} focused={!continuePending} options={[
             { name: "Work from Kanban", description: "One actual project item in an isolated Local checkout, through its PR", value: "kanban" },
             { name: "Send to model", description: "Send the unchanged prompt through the normal chat and permissions", value: "prompt" },
