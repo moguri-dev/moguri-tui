@@ -153,8 +153,9 @@ The [workspace experience](docs/architecture/workspace-experience.md) adds
 chart-first **My work, Usage, Cost and Velocity** dashboard pages and a
 profile-private **skill gateway** for local folders and refreshed remote
 archives. Settings use compact information/copy controls and contain Artifacts,
-Candidates and unified Sandbox management. Suggestions starts globally with
-local usage-gap checks; model generation still requires exact source review.
+Candidates and unified Sandbox management. Suggestions offers global local
+usage-gap checks; `/suggestions` defaults to the current project's scope.
+Model generation still requires exact source review.
 Automations remain unimplemented. Work item links the project's Kanban cards or
 GitHub issues; session PRs open in Code change. Copilot connection status stays in Settings,
 not the left sidebar.
