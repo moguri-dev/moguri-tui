@@ -68,11 +68,16 @@ without changing original retained bytes.
 
 The historical standalone contract and qualification below remain evidence
 for their original source only. Changed80 payloads need their own SDK, TUI,
-desktop, native and packaging evidence. The queued text intake must also replace
-the merged TUI's explicit development block without making view/theme actions
-eager; direct mouse/Tab/key navigation remains direct. The user selected
+desktop, native and packaging evidence. The actual merged TUI now uses shared
+queued text intake and compatible client claims instead of its development
+block. View/theme actions are not eager; actual rendered frames acknowledge
+navigation while direct mouse/Tab/key navigation remains direct. The user selected
 headless service execution for service-capable commands, while actual UI-only
 actions wait for an acknowledged compatible client.
+Held text, including `/yolo`, remains inert. Only unheld stop/approval/yolo
+controls are live. Real user-gate scheduling, original continuation reviews,
+retained responses and draft provenance follow
+[the shared command contract](workspace-experience.md#shared-queued-command-primitives).
 
 ### Historical independent schema lineage and integration gate
 

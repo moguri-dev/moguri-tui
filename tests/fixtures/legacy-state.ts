@@ -26,6 +26,7 @@ export function assertPreWorkspaceHistory(events: readonly StoredEvent[]): void 
     const owner = `${event.profile_id}/${event.session_id}`;
     if (event.event_type === "session.created" && event.payload.repositories?.length) grouped.add(owner);
     if (event.event_type.startsWith("slash.") || event.event_type === "project.folder_removed" ||
+      event.event_type === "draft.saved" && event.payload.source !== undefined ||
       event.event_type === "project.folder_saved" && event.payload.folder.color !== undefined ||
       (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && Object.hasOwn(event.payload.item, "command") ||
       (event.event_type === "session.created" || event.event_type === "session.configured") && grouped.has(owner) && event.payload.controls.env === "Sandbox" ||

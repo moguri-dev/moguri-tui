@@ -7,6 +7,7 @@ import { TuiApp } from "../apps/tui/src/App.tsx";
 import { MoguriSdk } from "../packages/sdk/src/index.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
+import { closeTui } from "./fixtures/tui-client.ts";
 
 test("actual TUI keys share knowledge promotion, disabled hooks and exact reviewed Git actions without inference", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
@@ -19,7 +20,7 @@ test("actual TUI keys share knowledge promotion, disabled hooks and exact review
     throw new Error(`Native workflow UI did not show ${text}:\n${setup.captureCharFrame()}`);
   };
   const slash = async (text: string, expected: string) => {
-    await frameUntil("Write a prompt"); await setup.mockInput.typeText(text); setup.mockInput.pressEnter({ ctrl: true }); await frameUntil(expected);
+    await frameUntil("Write a prompt"); await setup.mockInput.typeText(text); setup.mockInput.pressEnter(); await frameUntil(expected);
   };
   try {
     flushSync(() => root.render(createElement(TuiApp, { client: sdk })));
@@ -53,5 +54,5 @@ test("actual TUI keys share knowledge promotion, disabled hooks and exact review
     await slash("/containment status", "native-process-groups-only");
     assert.equal(fixture.requests.length, 0);
     assert.equal(fixture.session().queue.length, 0);
-  } finally { flushSync(() => root.unmount()); await setup.dispose(); sdk.disconnect(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });

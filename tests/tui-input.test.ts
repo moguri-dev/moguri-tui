@@ -6,6 +6,7 @@ import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
 import { MoguriSdk } from "../packages/sdk/src/index.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
+import { closeTui } from "./fixtures/tui-client.ts";
 
 async function ready(setup: Awaited<ReturnType<typeof createTestRenderer>>) {
   const deadline = Date.now() + 8000;
@@ -37,7 +38,7 @@ test("TUI Enter sends one message in legacy and enhanced keyboard modes without 
       assert.equal(completed.status, "completed"); assert.equal(fixture.requests.length, 1);
       assert.equal(completed.messages.find((message) => message.role === "user")?.text, expected);
       assert.equal(completed.draft.text, ""); assert.equal(completed.queue.length, 0);
-    } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+    } finally { await closeTui(root, setup, client, () => fixture.close()); }
   });
 });
 
@@ -59,5 +60,5 @@ test("TUI Shift+Enter inserts a newline and Cmd/Ctrl+Enter still holds the exact
     const held = await waitFor(() => fixture.session().queue[0]);
     assert.equal(held.held, true); assert.equal(held.text, "Generated first line.\nGenerated second line.\nGenerated third line.");
     assert.equal(fixture.session().turnId, null); assert.equal(fixture.requests.length, 0);
-  } finally { client.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });

@@ -7,9 +7,10 @@ import { Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { appearanceColors, colorContrast, MoguriSdk, themePalettes } from "../packages/sdk/src/index.ts";
+import { appearanceColors, colorContrast, MoguriSdk, themePalettes, type PlatformQuery, type PlatformResponse } from "../packages/sdk/src/index.ts";
 import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
+import { closeTui } from "./fixtures/tui-client.ts";
 
 type Terminal = Awaited<ReturnType<typeof createTestRenderer>>;
 async function frameUntil(setup: Terminal, text: string) {
@@ -42,7 +43,7 @@ test("native terminal mouse tabs navigate real screens and preserve the exact un
     assert.equal(fixture.session().draft.text, "Generated unsent navigation draft.");
     assert.equal(fixture.session().turnId, null); assert.equal(fixture.requests.length, 0);
     assert.equal(fixture.session().queue.length, 0); assert.equal(fixture.session().pendingApproval, null);
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("sidebar arrows are confined to navigation focus and remain usable after narrow terminal resizing", { skip: process.platform !== "darwin" }, async () => {
@@ -75,7 +76,7 @@ test("sidebar arrows are confined to navigation focus and remain usable after na
     assert.equal(setup.renderer.root.findDescendantById("tui-sidebar")?.visible, true);
     setup.mockInput.pressArrow("left"); setup.mockInput.pressEscape(); await frameUntil(setup, "abXc");
     assert.equal(fixture.session().draft.text, "abXc"); assert.equal(fixture.requests.length, 0);
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("slash discovery fills with terminal keyboard or mouse but executes navigation only on explicit Enter", { skip: process.platform !== "darwin" }, async () => {
@@ -101,7 +102,7 @@ test("slash discovery fills with terminal keyboard or mouse but executes navigat
     await frameUntil(setup, "Theme set to terminal / dark");
     assert.equal(sdk.settings.get()?.values.appearance.palette, "terminal");
     assert.equal(fixture.requests.length, 0); assert.equal(fixture.session().queue.length, 0);
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("terminal tab and sidebar navigation cannot answer or approve a pending action", { skip: process.platform !== "darwin" }, async () => {
@@ -120,7 +121,7 @@ test("terminal tab and sidebar navigation cannot answer or approve a pending act
     assert.equal(fixture.session().draft.text, "Generated draft while approval waits.");
     assert.equal(fixture.requests.length, 1);
     await sdk.approvals.respond(fixture.sessionId, approval.id, false); await fixture.terminal();
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("mouse navigation refuses to discard a local settings editor", { skip: process.platform !== "darwin" }, async () => {
@@ -135,7 +136,7 @@ test("mouse navigation refuses to discard a local settings editor", { skip: proc
     assert.ok(setup.captureCharFrame().includes("Generated unsaved settings edit"));
     assert.equal(setup.captureCharFrame().includes("Session code requests"), false);
     assert.equal(fixture.requests.length, 0);
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("native terminal cells follow shared preset updates in both modes and actual terminal System reports", { skip: process.platform !== "darwin" }, async () => {
@@ -172,7 +173,7 @@ test("native terminal cells follow shared preset updates in both modes and actua
     flushSync(() => { setup.renderer.emit("theme_mode", "dark"); });
     assert.deepEqual(await selectedColors(), { foreground: "#f0f3ff", background: "#304572" });
     assert.equal(fixture.requests.length, 0);
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("an empty terminal workspace supports slash onboarding without an inferred project or model call", { skip: process.platform !== "darwin" }, async () => {
@@ -188,7 +189,7 @@ test("an empty terminal workspace supports slash onboarding without an inferred 
     const created = await waitFor(() => sdk.getState().snapshot?.sessions[0]);
     assert.equal(created.projectId, null); assert.equal(created.turnId, null); assert.equal(created.controls.modelId, null);
     await frameUntil(setup, "Write a prompt"); assert.equal(fixture.requests.length, 0);
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("work-item and code-request tabs operate the actual bound Kanban and Git diff without consuming the draft", { skip: process.platform !== "darwin" }, async () => {
@@ -208,7 +209,7 @@ test("work-item and code-request tabs operate the actual bound Kanban and Git di
     assert.equal(fixture.session().draft.text, "Generated preserved work draft.");
     assert.equal(fixture.requests.length, 0); assert.equal(fixture.session().turnId, null);
     assert.equal(git(["rev-parse", "HEAD"]), originalHead); assert.equal(git(["diff", "--cached"]), "");
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("batched keyboard navigation cannot submit a configured session's existing prompt before focus renders", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
@@ -222,30 +223,37 @@ test("batched keyboard navigation cannot submit a configured session's existing 
     await frameUntil(setup, "Choose a session");
     assert.equal(fixture.requests.length, 0); assert.equal(fixture.session().turnId, null);
     assert.equal(fixture.session().draft.text, "Generated guarded navigation prompt.");
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
-test("held and ordered new slash actions stay unsent until the shared command intake is available", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+test("native terminal slash actions use the shared ordered queue and actual rendered-view acknowledgement", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   await fixture.configure();
   const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
     flushSync(() => root.render(createElement(TuiApp, { client: sdk }))); await frameUntil(setup, "Write a prompt");
     await setup.mockInput.typeText("/theme rose"); setup.mockInput.pressEnter({ ctrl: true });
-    await frameUntil(setup, "shared command intake");
-    assert.equal(fixture.session().draft.text, "/theme rose");
+    const theme = await waitFor(() => fixture.session().queue.find((entry) => entry.command?.name === "theme"));
+    assert.equal(theme.held, true); assert.equal(fixture.session().draft.text, "");
     assert.equal(sdk.settings.get()?.values.appearance.palette, "moguri");
-    setup.mockInput.pressKey("a", { super: true }); setup.mockInput.pressBackspace();
-    await setup.mockInput.typeText("Generated earlier held work."); setup.mockInput.pressEnter({ ctrl: true });
-    const queued = await waitFor(() => fixture.session().queue[0]); await frameUntil(setup, "Write a prompt");
+    await fixture.send("generated slow original terminal work");
+    await waitFor(() => fixture.requests.length === 1); await frameUntil(setup, "Write a prompt");
     await setup.mockInput.typeText("/sessions"); setup.mockInput.pressEnter();
-    await frameUntil(setup, "shared command intake");
-    assert.equal(fixture.session().draft.text, "/sessions");
-    assert.equal(fixture.session().queue[0]?.id, queued.id); assert.equal(fixture.session().queue[0]?.held, true);
+    await waitFor(() => fixture.session().queue.some((entry) => entry.command?.name === "sessions"));
+    await setup.flush(); assert.equal(setup.captureCharFrame().includes("Choose a session"), false);
+    assert.equal(fixture.session().draft.text, ""); assert.equal(fixture.session().queue[0]?.id, theme.id);
     await click(setup, "tui-tab-sessions"); await frameUntil(setup, "Choose a session");
-    assert.equal(fixture.session().draft.text, "/sessions");
-    assert.equal(fixture.requests.length, 0); assert.equal(fixture.session().turnId, null);
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+    await click(setup, "tui-tab-session");
+    await sdk.command({ type: "session.stop", sessionId: fixture.sessionId }); await fixture.terminal();
+    assert.ok(fixture.session().queue.every((entry) => entry.held));
+    await sdk.command({ type: "session.resume", sessionId: fixture.sessionId });
+    await waitFor(() => fixture.service.controller.snapshot().settings.values.appearance.palette === "rose");
+    await frameUntil(setup, "Choose a session");
+    await waitFor(() => fixture.service.controller.snapshot().commandExecutions.filter((entry) => entry.status === "completed").length === 2);
+    assert.equal(fixture.requests.length, 1);
+    assert.equal(fixture.session().messages.some((entry) => entry.role === "user" && entry.text.startsWith("/")), false);
+    assert.equal(fixture.session().draft.text, ""); assert.equal(fixture.session().turnId, null);
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
 test("compact pending decisions keep actual environment, budget and human controls readable without granting consent", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
@@ -271,5 +279,60 @@ test("compact pending decisions keep actual environment, budget and human contro
     setup.mockInput.pressKey("F6"); await frameUntil(setup, "Actual user question");
     setup.mockInput.pressEnter(); await fixture.terminal();
     assert.equal(fixture.session().pendingQuestionId, null);
-  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
+});
+
+test("native terminal Ctrl+Enter holds yolo without selecting a model or delegating tools", { skip: process.platform !== "darwin" }, async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk }))); await frameUntil(setup, "Write a prompt");
+    await setup.mockInput.typeText("/yolo"); setup.mockInput.pressEnter({ ctrl: true });
+    const queued = await waitFor(() => fixture.session().queue[0]);
+    assert.equal(queued.command?.name, "yolo"); assert.equal(queued.held, true);
+    assert.equal(fixture.session().controls.autonomy, "Manual"); assert.equal(fixture.session().controls.modelId, null);
+    await sdk.command({ type: "session.resume", sessionId: fixture.sessionId });
+    await waitFor(() => fixture.session().controls.autonomy === "Autopilot");
+    assert.equal(fixture.requests.length, 0); assert.equal(fixture.session().controls.modelId, null);
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
+});
+
+test("queued terminal quit saves the real draft and acknowledges its actual caller without replay", { skip: process.platform !== "darwin" }, async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 100, height: 38, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  let quit = 0;
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk, onQuit: () => { quit++; } }))); await frameUntil(setup, "Write a prompt");
+    await setup.mockInput.typeText("/quit"); setup.mockInput.pressEnter();
+    await waitFor(() => quit === 1);
+    await waitFor(() => fixture.service.controller.snapshot().commandExecutions.some((entry) => entry.name === "quit" && entry.status === "completed"));
+    assert.equal(fixture.session().draft.text, ""); assert.equal(fixture.requests.length, 0);
+    assert.equal(sdk.getState().status, "disconnected");
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
+});
+
+test("Escape cannot be undone by a delayed command response, which remains keyboard-readable in actual history", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  class DelayedResult extends MoguriSdk {
+    private delayed = false;
+    override async query<Q extends PlatformQuery>(query: Q, signal?: AbortSignal): Promise<Extract<PlatformResponse, { type: Q["type"] }>> {
+      const result = await super.query(query, signal);
+      if (query.type === "slash.read" && !this.delayed) { this.delayed = true; entered.resolve(); await release.promise; }
+      return result;
+    }
+  }
+  const fixture = await setupFixture(), sdk = await new DelayedResult(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk }))); await frameUntil(setup, "Write a prompt");
+    await setup.mockInput.typeText("/defaults"); setup.mockInput.pressEnter();
+    await entered.promise; setup.mockInput.pressKey("m", { ctrl: true }); await frameUntil(setup, "Select an available model");
+    setup.mockInput.pressEscape(); await frameUntil(setup, "Write a prompt"); release.resolve();
+    await frameUntil(setup, "Retained separately.");
+    assert.equal(setup.renderer.root.findDescendantById(`tui-surface-${fixture.sessionId}-compose`)?.visible, true);
+    await setup.mockInput.typeText("/commands"); setup.mockInput.pressEnter();
+    await frameUntil(setup, "Original queued-command results");
+    assert.ok(setup.captureCharFrame().includes("/defaults / completed"));
+    assert.equal(fixture.requests.length, 0);
+  } finally { release.resolve(); await closeTui(root, setup, sdk, () => fixture.close()); }
 });
