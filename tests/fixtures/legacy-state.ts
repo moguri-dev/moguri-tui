@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import type { startService } from "../../apps/service/src/server.ts";
-import { PROTOCOL_VERSION, resolveControls } from "../../packages/protocol/src/index.ts";
+import { hasCombinedWorkspaceHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
 import { randomUUID } from "node:crypto";
 import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
@@ -20,6 +20,41 @@ export async function appendLegacyProjectFreeSession(client: MoguriSdk, control:
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
+export function assertPreWorkspaceHistory(events: readonly StoredEvent[]): void {
+  if (hasCombinedWorkspaceHistory(events)) throw new Error("Generate genuine pre-workspace-interaction history; actual combined80 queue/native runtime cannot become an older fixture.");
+  for (const event of events) {
+    if (event.event_type === "project.folder_removed" || event.event_type === "project.folder_saved" && event.payload.folder.color !== undefined) {
+      throw new Error("Generate genuine pre-workspace-interaction history; queued commands, group actions and grouped Sandbox authority cannot become older state.");
+    }
+  }
+}
+export function assertPreCombinedHistory(events: readonly StoredEvent[]): void {
+  if (hasCombinedWorkspaceHistory(events)) throw new Error("Generate genuine pre-combined80 history; actual queue/native runtime cannot become standalone79.");
+}
+export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  assertPreWorkspaceHistory(events);
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('queued_slash_schema','project_folder_actions_schema','sandbox_multi_root_schema','theme_model_workspace_convergence_schema')");
+}
+export function assertPreThemeHistory(events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "settings.updated" && event.payload.settings.appearance?.palette !== undefined &&
+    !["moguri", "ocean", "orchid", "custom"].includes(event.payload.settings.appearance.palette))) {
+    throw new Error("Generate genuine pre-theme-catalogue history; new saved palettes cannot become older settings.");
+  }
+}
+export function assertPreContinuityHistory(events: readonly StoredEvent[]): void {
+  if (events.some((event) => (event.event_type === "session.created" || event.event_type === "session.configured") && event.payload.controls.preferredThinkingEffort !== undefined ||
+    event.event_type === "model.selection_remembered" && event.payload.selection?.preferredThinkingEffort !== undefined ||
+    event.event_type === "settings.updated" && (event.payload.settings.startup?.global?.preferredThinkingEffort !== undefined || event.payload.settings.startup?.profile?.preferredThinkingEffort !== undefined) ||
+    event.event_type === "project.configured" && event.payload.configuration.values?.defaults?.preferredThinkingEffort !== undefined ||
+    event.event_type === "global.controls_changed" && event.payload.values.preferredThinkingEffort !== undefined)) {
+    throw new Error("Generate genuine pre-continuity history; actual model effort preferences cannot become older state.");
+  }
+}
+export function removePost77FixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  assertPreThemeHistory(events);
+  removeWorkspaceFixtureMarkers(db, events);
+  db.exec("DELETE FROM retention_metadata WHERE id='theme_catalog_schema'");
+}
 export function appendLegacyAutopilot(service: Awaited<ReturnType<typeof startService>>, sessionId: string): void {
   const session = service.controller.snapshot().sessions.find((value) => value.id === sessionId);
   if (!session || session.controls.automaticApprovals !== undefined) throw new Error("Generate an original bounded session; never strip actual automatic-approval consent.");
@@ -27,10 +62,11 @@ export function appendLegacyAutopilot(service: Awaited<ReturnType<typeof startSe
     project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy: "Autopilot" } } }]);
   service.controller.refreshProfile();
 }
-export function removePost44FixtureMarkers(db: DatabaseSync): void {
+export function removePost44FixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   const future = db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type') IN ('candidate.owner_bound','candidate.cleanup_recorded','candidate.usage_retained','model.selection_remembered','session.pr_observed','skill.used','sandbox.setup_recorded','task.plan_updated','notification.sound_saved','notification.sound_removed','application.configured','application.storage_recorded','application.update_recorded')").get();
   if (Number(future?.count)) throw new Error("Generate genuine pre-settings history before relabeling an additive-marker fixture. New native intent or sound grants cannot become old data.");
-  db.exec("DELETE FROM retention_metadata WHERE id IN ('theme_catalog_schema','native_web_policy_schema','chat_home_schema','model_preferences_schema','composer_workflows_schema','side_context_schema','retained_telemetry_schema','session_reliability_schema','kanban_interactions_schema','session_kupo_kanban_schema','automatic_kupo_schema','project_kanban_schema','session_github_workflows_schema','session_github_convergence_schema','session_navigation_schema','workspace_experience_schema','lean_tooling_schema','lean_tooling_convergence_schema','candidate_retention_schema','browser_control_schema','model_defaults_schema','session_indicators_schema','desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
+  removePost77FixtureMarkers(db, events);
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('model_selection_continuity_schema','native_web_policy_schema','chat_home_schema','model_preferences_schema','composer_workflows_schema','side_context_schema','retained_telemetry_schema','session_reliability_schema','kanban_interactions_schema','session_kupo_kanban_schema','automatic_kupo_schema','project_kanban_schema','session_github_workflows_schema','session_github_convergence_schema','session_navigation_schema','workspace_experience_schema','lean_tooling_schema','lean_tooling_convergence_schema','candidate_retention_schema','browser_control_schema','model_defaults_schema','session_indicators_schema','desktop_interaction_schema','managed_sandbox_schema','session_interactions_schema','settings_preferences_schema','client_voice_capture_schema','notification_sound_schema','application_preferences_schema','state_location_schema','private_update_schema')");
 }
 export function retainedCiphertextRows(db: DatabaseSync) {
   return ["events", "retention_keys", "retention_forgotten", "blob_payloads", "receipts", "memory_scopes", "memory_files", "memory_chunks", "memory_graph_nodes", "memory_graph_edges"]
@@ -38,10 +74,9 @@ export function retainedCiphertextRows(db: DatabaseSync) {
 }
 export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57 | 58 | 59 | 60, lineage: "main" | "desktop" = "main"): Promise<void> {
   const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
-  if (events.some((event) => event.event_type === "settings.updated" && event.payload.settings.appearance.palette !== undefined &&
-    !["moguri", "ocean", "orchid", "custom"].includes(event.payload.settings.appearance.palette))) {
-    throw new Error("Generate genuine pre-theme-catalogue history; new saved palettes cannot become older settings.");
-  }
+  assertPreWorkspaceHistory(events);
+  assertPreThemeHistory(events);
+  assertPreContinuityHistory(events);
   if (events.some((event) => event.event_type === "session.home_bound" || event.event_type === "chat.writer_recorded" ||
     event.event_type === "session.created" && event.payload.homeRoot)) {
     throw new Error("Generate genuine root-less pre-Home chat history; immutable Home bindings and independent writer ownership cannot become older state.");
@@ -175,7 +210,8 @@ export async function writeLegacyState(service: Awaited<ReturnType<typeof startS
     const path = service.store.path; await service.close();
     const db = new DatabaseSync(path);
     try {
-      db.exec("DELETE FROM retention_metadata WHERE id IN ('theme_catalog_schema','native_web_policy_schema','chat_home_schema','model_preferences_schema','composer_workflows_schema','side_context_schema','retained_telemetry_schema','session_reliability_schema','kanban_interactions_schema','session_kupo_kanban_schema','automatic_kupo_schema','project_kanban_schema','session_github_workflows_schema','session_github_convergence_schema')");
+      removePost77FixtureMarkers(db, events);
+      db.exec("DELETE FROM retention_metadata WHERE id IN ('model_selection_continuity_schema','native_web_policy_schema','chat_home_schema','model_preferences_schema','composer_workflows_schema','side_context_schema','retained_telemetry_schema','session_reliability_schema','kanban_interactions_schema','session_kupo_kanban_schema','automatic_kupo_schema','project_kanban_schema','session_github_workflows_schema','session_github_convergence_schema')");
       if (version < 50 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.update_recorded'").get()?.count)) throw new Error("Generate pre-update history; never relabel actual download, installer or retained restart identity as an older schema.");
       if (version < 49 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.storage_recorded'").get()?.count)) throw new Error("Generate pre-relocation history; never relabel actual whole-store copy/root authority as an older schema.");
       if (version < 48 && Number(db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type')='application.configured'").get()?.count)) throw new Error("Generate pre-application-preference history; never relabel actual root-owned configuration as an older schema.");

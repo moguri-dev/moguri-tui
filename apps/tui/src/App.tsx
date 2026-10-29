@@ -3,11 +3,13 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
 import type { InputRenderable, TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessions, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessions, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
-import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, parseSlash, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, isSharedSlash, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Controls, type Session, type SettingsSection, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
+import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 function terminalColors(appearance: Appearance, mode: ThemeMode) {
@@ -18,8 +20,26 @@ function terminalColors(appearance: Appearance, mode: ThemeMode) {
 const ThemeContext = React.createContext(terminalColors({ theme: "dark" }, "dark"));
 const NavigationContext = React.createContext(false);
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+async function waitForCommandFrame(renderer: ReturnType<typeof useRenderer>, signal: AbortSignal, applied: () => boolean): Promise<void> {
+  const deadline = AbortSignal.timeout(10_000), owner = AbortSignal.any([signal, deadline]), originalFrame = renderer.frameId;
+  for (;;) {
+    owner.throwIfAborted();
+    if (renderer.isDestroyed) throw new Error("The original terminal closed before acknowledging its queued view.");
+    await delay(0, undefined, { signal: owner });
+    renderer.requestRender();
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => reject(owner.reason);
+      owner.addEventListener("abort", abort, { once: true });
+      if (owner.aborted) { owner.removeEventListener("abort", abort); abort(); return; }
+      void renderer.idle().then(() => { owner.removeEventListener("abort", abort); resolve(); },
+        (error: unknown) => { owner.removeEventListener("abort", abort); reject(error); });
+    });
+    if (renderer.frameId > originalFrame && applied()) return;
+    await delay(15, undefined, { signal: owner });
+  }
+}
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 type ArchiveReview = {
   session: Pick<Session, "id" | "title" | "revision">;
@@ -42,7 +62,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null);
   const [mode, renderMode] = useState<Mode>("compose");
   const modeRef = useRef<Mode>("compose");
-  const setMode = (value: Mode) => { modeRef.current = value; renderMode(value); };
+  const navigationEpoch = useRef(0), submittedViews = useRef(new Map<string, number>());
+  const [responsePulse, setResponsePulse] = useState(0);
+  const setMode = (value: Mode) => { navigationEpoch.current++; modeRef.current = value; renderMode(value); };
   const [sidebar, setSidebar] = useState<boolean | null>(null);
   const [navigationFocus, renderNavigationFocus] = useState(false), [navigationIndex, renderNavigationIndex] = useState(0);
   // One terminal packet can contain navigation and Enter before React commits focus.
@@ -55,7 +77,11 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [notice, setNotice] = useState("");
   const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
   const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
+  const queuedContinue = useRef<{ context: CommandViewContext; pending: boolean; cancelling?: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
+  const [continuePending, setContinuePending] = useState(false);
   const [archiveReview, setArchiveReview] = useState<ArchiveReview | null>(null);
+  const queuedArchive = useRef<{ context: CommandViewContext; pending: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
+  const [archivePending, setArchivePending] = useState(false);
   const [otherQuestion, setOtherQuestion] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [detailed, setDetailed] = useState(false);
@@ -78,7 +104,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
   const planEditor = useRef<PlanEditorRequest | null>(null), planSaving = useRef(false);
   const [planPending, setPlanPending] = useState(false);
-  const documentCapture = useRef<{ sessionId: string; id: string } | null>(null);
   const [profiles, setProfiles] = useState<ProfileCatalog | null>(null);
   const profileEditor = useRef<Profile | null>(null);
   const switchingProfile = useRef(false);
@@ -110,13 +135,26 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (snapshot) for (const [id, editor] of editors.current) if (!snapshot.sessions.some((session) => session.id === id)) { editor.dispose(); editors.current.delete(id); }
   }, [snapshot, selectedId]);
   useEffect(() => { if (session && editor) editor.receive(session.draft); }, [session?.draft.revision, editor]);
+  const settleContinuationCancellation = () => {
+    const owned = queuedContinue.current;
+    if (!owned?.cancelling || owned.context.sdk !== client) return;
+    const source = client.getState().snapshot?.sessions.find((session) => session.id === owned.context.sessionId);
+    if (source) editors.current.get(source.id)?.receive(source.draft);
+    queuedContinue.current = null; setContinueReview(null); setContinuePending(false); setMode("compose");
+  };
+  useEffect(() => {
+    const owned = queuedContinue.current;
+    if (!owned?.cancelling || owned.context.sdk !== client) return;
+    const actual = snapshot?.commandExecutions.find((entry) => entry.id === owned.context.execution.id);
+    if (!actual || terminalCommandExecution(actual.status)) settleContinuationCancellation();
+  }, [client, snapshot]);
   const perform = async (action: () => Promise<unknown>) => {
     setNotice("");
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
   };
   const command = (command: Command) => perform(() => client.command(command));
   const requireNavigation = () => {
-    if (editorModes.includes(modeRef.current) || modeRef.current === "mcp-token" || planSaving.current || switchingProfile.current || githubPending.current) {
+    if (editorModes.includes(modeRef.current) || modeRef.current === "mcp-token" || queuedContinue.current || queuedArchive.current || planSaving.current || switchingProfile.current || githubPending.current) {
       throw new Error("Save or discard this editor and let the owned operation settle before navigating. Your input is preserved.");
     }
   };
@@ -129,9 +167,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       if (sidebarOnly) setSidebar(false);
     } finally { setNavigationFocus(false); }
   };
-  const quit = async () => {
+  const quit = async (queued = false) => {
     for (const editor of editors.current.values()) await editor.flush();
     for (const editor of editors.current.values()) editor.dispose();
+    if (!queued) await client.commands.detachAll();
     client.disconnect();
     if (onQuit) onQuit(); else renderer.destroy();
   };
@@ -191,11 +230,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const created = await client.command({ type: "session.create", projectId: project.id! });
     setSelectedId(created.id!); setMode("compose"); setShowArchived(false);
   };
-  const configure = (controls: Controls, rememberModelSelection = false) => {
-    if (!session) throw new Error("Create a session first.");
-    return client.command({ type: "session.configure", sessionId: session.id, expectedRevision: session.revision, controls,
-      ...(rememberModelSelection ? { rememberModelSelection: true } : {}) });
-  };
   const applyArchiveChoice = async (review: ArchiveReview, action: Extract<SessionChildrenAction, "archive" | "detach">, remember: boolean) => {
     const check = () => {
       const state = client.getState(), current = state.snapshot?.sessions.find((value) => value.id === review.session.id);
@@ -213,6 +247,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     check();
     await client.command({ type: "session.archive", sessionId: review.session.id, expectedRevision: review.session.revision,
       children: { action, expected: review.expected } });
+    if (queuedArchive.current?.context.sessionId === review.session.id) queuedArchive.current.settle({ outcome: "completed" });
     setArchiveReview(null); setMode("compose");
   };
   const requestArchive = async (target: Session) => {
@@ -233,7 +268,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     setArchiveReview({ session: parent, children, expected, canDetach });
     setMode("session-action");
   };
-  const requiredProject = () => { if (!session?.projectId) throw new Error("This operation needs a selected project. Use /open ABSOLUTE_PATH or open a project chat."); return session.projectId; };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
   const openSettingsEditor = (prompt: boolean) => {
     if (!snapshot) { setNotice("Connect before editing settings."); return; }
@@ -340,6 +374,55 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     setTokenValue((value) => (value + text).slice(0, 32768));
   });
   const slashResult = async (result: SlashResult) => {
+    if (result.kind === "github-view") {
+      if (result.view.kind === "repositories") {
+        setGithubRepositories(result.view.result); githubSearch.current = { source: result.view.result.source, query: result.view.query }; setMode("github-repositories");
+      } else {
+        setGithubItems({ scope: result.view.scope, context: result.view.context, kind: result.view.resource, items: result.view.items, nextPage: result.view.nextPage }); setMode("github-items");
+      }
+      return;
+    }
+    if (result.kind === "client-view") {
+      switch (result.name) {
+        case "help": setSkillHelp({ profileId: client.profileId, text: result.text ?? "" }); setMode("help"); return;
+        case "commands": setMode("command-results"); return;
+        case "issues": setMode("issues"); return;
+        case "issue": {
+          const [action, id] = result.argument.split(/\s+/);
+          if (action !== "new" && action !== "edit") throw new Error("This issue action does not own an editor.");
+          openIssueEditor(action === "edit" ? id : undefined); return;
+        }
+        case "board": openBoardEditor(); return;
+        case "settings": openSettingsEditor(false); return;
+        case "project-settings": await openProjectEditor(); return;
+        case "prompt": openSettingsEditor(true); return;
+        case "trace": setMode("trace"); return;
+        case "details": setDetailed((value) => !value); return;
+        case "archive":
+          if (!session) throw new Error("The original archive owner was removed.");
+          await requestArchive(session); return;
+        case "reload-draft": case "keep-draft":
+          if (!editor || editor.getState().text || editor.getState().dirty) throw new Error("Newer composer input exists. Resolve its draft explicitly; the original queued command cannot overwrite it.");
+          if (result.name === "reload-draft") editor.reload(); else await editor.keepMine();
+          return;
+        case "cache": case "linear": case "mcp": case "model-token": case "remote-model-token": {
+          const server = result.name === "cache" ? result.argument.slice(6) : result.name === "mcp" ? result.argument.split(/\s+/)[1] ?? "" : result.name === "linear" ? "" : result.argument;
+          if (result.name === "cache" && !snapshot?.dependencyRegistries.some((registry) => registry.id === server)) throw new Error("Choose an exact registry ID from /cache registries.");
+          setTokenKind(result.name === "cache" ? "cache" : result.name === "linear" ? "linear" : result.name === "model-token" ? "model" : result.name === "remote-model-token" ? "remote-model" : "mcp");
+          setTokenServer(server); setTokenValue(""); setMode("mcp-token"); return;
+        }
+      }
+      if (result.name === "sidebar") {
+        if (result.argument && !["open", "close"].includes(result.argument)) throw new Error("Use /sidebar [open|close].");
+        setSidebar(result.argument === "open" ? true : result.argument === "close" ? false : !sidebarVisible);
+        setNavigationFocus(true); setNavigationIndex(Math.max(0, tuiTabs.findIndex((tab) => tab.id === activeTab))); return;
+      }
+      if (result.argument) throw new Error("This queued navigation action takes no arguments.");
+      if (result.name === "quit") { await quit(true); return; }
+      const tab = tuiTabs.find((tab) => tab.id === result.name);
+      if (!tab) throw new Error(`This terminal has no handler for ${result.name}. No queued view was acknowledged.`);
+      await navigate(tab.id); return;
+    }
     if (result.kind === "continue-work") { setContinueReview(result.review); setMode("continue-work"); return; }
     if (result.kind === "profiles") { await openProfiles(); return; }
     if (result.kind === "profile") { await chooseProfile(result.profileId); return; }
@@ -378,277 +461,138 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       else throw new Error("No current chat. Use /new global, /open ABSOLUTE_PATH, /connect, /profiles, /theme, /settings or /help. Nothing was sent.");
       setStartupCommand(""); return;
     }
-    if (!text.startsWith("/") || name === "/steer" || name === "/interrupt") {
-      if (documentCapture.current?.sessionId === session.id) throw new Error("Document extraction is still active. Wait or use Ctrl+C to cancel this capture before sending or holding its prompt.");
+    if (!text.startsWith("/")) {
       if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
       if (!held && session.projectId && !text.startsWith("/") && continueWorkInput(text)) {
         setContinueReview(await editor.reviewContinueWork()); setMode("continue-work"); return;
       }
-      if (name === "/steer" || name === "/interrupt") editor.edit(argument);
-      await editor.send(name === "/steer" ? "steer" : name === "/interrupt" ? "interrupt" : "queue", held && !["/steer", "/interrupt"].includes(name));
+      await editor.send("queue", held);
       return;
     }
-    const shared = parseSlash(text);
-    if (shared && ["session", "sessions", "work-items", "code-requests", "sidebar", "theme", "quit"].includes(shared.name)) {
-      const current = client.getState().snapshot?.sessions.find((value) => value.id === session.id);
-      if (!current) throw new Error("The original command session is unavailable. The draft was not consumed.");
-      if (held || current.turnId || current.queue.length) {
-        await editor.flush();
-        throw new Error("Queued actions need the shared command intake update. This command remains in your draft; it was not run or sent to a model.");
-      }
-    }
-    if (shared && ["session", "sessions", "work-items", "code-requests", "sidebar", "quit"].includes(shared.name)) {
-      if (shared.name === "sidebar" && shared.argument && !["open", "close"].includes(shared.argument) ||
-        shared.name !== "sidebar" && shared.argument) throw new Error("Navigation takes no arguments; use /sidebar [open|close].");
-      await editor.flush();
-      if (shared.name === "sidebar") {
-        setSidebar(shared.argument === "open" ? true : shared.argument === "close" ? false : !sidebarVisible);
-        setNavigationFocus(true); setNavigationIndex(Math.max(0, tuiTabs.findIndex((tab) => tab.id === activeTab)));
-      } else if (shared.name !== "quit") {
-        const tab = tuiTabs.find((tab) => tab.id === shared.name);
-        if (tab) await navigate(tab.id);
-      }
-      editor.edit(""); await editor.flush();
-      if (shared.name === "quit") await quit();
+    if (session.status === "archived" && name === "/restore" && !argument) {
+      await client.commands.restore(session.id, "tui", session.revision, held);
+      if (editor.getState().text === text) editor.reload();
       return;
     }
-    if (shared?.name === "side" && shared.argument) {
-      await editor.flush();
-      const result = await client.slash(session.id, text, "tui"), saved = client.getState().snapshot?.sessions.find((entry) => entry.id === session.id)?.draft;
-      if (saved) editor.receive(saved);
-      await slashResult(result); return;
-    }
-    if (shared?.name === "continue-work") {
-      await editor.flush(); await slashResult(await client.slash(session.id, text, "tui")); return;
-    }
-    if (shared?.name === "archive" && !shared.argument) {
-      await editor.flush(); editor.edit(""); await editor.flush();
-      await requestArchive(session);
-      return;
-    }
-    if (shared?.name === "github" && /^(?:repos(?:\s|$)|issues$|pulls$)/.test(shared.argument)) {
-      await editor.flush();
-      if (shared.argument === "issues" || shared.argument === "pulls") await openGithubItems(shared.argument === "issues" ? "issue" : "pull");
-      else {
-        const query = shared.argument.slice(5).trim();
-        await openGithubRepositories(query.startsWith("public ") ? "public" : "account", query.startsWith("public ") ? query.slice(7) : query);
-      }
-      editor.edit(""); await editor.flush(); return;
-    }
-    if (shared && (shared.name === "attach-document" || shared.name === "attach-file" && /\.(pdf|docx|xlsx)$/i.test(shared.argument))) {
-      if (documentCapture.current) throw new Error("One document is already extracting in this TUI. Ctrl+C requests its exact stop.");
-      await editor.flush();
-      const id = crypto.randomUUID(); documentCapture.current = { sessionId: session.id, id };
-      setNotice(`Extracting ${shared.argument.split(/[\\/]/).at(-1)} locally / ${id}. Ctrl+C cancels this capture; no model call.`);
-      try {
-        const result = await client.attachments.document(session.id, shared.argument, { captureId: id });
-        const saved = client.getState().snapshot!.sessions.find((item) => item.id === session.id)!.draft;
-        editor.receive(saved);
-        if (!editor.getState().conflict && editor.getState().text === text) { editor.edit("", saved.attachments); await editor.flush(); }
-        setNotice(`Captured document ${result.id}. /attached ID shows limitations; /document-read and /document-search inspect bounded content.`);
-      } finally { documentCapture.current = null; }
-      return;
-    }
-    if (shared && isSharedSlash(shared.name) && name !== "/help" && !(name === "/settings" && argument) &&
-      !(name === "/linear" && argument === "token") && !(name === "/cache" && argument.startsWith("token "))) {
-      await editor.flush(); editor.edit(""); await editor.flush();
-      try { await slashResult(await client.slash(session.id, text, "tui")); }
-      catch (error) { if (client.getState().snapshot?.sessions.some((item) => item.id === session.id && item.status !== "archived")) editor.edit(text); throw error; }
-      return;
-    }
-    switch (name) {
-      case "/config": {
-        const [action, id, hash, consent] = argument.split(/\s+/);
-        if (!action || action === "list") show(snapshot?.configurationProposals.filter((proposal) => (proposal.projectId === session.projectId || proposal.sessionId === session.id) && proposal.status === "pending"));
-        else if (action === "review" && id) show(await client.configuration.review(id));
-        else if ((action === "apply" || action === "reject") && id && hash) {
-          if (action === "apply" && consent !== "acknowledge-risk") throw new Error("Review the exact scope/base/value, then use /config apply ID SHA256 acknowledge-risk. A model recommendation is not approval.");
-          await client.configuration.decide(id, action === "apply", hash, action === "apply");
-        } else throw new Error("Use /config list, review ID, apply ID SHA256 acknowledge-risk or reject ID SHA256.");
-        break;
-      }
-      case "/notifications": show({ settings: snapshot?.settings.values.notifications, active: snapshot?.attention.filter((entry) => entry.active), note: "Use /settings edit for preferences. Desktop must run for OS banners. Read acknowledgement does not answer or approve." }); break;
-      case "/issues": setMode("issues"); break;
-      case "/issue": {
-        const [operation, id, value] = argument.split(" ");
-        if (operation === "new") openIssueEditor();
-        else if (operation === "create") {
-          if (!board || id !== "feature" && id !== "bug" && id !== "misc") throw new Error("Use /issue create feature|bug|misc TITLE, or /issue new for the full editor.");
-          const title = argument.split(" ").slice(2).join(" ");
-          await client.issues.create(requiredProject(), { title, body: "", kind: id, phaseId: board.columns[0]!.id, pullRequestUrl: null }); setMode("issues");
-        }
-        else if (operation === "edit") openIssueEditor(id);
-        else {
-          const issue = localIssues.find((issue) => issue.id === id) ?? snapshot?.issues.find((issue) => issue.id === id && issue.projectId === project?.id);
-          if (!issue) throw new Error("Use /issues, then choose a project issue ID.");
-          if (operation === "move" && value) await client.issues.move(issue.id, value, issue.revision);
-          else if (operation === "archive" || operation === "restore") await client.issues.archive(issue.id, operation === "archive", issue.revision);
-          else throw new Error("Use /issue new, edit ID, move ID PHASE, archive ID or restore ID.");
-        }
-        break;
-      }
-      case "/board":
-        if (argument === "edit") openBoardEditor();
-        else if (argument === "refresh") show(await client.issues.refresh(requiredProject()));
-        else show(await client.issues.board(requiredProject()));
-        break;
-      case "/cache": {
-        if (argument.startsWith("token ")) {
-          const registryId = argument.slice(6);
-          if (!snapshot?.dependencyRegistries.some((registry) => registry.id === registryId)) throw new Error("Choose an exact registry ID from /cache registries.");
-          setTokenKind("cache"); setTokenServer(registryId); setTokenValue(""); setMode("mcp-token"); break;
-        }
-        throw new Error("Use the shared /cache commands. Registry credentials use /cache token ID's dedicated masked dialog.");
-      }
-      case "/linear":
-        if (argument === "token") { setTokenKind("linear"); setTokenValue(""); setMode("mcp-token"); }
-        else throw new Error("Use the shared /linear workflow commands; token opens the dedicated masked dialog.");
-        break;
-      case "/settings":
-        if (argument === "edit") openSettingsEditor(false);
-        else if (argument.startsWith("reset ")) {
-          const section = argument.slice(6);
-          if (section !== "all" && !Object.keys(snapshot!.settings.values).includes(section)) throw new Error("Choose all or an existing shared settings section.");
-          await client.settings.reset(section as SettingsSection | "all", snapshot!.settings.revision);
-        } else setMode("settings");
-        break;
-      case "/project-settings":
-        if (argument === "edit") await openProjectEditor();
-        else show(await client.projects.configuration(requiredProject()));
-        break;
-      case "/project-sources": show(await client.projects.sources(requiredProject())); break;
-      case "/porto": show(await client.projects.porto(requiredProject())); break;
-      case "/prompt":
-        if (argument === "view") show(await client.prompt.preview(session.id));
-        else if (argument === "reset") await client.prompt.reset(snapshot!.settings.revision);
-        else openSettingsEditor(true);
-        break;
-      case "/memory": {
-        const [operation, ...rest] = argument.split(" ");
-        if (operation === "index") show(await client.memory.index(requiredProject(), session.workspaceId ?? undefined));
-        else if (operation === "graph") show(await client.memory.graph(requiredProject(), rest.join(" "), session.workspaceId ?? undefined));
-        else if (operation === "search") show(await client.memory.search(requiredProject(), rest.join(" "), 6, session.workspaceId ?? undefined));
-        else if (operation === "remember") show(await client.memory.remember(requiredProject(), rest.join(" ")));
-        else throw new Error("Use /memory index, graph, search TEXT or remember CONVENTION. Enable indexing in shared settings first.");
-        break;
-      }
-      case "/skills":
-      case "/plugins":
-        if (!argument.startsWith("import ")) throw new Error("Use /skills import /path/SKILL.md or /plugins import /path/manifest.json.");
-        show(name === "/skills" ? await client.capabilities.importSkill(requiredProject(), argument.slice(7)) : await client.capabilities.importPlugin(requiredProject(), argument.slice(7)));
-        break;
-      case "/capabilities": show({ registry: snapshot?.registry.filter((entry) => entry.projectId === session.projectId), proposals: snapshot?.proposals.filter((entry) => entry.projectId === session.projectId) }); break;
-      case "/proposal": {
-        const [operation, id, hash] = argument.split(" ");
-        if (!id) throw new Error("Use /proposal view ID, then /proposal approve|reject ID SHA256 after reviewing the exact source.");
-        if (operation === "view") show(await client.capabilities.proposal(id));
-        else if (["approve", "reject"].includes(operation ?? "") && hash) await client.capabilities.decide(id, operation === "approve", hash);
-        else throw new Error("Approval requires the exact reviewed SHA-256. Nothing auto-applies.");
-        break;
-      }
-      case "/mcp": {
-        const [operation, id = "builtin", ...rest] = argument.split(" ");
-        if (operation === "servers") show(await client.mcp.servers(session.id));
-        else if (operation === "tools") show(await client.mcp.tools(id, rest.join(" "), 0, session.id));
-        else if (operation === "auth") show(await client.mcp.auth(id, session.id));
-        else if (operation === "login") { const created = await client.mcp.oauthBegin(id, session.id); show(await client.mcp.oauthStatus(created.id!)); }
-        else if (operation === "cancel") show(await client.mcp.oauthCancel(id));
-        else if (operation === "clear-oauth") show(await client.mcp.oauthClear(id, session.id));
-        else if (operation === "token" && !rest.length && id !== "builtin") { setTokenKind("mcp"); setTokenServer(id); setTokenValue(""); setMode("mcp-token"); }
-        else if (operation === "call" && rest.length >= 3) {
-          const [tool, hash, ...json] = rest;
-          const args: unknown = JSON.parse(json.join(" "));
-          if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("Exact MCP arguments must be a JSON object.");
-          show(await client.mcp.call(session.id, id, tool!, args as Record<string, unknown>, hash!));
-          setMode("compose");
-        } else throw new Error("Use /mcp servers, tools SERVER QUERY, auth SERVER, token SERVER, or call SERVER TOOL SHA256 JSON. Never put credentials in a composer command.");
-        break;
-      }
-      case "/scripts": show(await client.mcp.tools("builtin", "", 0, session.id)); break;
-      case "/result": show(await client.mcp.readResult(argument)); break;
-      case "/subagent": show(await client.subagents.run(session.id, argument)); break;
-      case "/dictate":
-        if (argument === "status") show(await client.voice.status());
-        else if (argument === "download accept-license") show(await client.voice.download(true));
-        else if (argument === "record") await client.voice.record(session.id);
-        else if (argument === "stop" && voiceJob) await client.voice.stop(voiceJob.id);
-        else if (argument.startsWith("file ")) show(await client.voice.transcribe(session.id, argument.slice(5)));
-        else if (argument === "insert" && latestTranscript) {
-          editor.edit(""); await editor.flush();
-          await client.voice.insert(session.id, latestTranscript.id, client.getState().snapshot!.sessions.find((item) => item.id === session.id)!.draft.revision);
-          return;
-        } else throw new Error("Use /dictate status, download accept-license, record, stop, file /path.wav or insert. Review OpenMDW-1.1 and the 708 MiB download first.");
-        break;
-      case "/connect": await client.command({ type: "provider.login" }); break;
-      case "/disconnect": await client.command({ type: "provider.logout" }); break;
-      case "/cancel-login": await client.command({ type: "provider.cancel" }); break;
-      case "/local-models":
-        if (argument === "refresh") { await client.models.refresh(); show(client.getState().snapshot?.provider); }
-        else show({ endpoints: snapshot?.settings.values.localModels, connections: snapshot?.provider.connections, guidance: "Use /settings edit to configure exact URLs and model limits. /model-token ENDPOINT opens masked input; no inference or scan occurs during discovery." });
-        break;
-      case "/model-token":
-        if (!argument || argument.includes(" ")) throw new Error("Use /model-token ENDPOINT_ID, then the masked input. Never put a credential in the composer.");
-        setTokenKind("model"); setTokenServer(argument); setTokenValue(""); setMode("mcp-token"); break;
-      case "/remote-model-token":
-        if (!argument || argument.includes(" ")) throw new Error("Use /remote-model-token ENDPOINT_ID after probing SSH, then the masked input. Never put a credential in the composer.");
-        setTokenKind("remote-model"); setTokenServer(argument); setTokenValue(""); setMode("mcp-token"); break;
-      case "/defaults": show({ global: snapshot?.settings.values.startup.global, profile: snapshot?.settings.values.startup.profile, project: session.projectId ? snapshot?.projectConfigurations.find((configuration) => configuration.projectId === session.projectId)?.values.defaults ?? {} : {}, current: session.controls, sources: session.defaults, guidance: "Edit shared startup settings or project overrides. Existing sessions are never rewritten by default changes." }); break;
-      case "/env":
-        if (!["Local", "Sandbox", "Remote"].includes(argument)) throw new Error("Use /env Local, Sandbox, or Remote. Unready backends are rejected.");
-        await client.sessions.env(session.id, argument as Controls["env"]); break;
-      case "/autonomy":
-        if (!["Manual", "Guided", "Autopilot", "Autopilot Max"].includes(argument)) throw new Error("Choose Manual, Guided, Autopilot or Autopilot Max. Max requires an explicitly configured compatible bounded provider and exact delegated policy.");
-        await client.sessions.autonomy(session.id, argument as Controls["autonomy"]); break;
-      case "/attach":
-        if (!argument) throw new Error("Use /attach path/to/project-file. Only explicit project UTF-8 snapshots are supported.");
-        await editor.attach(argument); editor.edit(""); await editor.flush(); return;
-      case "/detach":
-        if (!editor.getState().attachments.some((attachment) => attachment.path === argument || attachment.id === argument)) throw new Error("Use /detach with an attached project path or snapshot ID.");
-        editor.edit("", editor.getState().attachments.filter((attachment) => attachment.path !== argument && attachment.id !== argument)); await editor.flush(); return;
-      case "/stop": await client.command({ type: "session.stop", sessionId: session.id }); break;
-      case "/archive": await requestArchive(session); break;
-      case "/restore": await client.command({ type: "session.restore", sessionId: session.id }); break;
-      case "/resume": await client.command({ type: "session.resume", sessionId: session.id }); break;
-      case "/queue": setMode("queue"); break;
-      case "/remove":
-        await client.command({ type: "queue.remove", sessionId: session.id, messageId: argument, expectedRevision: session.queueRevision }); break;
-      case "/queue-turn":
-        await client.command({ type: "queue.make-turn", sessionId: session.id, messageId: argument, expectedRevision: session.queueRevision }); break;
-      case "/edit": {
-        const separator = argument.indexOf(" ");
-        if (separator < 0) throw new Error("Use /edit MESSAGE_ID replacement text.");
-        await client.command({ type: "queue.edit", sessionId: session.id, messageId: argument.slice(0, separator), expectedRevision: session.queueRevision, text: argument.slice(separator + 1) }); break;
-      }
-      case "/reorder":
-        await client.command({ type: "queue.reorder", sessionId: session.id, expectedRevision: session.queueRevision, messageIds: argument.split(/\s+/) }); break;
-      case "/policy":
-        if (!["all", "protected"].includes(argument)) throw new Error("Use /policy all or /policy protected. Protected blocks new Local turns.");
-        await client.command({ type: "policy.set", allowedEnvs: argument === "all" ? ["Local", "Sandbox", "Remote"] : ["Sandbox", "Remote"] }); break;
-      case "/reload-draft": editor.reload(); return;
-      case "/keep-draft": await editor.keepMine(); return;
-      case "/new":
-        if (argument && argument !== "global") throw new Error("Use /new or /new global for a project-free chat.");
-        await newSession(argument === "global"); break;
-      case "/open": await openProject(argument); break;
-      case "/trace": setMode("trace"); break;
-      case "/details": setDetailed((value) => !value); break;
-      case "/help": {
-        const catalog = await client.commands.list(session.id);
-        setSkillHelp({ profileId: client.profileId, text: catalog.filter((entry) => entry.kind === "skill").map((entry) => `/${entry.name}  Skill / ${entry.skill.sourceName}: ${entry.description}`).join("\n") });
-        setMode("help"); break;
-      }
-      default: {
-        if (shared && (await client.commands.list(session.id)).some((entry) => entry.kind === "skill" && entry.name === shared.name)) {
-          await editor.flush(); const result = await client.slash(session.id, text, "tui");
-          const saved = client.getState().snapshot?.sessions.find((entry) => entry.id === session.id)?.draft;
-          if (saved) editor.receive(saved);
-          await slashResult(result); return;
-        }
-        throw new Error("Unknown slash command. Use /help. Ordinary @, ^, :, # and ! text stays literal.");
-      }
-    }
-    editor.edit(""); await editor.flush();
+    if (editor.getState().text !== text || editor.getState().conflict) throw new Error("The original command draft changed. Its newer text was preserved.");
+    const navigation = navigationEpoch.current, result = await editor.submit((expectedDraftRevision) => client.commands.submit(session.id, { client: "tui", expectedDraftRevision, delivery: "queue", held }));
+    if (result.id) { submittedViews.current.set(result.id, navigation); setResponsePulse((value) => value + 1); }
   };
+  const commandAttachment = useRef<CommandClientAttachment | null>(null);
+  const commandUi = useRef<{ canApply(execution: CommandExecution): boolean; apply(context: CommandViewContext): Promise<CommandViewOutcome> } | null>(null);
+  commandUi.current = {
+    canApply: (execution) => execution.sessionId === selectedId && execution.profileId === client.profileId && !editorModes.includes(modeRef.current) &&
+      !["mcp-token", "continue-work", "session-action"].includes(modeRef.current) && !planSaving.current && !switchingProfile.current && !githubPending.current && !profilePending,
+    apply: async (context) => {
+      context.signal.throwIfAborted(); requireNavigation();
+      if (context.sdk !== client || context.sessionId !== selectedId) throw new Error("The original terminal conversation/profile changed before applying its queued view.");
+      const result = context.result;
+      if (result.kind === "client-view" && result.name === "archive") {
+        return new Promise<CommandViewOutcome>((resolve, reject) => {
+          const clear = () => {
+            if (queuedArchive.current?.context.execution.id === context.execution.id) { queuedArchive.current = null; setArchiveReview(null); setArchivePending(false); setMode("compose"); }
+          };
+          const abort = () => { clear(); reject(context.signal.reason ?? new Error("The original queued archive owner ended.")); };
+          const settle = (outcome: CommandViewOutcome) => { context.signal.removeEventListener("abort", abort); clear(); resolve(outcome); };
+          queuedArchive.current = { context, pending: false, settle };
+          context.signal.addEventListener("abort", abort, { once: true });
+          const target = client.getState().snapshot?.sessions.find((session) => session.id === context.sessionId);
+          if (!target || context.signal.aborted) { abort(); return; }
+          void requestArchive(target).then(() => {
+            if (client.getState().snapshot?.sessions.find((session) => session.id === context.sessionId)?.status === "archived") settle({ outcome: "completed" });
+          }).catch((error: unknown) => { context.signal.removeEventListener("abort", abort); clear(); reject(error); });
+        });
+      }
+      if (result.kind === "continue-work") {
+        if (!("command" in result.review)) throw new Error("The original queued continuation review is missing; a saved composer was not substituted.");
+        return new Promise<CommandViewOutcome>((resolve, reject) => {
+          const clear = () => {
+            if (queuedContinue.current?.context.execution.id === context.execution.id) { queuedContinue.current = null; setContinueReview(null); setContinuePending(false); setMode("compose"); }
+          };
+          const abort = () => { clear(); reject(context.signal.reason ?? new Error("The exact queued continuation owner ended.")); };
+          const settle = (outcome: CommandViewOutcome) => {
+            context.signal.removeEventListener("abort", abort);
+            const owned = queuedContinue.current;
+            if (outcome.outcome === "cancelled" && outcome.restoreInput && owned?.context.execution.id === context.execution.id) {
+              owned.cancelling = true; owned.pending = true; setContinuePending(true);
+            } else clear();
+            resolve(outcome);
+          };
+          queuedContinue.current = { context, pending: false, settle };
+          context.signal.addEventListener("abort", abort, { once: true });
+          setContinueReview(result.review); setContinuePending(false); setMode("continue-work");
+          if (context.signal.aborted) abort();
+        });
+      }
+      const expectedSidebar = result.kind === "client-view" && result.name === "sidebar" ?
+        result.argument === "open" || result.argument !== "close" && !sidebarVisible : null;
+      await slashResult(result);
+      context.signal.throwIfAborted();
+      if (result.kind === "copy" || result.kind === "export" || result.kind === "client-view" && result.name === "quit") return { outcome: "completed" };
+      const expectedProfile = result.kind === "profile" ? result.profileId : client.profileId;
+      const expectedSession = result.kind === "session" ? result.sessionId : context.sessionId, expectedMode = modeRef.current;
+      await waitForCommandFrame(renderer, context.signal, () => {
+        if (!renderer.root.findDescendantById(`tui-profile-${expectedProfile}`)) return false;
+        if (result.kind === "profile") return true;
+        if (expectedSidebar !== null) return renderer.root.findDescendantById("tui-sidebar")?.visible === expectedSidebar;
+        return renderer.root.findDescendantById(`tui-surface-${expectedSession}-${expectedMode}`)?.visible === true;
+      });
+      return { outcome: "completed" };
+    },
+  };
+  useEffect(() => {
+    if (status !== "connected") return;
+    let closed = false, attached: CommandClientAttachment | undefined;
+    const apply = (context: CommandViewContext) => {
+      if (!commandUi.current) throw new Error("The original terminal view owner is closed.");
+      return commandUi.current.apply(context);
+    };
+    const views = ["session", "sessions", "work-items", "code-requests", "sidebar", "quit", "issues", "issue", "board", "settings",
+      "project-settings", "prompt", "trace", "details", "reload-draft", "keep-draft", "cache", "linear", "mcp", "model-token", "remote-model-token", "help", "archive", "commands"];
+    const handlers = Object.fromEntries(views.map((name) => [`client-view:${name}`, apply]));
+    void client.commands.attach("tui", { ...handlers, panel: apply, session: apply, profile: apply, profiles: apply, copy: apply, export: apply, "artifact-editor": apply, "continue-work": apply, "github-view": apply },
+      { canApply: (execution) => !closed && (commandUi.current?.canApply(execution) ?? false), onError: (error) => {
+        if (!closed) { settleContinuationCancellation(); setNotice(error.message); }
+      } })
+      .then((value) => { attached = value; if (closed) return value.dispose(); commandAttachment.current = value; })
+      .catch((error: unknown) => { if (!closed) setNotice(error instanceof Error ? error.message : "The actual terminal command client could not attach."); });
+    return () => {
+      closed = true; if (commandAttachment.current === attached) commandAttachment.current = null;
+      if (attached) void attached.dispose().catch((error: unknown) => console.error("Terminal command detach remains unconfirmed:", error instanceof Error ? error.message : "original client cleanup failed"));
+    };
+  }, [client, status]);
+  useEffect(() => { commandAttachment.current?.wake(); }, [selectedId, mode, profilePending, githubBusy, planPending]);
+  const displayedCommands = useRef(new Set<string>());
+  const [commandResponses, setCommandResponses] = useState<{ id: string; name: string; text: string }[]>([]);
+  const commandResponseOwner = useRef<{ client: MoguriSdk; sessionId: string | null } | null>(null);
+  commandResponseOwner.current = { client, sessionId: selectedId };
+  useEffect(() => () => { commandResponseOwner.current = null; }, []);
+  useEffect(() => {
+    displayedCommands.current = new Set(client.getState().snapshot?.commandExecutions.map((entry) => entry.id) ?? []);
+    submittedViews.current.clear();
+    setCommandResponses([]);
+  }, [client]);
+  useEffect(() => {
+    const owns = () => commandResponseOwner.current?.client === client && commandResponseOwner.current.sessionId === selectedId;
+    for (const entry of snapshot?.commandExecutions ?? []) {
+      if (entry.client !== "tui" || entry.sessionId !== selectedId || !["completed", "failed", "partial", "cancelled"].includes(entry.status) || displayedCommands.current.has(entry.id)) continue;
+      const navigation = submittedViews.current.get(entry.queueItemId);
+      if (navigation === undefined) continue;
+      displayedCommands.current.add(entry.id);
+      void client.commands.read(entry.id).then(({ result, item }) => {
+        if (!owns()) return;
+        if (result?.kind === "ok") setNotice(result.message);
+        if (entry.status !== "completed" && entry.diagnostic) setNotice(entry.diagnostic);
+        const text = result?.kind === "text" ? result.text : entry.diagnostic;
+        if (text) setCommandResponses((values) => [...values, { id: entry.id, name: entry.name, text }].slice(-10));
+        if (result?.kind === "text" && navigationEpoch.current === navigation && !navigationFocusRef.current && modeRef.current === "compose" && !editor?.getState().text && !editor?.getState().dirty) {
+          if (item.command?.name === "issue" && item.command.argument.startsWith("create ")) setMode("issues");
+          else show(result.text);
+        }
+        submittedViews.current.delete(entry.queueItemId);
+      }).catch((error: unknown) => { if (owns()) setNotice(error instanceof Error ? error.message : "The original retained command result could not be read."); });
+    }
+  }, [client, selectedId, snapshot?.commandExecutions, responsePulse]);
   useKeyboard((key) => {
     if (key.defaultPrevented) return;
     if (["return", "kpenter"].includes(key.name) && modeRef.current !== mode) { key.preventDefault(); key.stopPropagation(); return; }
@@ -683,7 +627,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       }
       return;
     }
-    if (key.name === "escape") { setContinueReview(null); setArchiveReview(null); setMode("compose"); if (sidebarOnly) setSidebar(false); return; }
+    if (key.name === "escape") {
+      if (queuedContinue.current?.pending) { setNotice("The original choice is still settling. Ctrl+C requests its owned stop; no replacement route will be sent."); return; }
+      if (queuedArchive.current?.pending) { setNotice("The original archive is still settling. Ctrl+C stops owned work; it cannot promise to undo an admitted archive."); return; }
+      if (queuedContinue.current) {
+        queuedContinue.current.settle({ outcome: "cancelled", restoreInput: true, diagnostic: "The actual user cancelled this original continuation before choosing a route." });
+        return;
+      }
+      queuedArchive.current?.settle({ outcome: "cancelled", diagnostic: "The actual user cancelled this exact archive review. No archive was requested." });
+      setContinueReview(null); setArchiveReview(null); setMode("compose"); if (sidebarOnly) setSidebar(false); return;
+    }
     if (mode === "github-clone" && githubCloneJob && key.ctrl && key.name === "c") { key.preventDefault(); void perform(() => client.jobs.cancel(githubCloneJob)); return; }
     if (mode === "github-detail" && githubSelection && key.ctrl && ["n", "l", "b"].includes(key.name)) {
       key.preventDefault();
@@ -734,11 +687,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (key.name === "g") { setMode("settings"); return; }
     if (key.name === "space") { void dictate(); return; }
     if (key.name === "q") void perform(quit);
-    else if (key.name === "c" && documentCapture.current?.sessionId === session?.id) {
-      const capture = documentCapture.current;
-      if (capture) void perform(() => client.attachments.cancelDocument(capture.sessionId, capture.id));
-    }
-    else if (key.name === "c" && session?.turnId) void command({ type: "session.stop", sessionId: session.id });
+    else if (key.name === "c" && session && (session.turnId || snapshot?.commandExecutions.some((entry) => entry.sessionId === session.id && ["running", "waiting-client", "claimed"].includes(entry.status)))) void command({ type: "session.stop", sessionId: session.id });
     else if (key.name === "o") setMode("project");
     else if (key.name === "n") void perform(newSession);
     else if (key.name === "l") void command({ type: "provider.login" });
@@ -760,7 +709,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
     return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home (no project)" : "No project")} / ${item.status}`, value: item.id };
   }) ?? [];
-  return <ThemeContext.Provider value={colors}><NavigationContext.Provider value={navigationFocus}><box width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
+  return <ThemeContext.Provider value={colors}><NavigationContext.Provider value={navigationFocus}><box id={`tui-profile-${client.profileId}`} width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
     <box height={3} paddingLeft={2} paddingRight={2} paddingTop={1} alignItems="flex-start" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
       <box id="tui-sidebar-toggle" width={10} height={1} onMouseDown={(event) => {
         if (event.button !== 0) return; event.preventDefault(); event.stopPropagation();
@@ -789,7 +738,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         </box>)}{!options.length && <text fg={colors.muted}>{"No sessions yet.\n/new global\n/open PATH\n/connect"}</text>}</scrollbox>
         <text fg={colors.muted}>{"/new  /profiles\n/sidebar close\nTab: navigation\nLeft closes / Right opens"}</text>
       </box>
-      <box visible={!sidebarOnly} flexGrow={1} minWidth={0} minHeight={0} overflow="hidden" flexDirection="column" paddingX={compact ? 1 : 2} backgroundColor={colors.background}>
+      <box id={`tui-surface-${selectedId ?? "none"}-${mode}`} visible={!sidebarOnly} flexGrow={1} minWidth={0} minHeight={0} overflow="hidden" flexDirection="column" paddingX={compact ? 1 : 2} backgroundColor={colors.background}>
         {mode === "profiles" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Profiles / {safe(snapshot?.profile?.name ?? client.profileId)}</text>
           <text fg={colors.muted} height={3}>Accounts, projects, drafts and memory stay separate. Switching does not stop owned work. New profiles copy no private data or model selection.</text>
@@ -873,7 +822,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
             `${child.parentSessionId === archiveReview.session.id ? "" : "  nested: "}${child.title}`),
           ...(archiveReview.children.length > 12 ? [`... and ${archiveReview.children.length - 12} more`] : [])].join("\n"))}</text>
           <text fg={colors.attention} height={3}>Cascade archives this exact tree. Detach retains direct child sessions and their nested hierarchy after settling owned work. Model-owned subagents cannot be detached. Esc cancels.</text>
-          <ThemedSelect focused flexGrow={1} options={[
+          <ThemedSelect focused={!archivePending} flexGrow={1} options={[
             { name: "Archive all attached subsessions", description: "Settle owned work and archive every descendant in the reviewed tree.", value: "archive" },
             ...(archiveReview.canDetach ? [{ name: "Detach direct children", description: "Settle owned work, preserve the sessions, and keep nested sessions attached.", value: "detach" }] : []),
             { name: "Archive all and don't ask me again", description: "Save this profile's archive-child choice.", value: "archive:remember" },
@@ -882,24 +831,39 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           ]} selectedBackgroundColor={colors.panel} selectedTextColor={colors.accent} textColor={colors.foreground} descriptionColor={colors.muted}
             onSelect={(_, option) => {
               const choice = String(option?.value ?? "");
-              if (choice === "cancel") { setArchiveReview(null); setMode("compose"); return; }
+              if (choice === "cancel") { queuedArchive.current?.settle({ outcome: "cancelled", diagnostic: "The actual user cancelled this archive review." }); setArchiveReview(null); setMode("compose"); return; }
               const [action, memory] = choice.split(":");
               if (action !== "archive" && action !== "detach") return;
               if (action === "detach" && !archiveReview.canDetach) return;
               const review = archiveReview;
-              void perform(() => applyArchiveChoice(review, action, memory === "remember"));
+              void perform(async () => {
+                const owned = queuedArchive.current;
+                if (owned?.pending) return;
+                if (owned) { owned.pending = true; setArchivePending(true); }
+                try { await applyArchiveChoice(review, action, memory === "remember"); }
+                finally { if (queuedArchive.current === owned) { if (owned) owned.pending = false; setArchivePending(false); } }
+              });
             }} />
         </box> :
         mode === "continue-work" && continueReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Continue work / choose for this request</text>
-          <text fg={colors.muted} height={4}>Work from Kanban, or send this exact prompt to the model? Esc cancels and preserves the draft. No route is remembered.</text>
-          <ThemedSelect flexGrow={1} focused options={[
+          <text fg={colors.muted} height={4}>{queuedContinue.current?.cancelling ? "Restoring the original draft. Wait for its actual service acknowledgement before another input." :
+            "Work from Kanban, or send this exact prompt to the model? Esc cancels and preserves the draft. No route is remembered."}</text>
+          <ThemedSelect flexGrow={1} focused={!continuePending} options={[
             { name: "Work from Kanban", description: "One actual project item in an isolated Local checkout, through its PR", value: "kanban" },
             { name: "Send to model", description: "Send the unchanged prompt through the normal chat and permissions", value: "prompt" },
           ]} selectedBackgroundColor={colors.panel} selectedTextColor={colors.accent} textColor={colors.foreground} descriptionColor={colors.muted}
             onSelect={(_, option) => { if (option?.value === "kanban" || option?.value === "prompt") {
               const choice = option.value, review = continueReview;
               void perform(async () => {
+                const owned = queuedContinue.current;
+                if (owned) {
+                  if (owned.pending) return;
+                  owned.context.signal.throwIfAborted(); owned.pending = true; setContinuePending(true);
+                  try { await client.commands.choose(owned.context.clientId, owned.context.claim, choice); owned.settle({ outcome: "completed" }); }
+                  finally { if (queuedContinue.current === owned) { owned.pending = false; setContinuePending(false); } }
+                  return;
+                }
                 if (!editor || editor.sessionId !== review.sessionId) throw new Error("The original continuation owner changed. No draft was consumed.");
                 await editor.chooseContinueWork(review, choice);
                 setContinueReview(null); setMode("compose");
@@ -1009,7 +973,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; }
               const model = availableModels.find((model) => model.id === option?.value);
               if (model?.environments && !model.environments.includes(session.controls.env)) { setNotice(`Kupo is unavailable in ${session.controls.env}. ${snapshot?.routingDiagnostics?.join(" ") ?? ""}`); return; }
-              if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }, true); setMode("compose"); });
+              if (option?.value) void perform(async () => { await client.sessions.selectModel(session.id, String(option.value), session.revision); setMode("compose"); });
             }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
           <text fg={colors.muted} height={4} flexShrink={0}>Kupo uses configured models by default. One eligible model runs directly; multiple models support automatic Single, gated Cascade or eligible Critique. /kupo status shows capabilities and policy. Normal approvals remain authoritative. /compound keeps separate worktree/test review.</text></box> :
@@ -1134,6 +1098,18 @@ Copilot uses pi-ai's third-party device flow. A subscription and
 account authorization are required. Sign-in may enable account
 model policies. Moguri is not an official Copilot partner.
 Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
+        mode === "command-results" ? <box flexGrow={1} flexDirection="column" paddingTop={1}>
+          <text fg={colors.accent} height={2}>Original queued-command results</text>
+          <text fg={colors.muted} height={3}>Latest 100 records for this session. Enter reads original input/result, never replays it. CLI commands list/read also inspects retained history.</text>
+          <ThemedSelect focused flexGrow={1} options={(snapshot?.commandExecutions ?? []).filter((entry) => entry.sessionId === session?.id).slice(-100).reverse().map((entry) =>
+            ({ name: safe(`/${entry.name} / ${entry.status}`), description: entry.id, value: entry.id }))} onSelect={(_, option) => {
+            if (!option) return;
+            void perform(async () => {
+              const retained = await client.commands.read(String(option.value));
+              show({ execution: retained.execution, input: retained.item, result: retained.result });
+            });
+          }} />
+        </box> :
         mode === "trace" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Recent events (last 200 received)</text>{events.filter((event) => !session || event.session_id === session.id).map((event) => <text key={event.id} fg={colors.muted}>{safe(`#${event.seq} ${event.event_type}\n${JSON.stringify(event.payload)}\n`)}</text>)}</scrollbox> :
         mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Held prompts do not run. /run ID releases one. /edit, /remove, /reorder and /copy ID manage prompts.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.held ? "held" : item.delivery}]\n${item.text}\n${item.attachments.map((attachment) => `${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`).join("\n")}\n`)}</text>)}</scrollbox> :
           <scrollbox key={`conversation-${session?.id ?? "empty"}`} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom">
@@ -1145,6 +1121,11 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
               <text fg={colors.foreground}>{safe((detailed ? message.text : message.text.slice(-4000)) || (message.toolCalls?.length ? "Requesting tool access." : "Working..."))}</text>
               {detailed && message.reasoning && <text fg={colors.muted}>{safe(`Provider-exposed reasoning:\n${message.reasoning}`)}</text>}
               {message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) => <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>)}
+            </box>)}
+            {commandResponses.map((response) => <box key={response.id} id={`tui-command-response-${response.id}`} flexDirection="column" paddingY={1}
+              onMouseDown={(event) => { if (event.button !== 0 || modeRef.current !== "compose") return; event.preventDefault(); event.stopPropagation(); void perform(async () => { requireNavigation(); show(response.text); }); }}>
+              <text fg={colors.accent}>{safe(`Command /${response.name} / ${response.id}`)}</text>
+              <text fg={colors.muted}>Retained separately. Click to read, or /commands for keyboard history.</text>
             </box>)}
           </scrollbox>}
         {mode === "compose" && continuedWork && <box flexDirection="column" border borderColor={colors.accent} padding={1} flexShrink={0}>

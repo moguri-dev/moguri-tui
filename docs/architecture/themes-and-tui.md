@@ -44,7 +44,42 @@ Settings compare-and-swap failures remain explicit; they cannot replace another
 client's settings or fall back to another palette. Navigation cannot escape a
 local unsaved editor or a settling owned operation.
 
-### Independent schema lineage and integration gate
+### Actual combined80 integration
+
+Themes/TUI merged first as main `8eca0de`. The user then authorized a merge
+of that actual baseline into the model/workspace branch, without rebasing,
+stacking or merging its pull request. The genuinely combined implementation
+uses the previously reserved protocol80, not a relabelled standalone79.
+It preserves the merged presets, shared `/theme` SDK behavior and actual
+JRPG-style OpenTUI navigation together with model continuity and workspace
+interactions.
+
+The combined schema requires `theme_catalog_schema='1'`,
+`model_selection_continuity_schema='1'`, `queued_slash_schema='1'`,
+`project_folder_actions_schema='1'`, `sandbox_multi_root_schema='1'` and the
+distinct `theme_model_workspace_convergence_schema='1'`. Exact genuine76,
+model77-only, theme78-only and workspace79-only predecessors are validated
+against all retained profile histories before their missing features and
+version80 commit atomically. A numeric version cannot manufacture a missing
+marker. New palette history cannot become theme-less model/workspace history;
+retained thinking intent cannot become theme78-only history. Unknown,
+corrupt, prematurely marked or numerically downgraded combinations are rejected
+without changing original retained bytes.
+
+The historical standalone contract and qualification below remain evidence
+for their original source only. Changed80 payloads need their own SDK, TUI,
+desktop, native and packaging evidence. The actual merged TUI now uses shared
+queued text intake and compatible client claims instead of its development
+block. View/theme actions are not eager; actual rendered frames acknowledge
+navigation while direct mouse/Tab/key navigation remains direct. The user selected
+headless service execution for service-capable commands, while actual UI-only
+actions wait for an acknowledged compatible client.
+Held text, including `/yolo`, remains inert. Only unheld stop/approval/yolo
+controls are live. Real user-gate scheduling, original continuation reviews,
+retained responses and draft provenance follow
+[the shared command contract](workspace-experience.md#shared-queued-command-primitives).
+
+### Historical independent schema lineage and integration gate
 
 This branch uses protocol/schema **78** and `theme_catalog_schema='1'`. Genuine
 baseline 76 has neither this marker nor

@@ -70,6 +70,9 @@ replaces developer commands with one explicit in-app review. Private workspaces
 and selected-provider DNS aliases are automatic. Setup review discloses 0.2.4's
 broader GitHub Meta network delegation; public runtime updates stay
 separate from activation and tool permissions.
+The [exact current native qualification](docs/architecture/sendbox-0.2.4-qualification.md)
+records physical artifact/network evidence separately from historical runs and
+the remaining milestone gates.
 
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
@@ -80,7 +83,8 @@ visible provenance; existing sessions are not rewritten.
 **Settings / Models / Providers** can disable providers or unwanted models per
 profile. Matching upstream model IDs share one explicit provider choice, without
 duplicates or silent fallback. The same availability gates `/model`, routing and
-new calls. [Provider/model controls](docs/setup.md#provider-and-model-availability).
+new calls. Disabling the selected model requires a fresh selection, even after
+re-enabling. [Provider/model controls](docs/setup.md#provider-and-model-availability).
 
 Isolated **profiles** use immutable SDK clients over the same local authority.
 Desktop's profile selector, TUI **F8** and CLI `--profile ID` preserve separate
@@ -117,8 +121,9 @@ and command tools, without creating a project. Browser control keeps its
 explicit user toggle; GitHub commands need an explicit repository target.
 Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
-Hold Ctrl+Space to dictate directly into the draft; release flushes the streamed
-transcript without an Insert step or automatic prompt submission. Side chat
+Click the microphone to record and click again to confirm, or hold Ctrl+Space
+and release to finish. Both stream into the draft without an Insert step or
+automatic prompt submission. Side chat
 opens immediately, read-only, with inherited controls and captured main context.
 
 [Chat activity](docs/setup.md#chat-activity-and-usage) uses small operation
@@ -293,6 +298,8 @@ current action; Shift+Enter adds a line.
 Both sidebars resize, and message copy appears on hover or keyboard focus.
 Toggle/dropdown preferences, model context and supported thinking effort save
 automatically through shared SDK controls; text settings retain explicit saves.
+Model switches preserve the original effort preference, with a supported
+fallback and restoration on capable models, not a reset to Model default.
 `/thinking` and `/effort` set supported effort; `/context-window` sets an exact
 token ceiling or `min`, `half`, `max` without running a model.
 See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).
@@ -306,7 +313,8 @@ commands, enforced read-only sessions and parallel question-only side chats.
 Opening Side chat immediately gives the same composer, model/thinking controls
 and voice input with captured main-chat context, permanently read-only.
 Hold **Ctrl+Space** to dictate locally: words stream into the textbox and release
-flushes them without sending. Session names and settings support fuzzy search.
+flushes them without sending. The microphone button instead uses click-to-record,
+click-again-to-confirm, never press-and-hold. Session names and settings support fuzzy search.
 Desktop embeds **Ghostty** through `ghostty-web`, alongside local diffs, plans,
 isolated browser previews, linked PRs and Insights. Double-click a session to
 rename it. Sessions support pin/group/

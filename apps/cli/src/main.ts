@@ -3,7 +3,6 @@ import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { createInterface } from "node:readline/promises";
 import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, sessionChildBindings, type ControlDefaults, type SessionChildrenReview } from "../../../packages/sdk/src/index.ts";
@@ -16,6 +15,7 @@ import { integrationCommand } from "./integrations.ts";
 import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../packages/sdk/src/index.ts";
 import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "../../../packages/sdk/src/index.ts";
 import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
+import { queuedSlash } from "./queued-commands.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -30,7 +30,7 @@ export async function main(argv: string[]): Promise<void> {
     "confirm-stage-and-test": { type: "boolean" },
     "confirm-git": { type: "boolean" },
     confirmations: { type: "string" }, registry: { type: "string" },
-    "capture-id": { type: "string" }, root: { type: "string" },
+    "capture-id": { type: "string" }, root: { type: "string" }, hold: { type: "boolean" }, repository: { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
@@ -40,6 +40,8 @@ export async function main(argv: string[]): Promise<void> {
 moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
+moguri slash '/COMMAND ARGUMENT' --session ID [--hold]  Actual ordered service intake
+moguri commands list|read EXECUTION_ID  Original outcomes and waiting UI results, never replay
 moguri progress --session ID       Checked plan items and untrusted task estimate
 moguri activity list --session ID  Retained chat operations, without new inference
 moguri agent-terminal list --session ID  Approved Agent commands, never private consoles
@@ -86,8 +88,8 @@ moguri sandbox preview PATHS.json --session ID
 moguri sandbox prepare PATHS.json --session ID --digest SHA --revision N --confirm-review
 moguri sandbox execution|result|stop RUN_ID
 moguri sandbox reconcile RUN_ID --confirm-review  Original signed guest only, no replay
-moguri sandbox publish-preview RUN_ID PATHS.json
-moguri sandbox publish RUN_ID PATHS.json --digest SHA --revision N --confirm-write
+moguri sandbox publish-preview RUN_ID PATHS.json [--repository CAPTURED_ID]
+moguri sandbox publish RUN_ID PATHS.json --digest SHA --revision N --confirm-write [--repository CAPTURED_ID]
 moguri sandbox publication|publication-stop|publication-wait PUBLICATION_ID
 moguri worker --stdio              Installed versioned SSH worker bridge
 moguri workspace list PROJECT_ID
@@ -635,9 +637,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "result" && args.length === 1) output(await sdk.sandbox.result(args[0]!));
       else if (action === "stop" && args.length === 1) output(await sdk.sandbox.stop(args[0]!));
       else if (action === "reconcile" && args.length === 1 && values["confirm-review"]) { await sdk.sandbox.reconcile(args[0]!); output(await sdk.sandbox.execution(args[0]!)); }
-      else if (action === "publish-preview" && args.length === 2) output(await sdk.sandbox.publicationPreview(args[0]!, await paths(args[1]!)));
+      else if (action === "publish-preview" && args.length === 2) output(await sdk.sandbox.publicationPreview(args[0]!, await paths(args[1]!), values.repository));
       else if (action === "publish" && args.length === 2 && values.digest && values["confirm-write"]) {
-        const created = await sdk.sandbox.publish(args[0]!, await paths(args[1]!), values.digest, expectedRevision());
+        const created = await sdk.sandbox.publish(args[0]!, await paths(args[1]!), values.digest, expectedRevision(), values.repository);
         const record = (await sdk.sandbox.publication(created.id!)).publication;
         await waitForJob(record.jobId, () => sdk.jobs.cancel(record.jobId), "Native source publication", () => sdk.sandbox.publication(record.id));
       } else if (action === "publication" && args.length === 1) output(await sdk.sandbox.publication(args[0]!));
@@ -665,19 +667,14 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "token" && args[0]) output(await sdk.models.setToken(args[0], await credential()));
       else if (action === "clear-token" && args[0]) output(await sdk.models.clearToken(args[0]));
       else throw new Error("Use models list, catalogue, refresh, enable|disable API_ID, provider ID enable|disable, source API_ID MODEL_ID, evidence MODEL_ID, token ENDPOINT or clear-token ENDPOINT. Preference writes accept an observed --revision N. No sign-in, inference or source fallback is implied.");
+    } else if (group === "commands") {
+      if (action === "list") output(sdk.getState().snapshot?.commandExecutions.filter((entry) => !values.session || entry.sessionId === values.session));
+      else if (action === "read" && args[0]) output(await sdk.commands.read(args[0]));
+      else throw new Error("Use commands list [--session ID] or commands read EXECUTION_ID. Inspection never replays input or acknowledges a view.");
     } else if (group === "slash") {
-      if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID. Native panels are returned as typed actions, not opened by this CLI.");
+      if (!values.session || !action) throw new Error("Use slash '/COMMAND ARGUMENT' --session ID [--hold]. Text uses the actual ordered service queue.");
       if (/^\/budget\s+(?:set|profile|global)\b/.test(action)) console.error(BUDGET_WARNING);
-      const result = await sdk.slash(values.session, [action, ...args].join(" "), "cli");
-      if (result.kind === "continue-work" && process.stdin.isTTY && !values.json) {
-        const prompt = createInterface({ input: process.stdin, output: process.stdout });
-        try {
-          const answer = (await prompt.question("Continue work: [k] Kanban, [m] send to model, [c] cancel: ")).trim().toLowerCase();
-          if (answer === "k" || answer === "m") output(await sdk.kanban.choose(result.review, answer === "k" ? "kanban" : "prompt"));
-          else if (answer === "c" || answer === "") output({ cancelled: true, draftPreserved: true });
-          else throw new Error("Choose k, m or c. No request was dispatched; the saved draft is preserved.");
-        } finally { prompt.close(); }
-      } else if (result.kind === "export" && result.path) output(await saveArtifactExport(result.path, result.document)); else output(result);
+      await queuedSlash(sdk, values.session, [action, ...args].join(" "), { hold: values.hold, json: values.json }, output);
     } else if (group === "metachat") {
       if (values.session && values.project) throw new Error("Choose --session or --project, not both. A settings chat cannot silently change its parent's scope.");
       const parent = snapshot.sessions.find((session) => session.id === values.session);
@@ -927,7 +924,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (!values.session) throw new Error("Choose --session SESSION_ID and explicitly enable optional subagents first.");
       output(await sdk.subagents.run(values.session, args.join(" ")));
     } else throw new Error("Unknown command. Run moguri --help.");
-  } finally { if (!keep) sdk.disconnect(); }
+  } finally { if (!keep) { try { await sdk.commands.detachAll(); } finally { sdk.disconnect(); } } }
 }
 if (import.meta.main) {
   try { await main(process.argv.slice(2)); }
