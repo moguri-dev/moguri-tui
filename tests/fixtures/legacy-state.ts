@@ -39,7 +39,20 @@ export function removeRecoveryFixtureMarkers(db: DatabaseSync, events: readonly 
       ["git.branch.create", "git.branch.rename", "git.switch", "git.revert", "git.commit", "git.stage", "git.unstage"].includes(event.payload.operation.kind)))) {
     throw new Error("Generate genuine pre-recovery history; explicit autonomy and built-in Git intent cannot become older state.");
   }
+  removeCommandToolFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('session_request_recovery_schema','builtin_git_schema')");
+}
+export function removeCommandToolFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "session.resumed" && event.payload.continuation ||
+    event.event_type === "settings.updated" && event.payload.settings.toolPreferences !== undefined ||
+    (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && (event.payload.item.spawnPromptOrigin ||
+      event.payload.item.workflow && !["review", "security", "performance", "debug"].includes(event.payload.item.workflow.kind) ||
+      event.payload.item.command && ["impeccable", "continue", "orchestrate", "spawn", "spar", "critique", "roast-me", "tool-preferences"].includes(event.payload.item.command.name)) ||
+    event.event_type === "tool.requested" && event.payload.approval.call.directMcp ||
+    (event.event_type === "tool.started" || event.event_type === "tool.completed") && event.payload.call.directMcp)) {
+    throw new Error("Generate genuine pre-82 history; actual command/tool preferences cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('workflow_commands_schema','tool_preferences_schema')");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);

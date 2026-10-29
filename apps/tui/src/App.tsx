@@ -896,6 +896,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <ThemedSelect focused flexGrow={1} options={[
             { name: "System prompt: view, edit, restore", value: "prompt" },
             { name: "Appearance: shared color palettes", value: "appearance" },
+            { name: "Integration order: MCP via Gateway, MCP direct, REST, CLI", value: "tool-preferences" },
             { name: "All shared settings (JSON): dark theme, guardrails, memory, MCP, optional modes", value: "json" },
             { name: "Project settings (JSON): repo, folders, scripts, preview port, instructions and MCP", value: "project" },
             { name: "View effective committed system prompt", value: "preview" },
@@ -911,6 +912,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           ].map((option) => ({ ...option, description: "" }))} onSelect={(_, option) => { void perform(async () => {
             switch (option?.value) {
               case "appearance": setMode("themes"); break;
+              case "tool-preferences": if (!session) throw new Error("Choose a chat before using /tool-preferences to review or rank this profile's integration methods."); await slashResult(await client.slash(session.id, "/tool-preferences", "tui")); break;
               case "prompt": openSettingsEditor(true); break;
               case "json": openSettingsEditor(false); break;
               case "project": await openProjectEditor(); break;
@@ -1047,6 +1049,11 @@ Existing shortcut aliases remain available for compatibility.
 /trace | /details | /reload-draft | /keep-draft
 /policy all | /policy protected
 /settings | /settings edit | /settings reset SECTION
+/tool-preferences [mcp-gateway mcp-direct rest cli|reset]
+/impeccable [PROMPT] | /continue (original task, no new prompt)
+/suggestions [all|session|run DIGEST|run-all DIGEST]
+/orchestrate PROMPT | /spawn PROMPT | /spar PROMPT
+/critique PROMPT | /roast-me PROMPT (read-only work critique)
 /project-settings [edit] | /project-sources | /porto
 /prompt | /prompt view | /prompt reset
 /memory index|graph|search TEXT|remember CONVENTION

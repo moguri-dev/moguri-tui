@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { effectiveToolPreferences, MoguriSdk } from "../packages/sdk/src/index.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
@@ -66,6 +66,13 @@ test("actual TUI keys share knowledge promotion, disabled hooks and exact review
     appendLegacyAutopilot(fixture.service, fixture.sessionId); await sdk.refresh();
     await slash("/autonomy Autopilot", "Session autonomy set to Autopilot");
     assert.equal(fixture.session().controls.automaticApprovals, true);
+    await slash("/tool-preferences", "Integration method order:"); await frameUntil("MCP direct");
+    setup.mockInput.pressEscape();
+    await slash("/tool-preferences cli rest mcp-direct mcp-gateway", "Shared integration method order saved");
+    assert.deepEqual(sdk.settings.get()?.values.toolPreferences?.order, ["cli", "rest", "mcp-direct", "mcp-gateway"]);
+    await slash("/tool-preferences reset", "Shared integration method order saved");
+    await waitFor(() => effectiveToolPreferences(sdk.settings.get()?.values.toolPreferences).order[0] === "mcp-gateway");
+    assert.deepEqual(effectiveToolPreferences(sdk.settings.get()?.values.toolPreferences).order, ["mcp-gateway", "mcp-direct", "rest", "cli"]);
     assert.equal(fixture.requests.length, 0);
     assert.equal(fixture.session().queue.length, 0);
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }

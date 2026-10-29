@@ -144,7 +144,10 @@ existing approvals and per-command PTY lifecycle, not shared shell state.
 compact recoverable results, deterministic file/data/document operations and
 browser-free search. Root-bound main/child messaging and orchestration preserve
 read-only side chats, actual actors, approvals and aggregate budgets. Shared
-workflows are `/review`, `/security`, `/performance` and `/debug`.
+workflows include `/review`, `/security`, `/performance`, `/debug` and the
+[new design, continuation, child-session and critique commands](docs/architecture/command-tool-preferences.md).
+Rank equivalent integrations in Settings: Gateway MCP, direct MCP, REST, then
+CLI by default. Direct schemas keep the same exact MCP execution approvals.
 
 The [workspace experience](docs/architecture/workspace-experience.md) adds
 chart-first **My work, Usage, Cost and Velocity** dashboard pages and a
