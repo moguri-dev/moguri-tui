@@ -33,6 +33,7 @@ export function assertPreCombinedHistory(events: readonly StoredEvent[]): void {
 }
 export function removeRecoveryFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "session.configured" && event.payload.autonomySelection ||
+    event.event_type === "workspace.saved" && event.payload.branchOperation ||
     event.event_type === "tool.started" && ["git_read", "git_write"].includes(event.payload.call.name) ||
     event.event_type === "github.operation_recorded" && (event.payload.operation.toolCallDigest ||
       ["git.branch.create", "git.branch.rename", "git.switch", "git.revert", "git.commit", "git.stage", "git.unstage"].includes(event.payload.operation.kind)))) {
