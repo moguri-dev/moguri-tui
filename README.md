@@ -79,7 +79,8 @@ visible provenance; existing sessions are not rewritten.
 **Settings / Models / Providers** can disable providers or unwanted models per
 profile. Matching upstream model IDs share one explicit provider choice, without
 duplicates or silent fallback. The same availability gates `/model`, routing and
-new calls. [Provider/model controls](docs/setup.md#provider-and-model-availability).
+new calls. Disabling the selected model requires a fresh selection, even after
+re-enabling. [Provider/model controls](docs/setup.md#provider-and-model-availability).
 
 Isolated **profiles** use immutable SDK clients over the same local authority.
 Desktop's profile selector, TUI **F8** and CLI `--profile ID` preserve separate
@@ -293,6 +294,8 @@ current action; Shift+Enter adds a line.
 Both sidebars resize, and message copy appears on hover or keyboard focus.
 Toggle/dropdown preferences, model context and supported thinking effort save
 automatically through shared SDK controls; text settings retain explicit saves.
+Model switches preserve the original effort preference, with a supported
+fallback and restoration on capable models, not a reset to Model default.
 `/thinking` and `/effort` set supported effort; `/context-window` sets an exact
 token ceiling or `min`, `half`, `max` without running a model.
 See [desktop controls and settings](docs/setup.md#shared-sdk-and-settings).

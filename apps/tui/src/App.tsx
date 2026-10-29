@@ -139,11 +139,6 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const created = await client.command({ type: "session.create", projectId: project.id! });
     setSelectedId(created.id!); setMode("compose"); setShowArchived(false);
   };
-  const configure = (controls: Controls, rememberModelSelection = false) => {
-    if (!session) throw new Error("Create a session first.");
-    return client.command({ type: "session.configure", sessionId: session.id, expectedRevision: session.revision, controls,
-      ...(rememberModelSelection ? { rememberModelSelection: true } : {}) });
-  };
   const applyArchiveChoice = async (review: ArchiveReview, action: Extract<SessionChildrenAction, "archive" | "detach">, remember: boolean) => {
     const check = () => {
       const state = client.getState(), current = state.snapshot?.sessions.find((value) => value.id === review.session.id);
@@ -880,7 +875,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; }
               const model = availableModels.find((model) => model.id === option?.value);
               if (model?.environments && !model.environments.includes(session.controls.env)) { setNotice(`Kupo is unavailable in ${session.controls.env}. ${snapshot?.routingDiagnostics?.join(" ") ?? ""}`); return; }
-              if (option?.value) void perform(async () => { const { modelOptions: _, ...controls } = session.controls; await configure({ ...controls, modelId: String(option.value) }, true); setMode("compose"); });
+              if (option?.value) void perform(async () => { await client.sessions.selectModel(session.id, String(option.value), session.revision); setMode("compose"); });
             }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
           <text fg={colors.muted} height={4} flexShrink={0}>Kupo uses configured models by default. One eligible model runs directly; multiple models support automatic Single, gated Cascade or eligible Critique. /kupo status shows capabilities and policy. Normal approvals remain authoritative. /compound keeps separate worktree/test review.</text></box> :

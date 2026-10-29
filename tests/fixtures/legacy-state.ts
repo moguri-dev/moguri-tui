@@ -38,6 +38,10 @@ export function retainedCiphertextRows(db: DatabaseSync) {
 }
 export async function writeLegacyState(service: Awaited<ReturnType<typeof startService>>, version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 | 47 | 48 | 49 | 50 | 51 | 52 | 53 | 54 | 55 | 56 | 57 | 58 | 59 | 60, lineage: "main" | "desktop" = "main"): Promise<void> {
   const events = service.store.db.isOpen ? service.store.events() : service.controller.events(0);
+  if (events.some((event) => (event.event_type === "session.created" || event.event_type === "session.configured") && event.payload.controls.preferredThinkingEffort !== undefined ||
+    event.event_type === "model.selection_remembered" && event.payload.selection?.preferredThinkingEffort !== undefined)) {
+    throw new Error("Generate genuine pre-continuity history; actual model effort preferences cannot become older state.");
+  }
   if (events.some((event) => event.event_type === "session.home_bound" || event.event_type === "chat.writer_recorded" ||
     event.event_type === "session.created" && event.payload.homeRoot)) {
     throw new Error("Generate genuine root-less pre-Home chat history; immutable Home bindings and independent writer ownership cannot become older state.");
