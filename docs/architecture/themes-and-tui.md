@@ -67,6 +67,12 @@ folder-management and grouped-project Sandbox follow-up, and protocol 80 for
 the eventual actual combined themes build. Neither reservation is implemented
 or claimed qualified here. Genuine standalone 78 receipts remain 78 evidence;
 actual combined 80 source, markers and payload identities require new evidence.
+The known upcoming 79 markers are `queued_slash_schema='1'`,
+`project_folder_actions_schema='1'` and `sandbox_multi_root_schema='1'`, alongside
+the independent model-continuity marker. The proposed `sdk.commands.submit(...)`
+intake and client registration/acknowledgement contract are not implemented or
+approximated here. `sdk.slash(...)` remains the lower-level immediate dispatcher
+for explicit direct SDK use, not proof of ordered chat submission.
 
 The owner subsequently selected intentional queued slash-command execution in
 the other workstream. Its actual shared intake/dispatch contract must also be
@@ -113,3 +119,49 @@ text/control/selection/focus contrast, saved/custom theme compatibility,
 cross-client updates, actual mouse tabs, focus-safe sidebar arrows, slash
 completion and execution, resizing, retained drafts and untouched approvals.
 No personal credentials, live inference or visible user application is used.
+
+### Standalone qualification, 2026-10-29
+
+Runtime source is `37ddfa8`; earlier `2640caa` previews and `4d298a1` development
+receipts remain historical, not relabelled final evidence. Subsequent
+documentation does not change runtime payloads.
+
+| Gate | Result |
+| --- | --- |
+| Type checks and production build | PASS |
+| Complete Node/worker/CLI/native-TUI suite | 1,814 passed, 14 declared physical-native skips, zero failures; 1,828 total / 1,529.77 s |
+| Complete hidden Electron suite | 254 passed, three declared skips, zero failures; 257 total / 8.1 min |
+| Focused predecessor migration, rollback, provenance and restart suite | 118 passed, zero skips or failures |
+| Focused TUI interaction suite | 58 passed, one physical-native skip; includes the existing workflows and new navigation cases |
+| Final navigation/focus/compact-decision cases | 11 passed, zero failures; actual native mouse/key parsing, no callback-only substitute |
+| Packed external SDK types, browser-safe root/React, explicit Node/MCP, installed worker/CLI/TUI and audits | PASS; zero vulnerabilities |
+| Root dependency audit | PASS; zero vulnerabilities |
+| Generated pinned loopback SSH primitive on rebuilt worker/bridge | PASS; one generated inference request / 178.83 ms |
+| Ten presets, two modes, 620 shared RGB pair checks | PASS; minimum normal text 4.587:1, control boundary 3.485:1, accent 4.820:1 |
+| Actual native selected cells and hidden desktop controls | PASS across all presets and modes; saved custom colors, System event handling, reload and cross-client state remain intact |
+
+The contrast matrix measures the declared shared RGB pairs, not whole-app WCAG
+certification on arbitrary terminal palettes or physical displays. The native
+UI previews are generated OpenTUI character/color frames rendered with a system
+monospace font. They show actual tested views, not a personal terminal capture
+or a replacement terminal renderer.
+
+The 14 unit skips need qualified immutable physical SendBox receipts for these
+exact payloads. The three desktop skips are the actual packaged CLI installation
+and two physical-native Sandbox flows. The generated passes do not qualify those
+boundaries, Linux, signed/notarized packaging or the later combined protocol 80.
+OpenTUI's experimental FFI warning and the existing lazy Ghostty chunk-size
+warning remain. CI is intentionally main-only; working branches do not trigger it.
+
+### Exact protocol-78 payload identities
+
+These are SHA-256 values of this branch's final rebuilt bytes, not receipts from
+another workstream or a claim that an older native image contains them.
+
+| Payload | SHA-256 |
+| --- | --- |
+| `dist/worker.mjs` | `4fd650f4fa4e09d0d83363133723327d35e55ecab1fa81fd8aa27921da932541` |
+| `dist/remote-bridge.mjs` | `f67aaa589778c2b76c7c0b0f290b9ab83e48ffc7782ad4ba61a1078cc1b57409` |
+| `dist/terminal-bridge.mjs` | `0cc11fbf82834c13a2c39f51364f965adff535fc382b55195397802420689948` |
+| `dist/terminal-broker.mjs` | `c8588fc74de4bc590495653f475551de6fdc96667153a7893df463d3ff7557b2` |
+| `dist/tui.mjs` | `3670114687506717b2aab8fe2622e668c61bfca250a106f3dc19818664dcd7b0` |
