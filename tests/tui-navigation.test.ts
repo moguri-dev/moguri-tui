@@ -60,6 +60,8 @@ test("sidebar arrows are confined to navigation focus and remain usable after na
     assert.equal(setup.renderer.root.findDescendantById("tui-sidebar")?.visible, true);
     setup.mockInput.pressArrow("left"); await waitFor(() => setup.renderer.root.findDescendantById("tui-sidebar")?.visible === false); setup.mockInput.pressEscape();
     setup.resize(52, 24); await frameUntil(setup, "/help commands");
+    await frameUntil(setup, "Env Local | Model");
+    await frameUntil(setup, "Autonomy level Manual | Budget Unlimited");
     for (const tab of ["session", "sessions", "work-items", "code-requests"]) {
       const target = setup.renderer.root.findDescendantById(`tui-tab-${tab}`);
       assert.ok(target instanceof Renderable);
@@ -243,5 +245,31 @@ test("held and ordered new slash actions stay unsent until the shared command in
     await click(setup, "tui-tab-sessions"); await frameUntil(setup, "Choose a session");
     assert.equal(fixture.session().draft.text, "/sessions");
     assert.equal(fixture.requests.length, 0); assert.equal(fixture.session().turnId, null);
+  } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
+});
+
+test("compact pending decisions keep actual environment, budget and human controls readable without granting consent", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  await reviewNativeTools(fixture, ["read_file"]); await fixture.configure();
+  const setup = await createTestRenderer({ width: 52, height: 24, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk }))); await frameUntil(setup, "Write a prompt");
+    await fixture.send("generated tool compact approval");
+    const approval = await waitFor(() => fixture.session().pendingApproval);
+    await frameUntil(setup, "Approval required: read_file");
+    await frameUntil(setup, "Env Local | Model");
+    await frameUntil(setup, "Budget Unlimited");
+    await frameUntil(setup, "Ctrl+D deny");
+    assert.equal(fixture.session().pendingApproval?.id, approval.id);
+    setup.mockInput.pressKey("d", { ctrl: true }); await fixture.terminal();
+    await fixture.send("generated structured question choices only");
+    const question = await waitFor(() => fixture.session().pendingQuestionId);
+    await frameUntil(setup, "Your actual answer is needed");
+    await frameUntil(setup, "Env Local | Model");
+    await frameUntil(setup, "Budget Unlimited");
+    assert.equal(fixture.session().pendingQuestionId, question);
+    setup.mockInput.pressKey("F6"); await frameUntil(setup, "Actual user question");
+    setup.mockInput.pressEnter(); await fixture.terminal();
+    assert.equal(fixture.session().pendingQuestionId, null);
   } finally { sdk.disconnect(); flushSync(() => root.unmount()); await setup.dispose(); await fixture.close(); }
 });

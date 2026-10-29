@@ -90,6 +90,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const taskProgress = useTaskProgress(client, session, status === "connected");
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
+  const compactDecision = compact && Boolean(session?.pendingApproval || pendingQuestion);
   useEffect(() => { setOtherQuestion(null); }, [client.profileId, pendingQuestion?.id, pendingQuestion?.revision]);
   const recommendation = pendingQuestion?.recommendation;
   const questionDetails = pendingQuestion ? `${pendingQuestion.question}${recommendation ? `\n\nModel recommends: ${recommendation.choice}\n${recommendation.reason}\nFrom ${recommendation.modelId}. Untrusted advice; you still decide.` : ""}` : "";
@@ -766,7 +767,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (event.button !== 0) return; event.preventDefault(); event.stopPropagation();
         void perform(async () => { requireNavigation(); setSidebar(!sidebarVisible); setNavigationFocus(true); });
       }}><text fg={colors.accent}>{sidebarVisible ? "[-] Menu" : "[+] Menu"}</text></box>
-      <text height={1} fg={colors.accent}><strong>{"<> moguri"}</strong></text><text height={1} fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}{width >= 80 ? ` / ${safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session?.controls.env === "Local" && session.homeRoot ? "Home (no project)" : session ? "No project" : "Workspace"))}` : ""}  /  {profilePending ? "Updating profile..." : status}</text>
+      <text height={1} wrapMode="none" truncate fg={colors.accent}><strong>{"<> moguri"}</strong></text><text height={1} wrapMode="none" truncate fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}{width >= 80 ? ` / ${safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session?.controls.env === "Local" && session.homeRoot ? "Home (no project)" : session ? "No project" : "Workspace"))}` : ""}  /  {profilePending ? "Updating profile..." : status}</text>
     </box>
     <box id="tui-navigation" height={width < 80 ? 4 : 3} flexShrink={0} flexDirection="row" flexWrap="wrap" border borderStyle="double" borderColor={navigationFocus ? colors.accent : colors.border}
       title={navigationFocus ? "Navigation / arrows: sidebar, up/down: tabs" : "Navigation / click or /help"} titleColor={colors.muted}>
@@ -784,12 +785,12 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         <scrollbox flexGrow={1} minHeight={0}>{options.map((option) => <box key={option.value} flexDirection="column" paddingY={1}
           backgroundColor={option.value === selectedId ? colors.panel : colors.sidebar}
           onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); void perform(async () => { await chooseSession(option.value); setNavigationFocus(false); if (sidebarOnly) setSidebar(false); }); }}>
-          <text fg={option.value === selectedId ? colors.selection : colors.foreground}>{option.value === selectedId ? "> " : "  "}{option.name}</text>
-          <text fg={colors.muted}>{safe(option.description)}</text>
+          <text height={1} wrapMode="none" truncate fg={option.value === selectedId ? colors.selection : colors.foreground}>{option.value === selectedId ? "> " : "  "}{option.name}</text>
+          <text height={1} wrapMode="none" truncate fg={colors.muted}>{safe(option.description)}</text>
         </box>)}{!options.length && <text fg={colors.muted}>{"No sessions yet.\n/new global\n/open PATH\n/connect"}</text>}</scrollbox>
         <text fg={colors.muted}>{"/new  /profiles\n/sidebar close\nTab: navigation\nLeft closes / Right opens"}</text>
       </box>
-      <box visible={!sidebarOnly} flexGrow={1} minWidth={0} flexDirection="column" paddingX={compact ? 1 : 2} backgroundColor={colors.background}>
+      <box visible={!sidebarOnly} flexGrow={1} minWidth={0} minHeight={0} overflow="hidden" flexDirection="column" paddingX={compact ? 1 : 2} backgroundColor={colors.background}>
         {mode === "profiles" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Profiles / {safe(snapshot?.profile?.name ?? client.profileId)}</text>
           <text fg={colors.muted} height={3}>Accounts, projects, drafts and memory stay separate. Switching does not stop owned work. New profiles copy no private data or model selection.</text>
@@ -908,7 +909,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         </box> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
-          {pendingQuestion ? <><scrollbox height={10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
+          {pendingQuestion ? <><scrollbox height={compact ? 4 : 10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
             <ThemedSelect focused flexGrow={1} options={[...pendingQuestion.choices.flatMap((choice, index) => choice === "Other, please specify" ? [] : [{ name: safe(choice), description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` }]), { name: "Other, please specify", description: "Type a custom answer in the saved composer. Enter submits; Cmd/Ctrl+Enter still holds.", value: "other" }, ...(pendingQuestion.allowFreeform ? [{ name: "Type a freeform answer in the saved composer", description: "Enter answers; Cmd/Ctrl+Enter still holds a queue.", value: "freeform" }] : [])]} onSelect={(_, option) => {
               if (!option) return;
               if (option.value === "other" || option.value === "freeform") { setOtherQuestion(option.value === "other" ? pendingQuestion.id : null); setMode("compose"); setNotice("Type your actual answer. Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues."); return; }
@@ -1155,8 +1156,9 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <text fg={colors.accent}>GitHub Copilot sign-in: {snapshot.provider.login.code}</text><text fg={colors.foreground}>{snapshot.provider.login.url}</text><text fg={colors.muted}>Authorize in your browser. /cancel-login cancels. Account model policies may be enabled.</text>
         </box>}
         {snapshot?.provider.diagnostic && <text fg={colors.attention}>{safe(snapshot.provider.diagnostic)}</text>}
-        {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={mode === "approval-choices" ? 17 : 10} flexShrink={0}>
-          <text fg={colors.attention}><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
+        {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1}
+          height={compact ? mode === "approval" || mode === "approval-choices" ? 10 : 6 : mode === "approval-choices" ? 17 : 10} flexShrink={0}>
+          <text fg={colors.attention} height={1} wrapMode="none" truncate><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
           {mode === "approval-choices" ? <ThemedSelect focused flexGrow={1} options={[
             { name: "Approve only this action", description: "No remembered grant.", value: "once" },
             { name: "Approve for this session", description: "Same exact command/arguments or MCP tool.", value: "session:exact" },
@@ -1177,9 +1179,14 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             const [scope, match] = String(option.value).split(":");
             void perform(async () => { await client.approvals.respond(session.id, session.pendingApproval!.id, true, scope === "once" ? undefined : parse(RememberApprovalSchema, { scope, match })); setMode("compose"); });
           }} /> : <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>}
-          <text fg={colors.attention}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}/approve once | Ctrl+D deny | Ctrl+V args | Ctrl+Y approve</text>
+          <text fg={colors.attention} height={compact ? 2 : undefined}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}{compact ? "\nCtrl+Y approve | Ctrl+D deny | Ctrl+V args" : "/approve once | Ctrl+D deny | Ctrl+V args | Ctrl+Y approve"}</text>
         </box>}
-        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} padding={1} height={recommendation ? 11 : 9} flexShrink={0}><text fg={colors.attention} height={1} flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text><text fg={colors.foreground} height={2} flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>{recommendation && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}<text fg={colors.muted} height={2} flexShrink={0}>Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted.</text></box>}
+        {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1} height={compact ? 6 : recommendation ? 11 : 9} flexShrink={0}>
+          <text fg={colors.attention} height={1} wrapMode="none" truncate flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text>
+          <text fg={colors.foreground} height={2} truncate flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>
+          {recommendation && !compact && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}
+          <text fg={colors.muted} height={compact ? 1 : 2} wrapMode={compact ? "none" : "word"} truncate flexShrink={0}>{compact ? "Enter answers | Cmd/Ctrl+Enter holds" : "Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted."}</text>
+        </box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
         {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}
@@ -1189,12 +1196,12 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {mode === "compose" && !session && <box border borderStyle="double" borderColor={colors.accent} paddingX={1} flexShrink={0} title="Commands">
           <ThemedInput id="tui-startup-command" focused value={startupCommand} placeholder="/new global  /open PATH  /connect  /help" onInput={setStartupCommand} onSubmit={(text) => void perform(() => submit(text))} />
         </box>}
-        <box height={taskProgress.progress?.longRunning && taskProgress.progress.model ? 5 : 4} flexShrink={0} flexDirection="column">
-          <text fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (/models)"}` : "Env Local | Model not set"}</text>
-          <text fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
-          <text fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls${session.kind === "side" ? " | main context per question" : ""}` : "Factory defaults. /help commands."}</text>
-          {session && <text fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : taskProgress.progress?.checklist.total ? `${taskProgress.progress.checklist.completed}/${taskProgress.progress.checklist.total}` : "no checklist"} / estimate, 15s`)}</text>}
-          {taskProgress.progress?.longRunning && taskProgress.progress.model && <text fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent, 8)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
+        <box height={compactDecision ? 3 : taskProgress.progress?.longRunning && taskProgress.progress.model ? 5 : 4} flexShrink={0} flexDirection="column" backgroundColor={colors.background}>
+          <text id="tui-status-env" height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (/models)"}` : "Env Local | Model not set"}</text>
+          <text id="tui-status-budget" height={1} wrapMode="none" truncate fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
+          <text height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls${session.kind === "side" ? " | main context per question" : ""}` : "Factory defaults. /help commands."}</text>
+          {session && !compactDecision && <text height={1} wrapMode="none" truncate fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : taskProgress.progress?.checklist.total ? `${taskProgress.progress.checklist.completed}/${taskProgress.progress.checklist.total}` : "no checklist"} / estimate, 15s`)}</text>}
+          {!compactDecision && taskProgress.progress?.longRunning && taskProgress.progress.model && <text height={1} wrapMode="none" truncate fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent, 8)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>
       </box>
     </box>
@@ -1205,7 +1212,8 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
 function TuiComposer({ editor, session, focused, compact, focus, submit, run }: { editor: DraftEditor; session: Session; focused: boolean; compact: boolean; focus: () => void; submit: () => void; run: (operation: () => Promise<void>) => Promise<void> }) {
   const colors = React.useContext(ThemeContext);
   const draft = useSyncExternalStore(editor.subscribe, editor.getState, editor.getState);
-  const [suggestionIndex, renderSuggestionIndex] = useState(0), suggestions = tuiCommandSuggestions(draft.text).slice(0, compact ? 3 : 6);
+  const limitedSuggestions = compact && Boolean(session.pendingApproval || session.pendingQuestionId);
+  const [suggestionIndex, renderSuggestionIndex] = useState(0), suggestions = tuiCommandSuggestions(draft.text).slice(0, limitedSuggestions ? 1 : compact ? 3 : 6);
   const suggestionIndexRef = useRef(0);
   const setSuggestionIndex = (value: number) => { suggestionIndexRef.current = value; renderSuggestionIndex(value); };
   useEffect(() => { setSuggestionIndex(0); }, [draft.text]);
@@ -1230,9 +1238,9 @@ function TuiComposer({ editor, session, focused, compact, focus, submit, run }: 
       finally { mirror.current.setting = false; }
     }
   }, [draft.text]);
-  return <box flexDirection="column" border borderStyle="double" borderColor={focused ? colors.accent : colors.border} backgroundColor={colors.surface} paddingX={1} paddingY={compact ? 0 : 1} marginTop={compact ? 0 : 1} flexShrink={0} title={`Prompt / ${safe(session.title).slice(0, 40)}`} titleColor={colors.accent}>
+  return <box flexDirection="column" border borderStyle="double" borderColor={focused ? colors.accent : colors.border} backgroundColor={colors.surface} paddingX={1} paddingY={compact ? 0 : 1} marginTop={compact ? 0 : 1} overflow="hidden" flexShrink={0} title={`Prompt / ${safe(session.title).slice(0, 40)}`} titleColor={colors.accent}>
     {/^\/budget\s+(?:set|profile|global)\b/.test(draft.text) && <text fg={colors.attention} height={3} flexShrink={0}>{BUDGET_WARNING} Input reservations use an explicit estimate-based policy, not a billing guarantee.</text>}
-    <textarea id="tui-composer" ref={ref} focused={focused} initialValue={draft.text} height={compact ? 2 : 4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.surface}
+    <textarea id="tui-composer" ref={ref} focused={focused} initialValue={draft.text} height={limitedSuggestions ? 1 : compact ? 2 : 4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.surface}
       onMouseDown={focus}
       placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Enter sends; Shift+Enter newline. /help for commands."}
       keyBindings={[{ name: "return", action: "submit" }, { name: "return", shift: true, action: "newline" },
@@ -1262,12 +1270,12 @@ function TuiComposer({ editor, session, focused, compact, focus, submit, run }: 
       }} />
     {draft.attachments.length > 0 && <text fg={colors.accent}>{safe(draft.attachments.map((attachment) => `@${attachment.path}${attachment.kind === "document" ? ` [${attachmentStatus(attachment)}] ${attachment.id}` : ""}`).join("  "))}</text>}
     <text fg={draft.error ? colors.error : colors.muted}>{draft.error ?? (draft.saving ? "Saving draft..." : draft.dirty ? "Unsent edits" : "Draft saved")}</text>
-    {focused && suggestions.length > 0 && <box id="tui-slash-suggestions" flexDirection="column" border={["top"]} borderColor={colors.border}>
-      <text fg={colors.muted}>Commands / Up/Down choose / Tab or click fills / Enter runs</text>
+    {focused && suggestions.length > 0 && <box id="tui-slash-suggestions" flexDirection="column" border={limitedSuggestions ? false : ["top"]} borderColor={colors.border}>
+      {!limitedSuggestions && <text fg={colors.muted}>Commands / Up/Down choose / Tab or click fills / Enter runs</text>}
       {suggestions.map((entry, index) => <box id={`tui-command-${entry.name}`} key={entry.name} height={1}
         backgroundColor={index === suggestionIndex ? colors.panel : colors.surface}
         onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); complete(index); }}>
-        <text fg={index === suggestionIndex ? colors.selection : colors.foreground}>{index === suggestionIndex ? "> " : "  "}/{entry.name}  {entry.description}</text>
+        <text height={1} wrapMode="none" truncate fg={index === suggestionIndex ? colors.selection : colors.foreground}>{index === suggestionIndex ? "> " : "  "}/{entry.name}  {entry.description}</text>
       </box>)}
     </box>}
   </box>;

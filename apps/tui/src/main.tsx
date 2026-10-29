@@ -11,7 +11,7 @@ import { nativeActions } from "./native.ts";
 
 const { values } = parseArgs({ options: { project: { type: "string" }, profile: { type: "string" }, help: { type: "boolean" } } });
 if (values.help) {
-  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nEnter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter holds; Shift+Cmd/Ctrl+Enter sends now.\nClick Current session, Sessions, Work items or Code requests. Tab focuses navigation;\nLeft closes and Right opens the sidebar there, never while editing the prompt.\n/help lists commands; Tab or click completes without executing.\n/connect signs in, /open PATH opens a project, /models selects a model,\n/profiles switches profiles, /theme lists shared palettes, /quit saves and leaves.\nThe desktop and TUI share the same private local service.");
+  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nEnter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter holds; Shift+Cmd/Ctrl+Enter sends now.\nClick Current session, Sessions, Work items or Code requests. Tab focuses navigation;\nLeft closes and Right opens the sidebar there, never while editing the prompt.\n/help lists commands; Tab or click completes without executing.\n/connect signs in, /open PATH opens a project, /models selects a model,\n/profiles switches profiles, /theme lists shared palettes, /quit saves and leaves.\nHeld/ordered new view/theme commands stay unsent until shared intake integration.\nThe desktop and TUI share the same private local service.");
 } else {
   let client: MoguriSdk | undefined;
   try {

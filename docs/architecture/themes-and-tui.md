@@ -18,6 +18,14 @@ neither client owns a second theme preference store.
 The terminal presentation uses restrained double-line menu frames, a crystal
 cursor and a compact session-status panel. Content and actual pending decisions
 take priority over decoration. Terminal fonts remain user-owned.
+Single-row metadata and session labels use OpenTUI's own truncation, not a
+Moguri text-width/VT implementation. At 52 by 24, the actual Env/model and
+autonomy/budget rows remain readable. Pending approvals/questions reserve
+space for their real human controls, with a one-row editable composer and one
+inline slash suggestion; expanded arguments/choices still use the existing
+focused views. Secondary plan/estimate detail stays available through `/progress`.
+Chat and command-result scroll surfaces have distinct native identities so a
+read result cannot inherit the chat's sticky bottom position or stale pixels.
 
 Navigation uses real OpenTUI mouse hit testing for Current session, Sessions,
 Work items and Code requests. Code requests means existing session-linked pull
@@ -67,8 +75,10 @@ second queue or enqueue raw slash text that baseline workers could interpret as
 a model prompt. Idle Enter may execute a new view/theme/quit action with no
 earlier work; held commands, active turns or an earlier queue instead preserve
 the command draft and report the missing intake explicitly. Click/Tab view
-navigation remains available. This fail-closed development boundary is not
-completed queued-slash support and assumes no unconfirmed live-control exemption.
+navigation remains available. This fail-closed development boundary is not completed queued-slash
+support. The user subsequently confirmed only live stop/approval controls and
+`/yolo` as bypasses in the other workstream; navigation and theme changes are
+not exempt. This branch neither adds `/yolo` nor invents that dispatch contract.
 
 ## Prerequisite measurements
 
