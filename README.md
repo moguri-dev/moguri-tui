@@ -14,7 +14,11 @@ Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 
 The TUI uses Enter to send and Shift+Enter for newlines; Cmd/Ctrl+Enter still
-holds. Moguri includes its own verified [source setup instructions](docs/setup.md)
+holds. Its original JRPG-style menus have clickable Current session, Sessions,
+Work items and Code requests tabs, a focus-safe arrow-controlled sidebar and
+slash-command discovery. [Shared themes](docs/architecture/themes-and-tui.md)
+include ten presets in Dark and Light, without changing saved choices or factory
+Dark. Moguri includes its own verified [source setup instructions](docs/setup.md)
 in normal model context, including project-free chats.
 The [Local website allowlist](docs/architecture/native-network-policy.md) supports
 session, project and profile-wide grants through Guardrails and `/firewall`.

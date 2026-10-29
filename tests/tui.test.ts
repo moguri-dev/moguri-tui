@@ -595,8 +595,9 @@ test("the actual TUI explicitly generates, reviews, applies and restores one met
     await slash(`/compact generate ${JSON.stringify({ digest: preview.digest, modelId: preview.modelId, keepRecentTurns: preview.keepRecentTurns })} confirm-cost`, "requested");
     await fixture.terminal(); setup.mockInput.pressEscape();
     const entry = (await fixture.sdk.compactions.state(fixture.sessionId)).compactions.at(-1)!;
-    await slash(`/compact read ${entry.id}`, '"status": "proposed"');
-    await frameUntil("Generated summary");
+    await slash(`/compact read ${entry.id}`, "Generated summary");
+    setup.mockInput.pressKey("END");
+    await frameUntil('"status": "proposed"');
     setup.mockInput.pressEscape();
     await slash(`/compact apply ${entry.id} ${entry.revision} confirm-reviewed`, "Reviewed context prefix applied");
     assert.equal(fixture.session().activeCompactionId, entry.id); setup.mockInput.pressEscape();
@@ -983,7 +984,8 @@ test("the actual TUI creates Home-backed chats, shows attention and keeps metach
     await waitFor(() => fixture.service.controller.snapshot().sessions.find((value) => value.id === meta.id)?.status === "completed");
     await frameUntil("Write a prompt");
     await slash(`/config review ${proposal.id}`);
-    await frameUntil("Model advice is not user approval.");
+    await frameUntil("Model advice is not user");
+    await frameUntil("approval. Applying never");
     setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
     assert.equal(fixture.service.controller.snapshot().settings.values.instructions, "");
     await slash(`/config apply ${proposal.id} ${proposal.contentDigest} acknowledge-risk`);
