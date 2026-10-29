@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { MoguriSdk } from "../../packages/sdk/src/index.ts";
 import { fixtureProvider, setupFixture, type GeneratedProviderOptions } from "../fixture.ts";
+import { appendLegacyAutopilot } from "./legacy-state.ts";
 
 export const generatedAdvice = (choice = "allow", confidence = 0.98) => JSON.stringify({ answers: { action: {
   type: "choice", choice, confidence, probabilities: { allow: choice === "allow" ? 0.98 : 0.01, deny: choice === "deny" ? 0.98 : 0.01, askUser: choice === "askUser" ? 0.98 : 0.01 },
@@ -19,8 +20,8 @@ export async function setupDecisions(options: { primary?: GeneratedProviderOptio
     const configured = structuredClone(sdk.settings.get()!.values);
     configured.decisions = { ...configured.decisions, enabled: true, modelId: model.id, outputTokens: 256 };
     await sdk.settings.update(configured, sdk.settings.get()!.revision);
-    // Transport/delegation fixtures explicitly retain bounded Max, not new automatic approvals.
-    await sdk.sessions.configure(f.sessionId, { ...f.session().controls, autonomy: "Autopilot Max", automaticApprovals: false });
+    appendLegacyAutopilot(f.service, f.sessionId, "Autopilot Max");
+    await sdk.refresh();
     return { ...f, sdk, advice, decisionModelId: model.id, close: async () => { sdk.disconnect(); await f.close(); await advice.close(); } };
   } catch (error) { sdk.disconnect(); await f.close(); await advice.close(); throw error; }
 }

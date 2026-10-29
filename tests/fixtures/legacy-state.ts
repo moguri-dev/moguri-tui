@@ -66,11 +66,11 @@ export function removePost77FixtureMarkers(db: DatabaseSync, events: readonly St
   removeWorkspaceFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='theme_catalog_schema'");
 }
-export function appendLegacyAutopilot(service: Awaited<ReturnType<typeof startService>>, sessionId: string): void {
+export function appendLegacyAutopilot(service: Awaited<ReturnType<typeof startService>>, sessionId: string, autonomy: "Autopilot" | "Autopilot Max" = "Autopilot"): void {
   const session = service.controller.snapshot().sessions.find((value) => value.id === sessionId);
   if (!session || session.controls.automaticApprovals !== undefined) throw new Error("Generate an original bounded session; never strip actual automatic-approval consent.");
   service.store.commit([{ event_type: "session.configured", profile_id: service.controller.snapshot().profileId,
-    project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy: "Autopilot" } } }]);
+    project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy } } }]);
   service.controller.refreshProfile();
 }
 export function removePost44FixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
