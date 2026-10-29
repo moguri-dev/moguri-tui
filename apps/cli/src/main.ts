@@ -30,7 +30,7 @@ export async function main(argv: string[]): Promise<void> {
     "confirm-stage-and-test": { type: "boolean" },
     "confirm-git": { type: "boolean" },
     confirmations: { type: "string" }, registry: { type: "string" },
-    "capture-id": { type: "string" }, root: { type: "string" }, hold: { type: "boolean" },
+    "capture-id": { type: "string" }, root: { type: "string" }, hold: { type: "boolean" }, repository: { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
@@ -88,8 +88,8 @@ moguri sandbox preview PATHS.json --session ID
 moguri sandbox prepare PATHS.json --session ID --digest SHA --revision N --confirm-review
 moguri sandbox execution|result|stop RUN_ID
 moguri sandbox reconcile RUN_ID --confirm-review  Original signed guest only, no replay
-moguri sandbox publish-preview RUN_ID PATHS.json
-moguri sandbox publish RUN_ID PATHS.json --digest SHA --revision N --confirm-write
+moguri sandbox publish-preview RUN_ID PATHS.json [--repository CAPTURED_ID]
+moguri sandbox publish RUN_ID PATHS.json --digest SHA --revision N --confirm-write [--repository CAPTURED_ID]
 moguri sandbox publication|publication-stop|publication-wait PUBLICATION_ID
 moguri worker --stdio              Installed versioned SSH worker bridge
 moguri workspace list PROJECT_ID
@@ -637,9 +637,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "result" && args.length === 1) output(await sdk.sandbox.result(args[0]!));
       else if (action === "stop" && args.length === 1) output(await sdk.sandbox.stop(args[0]!));
       else if (action === "reconcile" && args.length === 1 && values["confirm-review"]) { await sdk.sandbox.reconcile(args[0]!); output(await sdk.sandbox.execution(args[0]!)); }
-      else if (action === "publish-preview" && args.length === 2) output(await sdk.sandbox.publicationPreview(args[0]!, await paths(args[1]!)));
+      else if (action === "publish-preview" && args.length === 2) output(await sdk.sandbox.publicationPreview(args[0]!, await paths(args[1]!), values.repository));
       else if (action === "publish" && args.length === 2 && values.digest && values["confirm-write"]) {
-        const created = await sdk.sandbox.publish(args[0]!, await paths(args[1]!), values.digest, expectedRevision());
+        const created = await sdk.sandbox.publish(args[0]!, await paths(args[1]!), values.digest, expectedRevision(), values.repository);
         const record = (await sdk.sandbox.publication(created.id!)).publication;
         await waitForJob(record.jobId, () => sdk.jobs.cancel(record.jobId), "Native source publication", () => sdk.sandbox.publication(record.id));
       } else if (action === "publication" && args.length === 1) output(await sdk.sandbox.publication(args[0]!));

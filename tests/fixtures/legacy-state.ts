@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import type { startService } from "../../apps/service/src/server.ts";
-import { PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
+import { hasCombinedWorkspaceHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
 import { randomUUID } from "node:crypto";
 import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
@@ -21,20 +21,15 @@ export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
 }
 export function assertPreWorkspaceHistory(events: readonly StoredEvent[]): void {
-  const grouped = new Set<string>();
+  if (hasCombinedWorkspaceHistory(events)) throw new Error("Generate genuine pre-workspace-interaction history; actual combined80 queue/native runtime cannot become an older fixture.");
   for (const event of events) {
-    const owner = `${event.profile_id}/${event.session_id}`;
-    if (event.event_type === "session.created" && event.payload.repositories?.length) grouped.add(owner);
-    if (event.event_type.startsWith("slash.") || event.event_type === "project.folder_removed" ||
-      event.event_type === "draft.saved" && event.payload.source !== undefined ||
-      event.event_type === "project.folder_saved" && event.payload.folder.color !== undefined ||
-      (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && Object.hasOwn(event.payload.item, "command") ||
-      (event.event_type === "session.created" || event.event_type === "session.configured") && grouped.has(owner) && event.payload.controls.env === "Sandbox" ||
-      event.event_type === "sandbox.workspace_recorded" && Object.hasOwn(event.payload.workspace, "repositories") ||
-      event.event_type === "sandbox.execution_recorded" && Object.hasOwn(event.payload.execution, "repositories")) {
+    if (event.event_type === "project.folder_removed" || event.event_type === "project.folder_saved" && event.payload.folder.color !== undefined) {
       throw new Error("Generate genuine pre-workspace-interaction history; queued commands, group actions and grouped Sandbox authority cannot become older state.");
     }
   }
+}
+export function assertPreCombinedHistory(events: readonly StoredEvent[]): void {
+  if (hasCombinedWorkspaceHistory(events)) throw new Error("Generate genuine pre-combined80 history; actual queue/native runtime cannot become standalone79.");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);
