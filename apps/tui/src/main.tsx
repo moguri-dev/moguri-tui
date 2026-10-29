@@ -11,7 +11,7 @@ import { nativeActions } from "./native.ts";
 
 const { values } = parseArgs({ options: { project: { type: "string" }, profile: { type: "string" }, help: { type: "boolean" } } });
 if (values.help) {
-  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nEnter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter holds; Shift+Cmd/Ctrl+Enter sends now.\nCtrl+L Copilot login, Ctrl+O open project, Ctrl+M models, F8 profiles, Ctrl+K commands.\nThe desktop and TUI share the same private local service.");
+  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nEnter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter holds; Shift+Cmd/Ctrl+Enter sends now.\nClick Current session, Sessions, Work items or Code requests. Tab focuses navigation;\nLeft closes and Right opens the sidebar there, never while editing the prompt.\n/help lists commands; Tab or click completes without executing.\n/connect signs in, /open PATH opens a project, /models selects a model,\n/profiles switches profiles, /theme lists shared palettes, /quit saves and leaves.\nThe desktop and TUI share the same private local service.");
 } else {
   let client: MoguriSdk | undefined;
   try {
@@ -25,7 +25,7 @@ if (values.help) {
       const existing = client.getState().snapshot?.sessions.find((session) => session.projectId === project.id && session.status !== "archived");
       initialSessionId = existing?.id ?? (await client.command({ type: "session.create", projectId: project.id! })).id;
     }
-    const renderer = await createCliRenderer({ exitOnCtrlC: false });
+    const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true });
     createRoot(renderer).render(createElement(TuiApp, { client, initialSessionId, native: nativeActions }));
   } catch (error) {
     client?.disconnect();
