@@ -31,8 +31,32 @@ export function assertPreWorkspaceHistory(events: readonly StoredEvent[]): void 
 export function assertPreCombinedHistory(events: readonly StoredEvent[]): void {
   if (hasCombinedWorkspaceHistory(events)) throw new Error("Generate genuine pre-combined80 history; actual queue/native runtime cannot become standalone79.");
 }
+export function removeRecoveryFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "session.configured" && event.payload.autonomySelection ||
+    event.event_type === "workspace.saved" && event.payload.branchOperation ||
+    event.event_type === "tool.started" && ["git_read", "git_write"].includes(event.payload.call.name) ||
+    event.event_type === "github.operation_recorded" && (event.payload.operation.toolCallDigest ||
+      ["git.branch.create", "git.branch.rename", "git.switch", "git.revert", "git.commit", "git.stage", "git.unstage"].includes(event.payload.operation.kind)))) {
+    throw new Error("Generate genuine pre-recovery history; explicit autonomy and built-in Git intent cannot become older state.");
+  }
+  removeCommandToolFixtureMarkers(db, events);
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('session_request_recovery_schema','builtin_git_schema')");
+}
+export function removeCommandToolFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "session.resumed" && event.payload.continuation ||
+    event.event_type === "settings.updated" && event.payload.settings.toolPreferences !== undefined ||
+    (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && (event.payload.item.spawnPromptOrigin ||
+      event.payload.item.workflow && !["review", "security", "performance", "debug"].includes(event.payload.item.workflow.kind) ||
+      event.payload.item.command && ["impeccable", "continue", "orchestrate", "spawn", "spar", "critique", "roast-me", "tool-preferences"].includes(event.payload.item.command.name)) ||
+    event.event_type === "tool.requested" && event.payload.approval.call.directMcp ||
+    (event.event_type === "tool.started" || event.event_type === "tool.completed") && event.payload.call.directMcp)) {
+    throw new Error("Generate genuine pre-82 history; actual command/tool preferences cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('workflow_commands_schema','tool_preferences_schema')");
+}
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);
+  removeRecoveryFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('queued_slash_schema','project_folder_actions_schema','sandbox_multi_root_schema','theme_model_workspace_convergence_schema')");
 }
 export function assertPreThemeHistory(events: readonly StoredEvent[]): void {
@@ -55,11 +79,11 @@ export function removePost77FixtureMarkers(db: DatabaseSync, events: readonly St
   removeWorkspaceFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='theme_catalog_schema'");
 }
-export function appendLegacyAutopilot(service: Awaited<ReturnType<typeof startService>>, sessionId: string): void {
+export function appendLegacyAutopilot(service: Awaited<ReturnType<typeof startService>>, sessionId: string, autonomy: "Autopilot" | "Autopilot Max" = "Autopilot"): void {
   const session = service.controller.snapshot().sessions.find((value) => value.id === sessionId);
   if (!session || session.controls.automaticApprovals !== undefined) throw new Error("Generate an original bounded session; never strip actual automatic-approval consent.");
   service.store.commit([{ event_type: "session.configured", profile_id: service.controller.snapshot().profileId,
-    project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy: "Autopilot" } } }]);
+    project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy } } }]);
   service.controller.refreshProfile();
 }
 export function removePost44FixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {

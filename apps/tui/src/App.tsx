@@ -20,6 +20,21 @@ function terminalColors(appearance: Appearance, mode: ThemeMode) {
 const ThemeContext = React.createContext(terminalColors({ theme: "dark" }, "dark"));
 const NavigationContext = React.createContext(false);
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
+function TerminalAlert({ text, error, keyboard }: { text: string; error: boolean; keyboard: boolean }) {
+  const colors = React.useContext(ThemeContext), [dismissed, setDismissed] = useState(false);
+  useKeyboard((key) => {
+    if (!dismissed && keyboard && !key.defaultPrevented && key.name === "escape") {
+      key.preventDefault(); key.stopPropagation(); setDismissed(true);
+    }
+  });
+  if (dismissed) return null;
+  return <box flexDirection="row" flexShrink={0}>
+    <text id={error ? "tui-alert-error" : "tui-alert-info"} fg={error ? colors.error : colors.muted} flexGrow={1}>{safe(text)}</text>
+    <box id="tui-alert-dismiss" width={5} height={1} onMouseDown={(event) => {
+      if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); setDismissed(true);
+    }}><text fg={colors.muted}>[x]</text></box>
+  </box>;
+}
 async function waitForCommandFrame(renderer: ReturnType<typeof useRenderer>, signal: AbortSignal, applied: () => boolean): Promise<void> {
   const deadline = AbortSignal.timeout(10_000), owner = AbortSignal.any([signal, deadline]), originalFrame = renderer.frameId;
   for (;;) {
@@ -74,7 +89,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const sidebarVisible = sidebar ?? width >= 100, sidebarOnly = sidebarVisible && width < 80;
   const compact = width < 80 || height < 30;
   const activeTab: TuiTab = mode === "sessions" ? "sessions" : mode === "work-items" || mode === "issues" ? "work-items" : mode === "code-requests" ? "code-requests" : "session";
-  const [notice, setNotice] = useState("");
+  const [notice, storeNotice] = useState<{ id: number; text: string; error: boolean } | null>(null), noticeSequence = useRef(0);
+  const setNotice = React.useCallback((text: string, error = false) => storeNotice(text ? { id: ++noticeSequence.current, text, error } : null), []);
   const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
   const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
   const queuedContinue = useRef<{ context: CommandViewContext; pending: boolean; cancelling?: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
@@ -150,7 +166,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   }, [client, snapshot]);
   const perform = async (action: () => Promise<unknown>) => {
     setNotice("");
-    try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved."); }
+    try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "Operation failed. The draft is preserved.", true); }
   };
   const command = (command: Command) => perform(() => client.command(command));
   const requireNavigation = () => {
@@ -552,10 +568,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const handlers = Object.fromEntries(views.map((name) => [`client-view:${name}`, apply]));
     void client.commands.attach("tui", { ...handlers, panel: apply, session: apply, profile: apply, profiles: apply, copy: apply, export: apply, "artifact-editor": apply, "continue-work": apply, "github-view": apply },
       { canApply: (execution) => !closed && (commandUi.current?.canApply(execution) ?? false), onError: (error) => {
-        if (!closed) { settleContinuationCancellation(); setNotice(error.message); }
+        if (!closed) { settleContinuationCancellation(); setNotice(error.message, true); }
       } })
       .then((value) => { attached = value; if (closed) return value.dispose(); commandAttachment.current = value; })
-      .catch((error: unknown) => { if (!closed) setNotice(error instanceof Error ? error.message : "The actual terminal command client could not attach."); });
+      .catch((error: unknown) => { if (!closed) setNotice(error instanceof Error ? error.message : "The actual terminal command client could not attach.", true); });
     return () => {
       closed = true; if (commandAttachment.current === attached) commandAttachment.current = null;
       if (attached) void attached.dispose().catch((error: unknown) => console.error("Terminal command detach remains unconfirmed:", error instanceof Error ? error.message : "original client cleanup failed"));
@@ -582,7 +598,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       void client.commands.read(entry.id).then(({ result, item }) => {
         if (!owns()) return;
         if (result?.kind === "ok") setNotice(result.message);
-        if (entry.status !== "completed" && entry.diagnostic) setNotice(entry.diagnostic);
+        if (entry.status !== "completed" && entry.diagnostic) setNotice(entry.diagnostic, true);
         const text = result?.kind === "text" ? result.text : entry.diagnostic;
         if (text) setCommandResponses((values) => [...values, { id: entry.id, name: entry.name, text }].slice(-10));
         if (result?.kind === "text" && navigationEpoch.current === navigation && !navigationFocusRef.current && modeRef.current === "compose" && !editor?.getState().text && !editor?.getState().dirty) {
@@ -590,7 +606,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           else show(result.text);
         }
         submittedViews.current.delete(entry.queueItemId);
-      }).catch((error: unknown) => { if (owns()) setNotice(error instanceof Error ? error.message : "The original retained command result could not be read."); });
+      }).catch((error: unknown) => { if (owns()) setNotice(error instanceof Error ? error.message : "The original retained command result could not be read.", true); });
     }
   }, [client, selectedId, snapshot?.commandExecutions, responsePulse]);
   useKeyboard((key) => {
@@ -896,6 +912,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <ThemedSelect focused flexGrow={1} options={[
             { name: "System prompt: view, edit, restore", value: "prompt" },
             { name: "Appearance: shared color palettes", value: "appearance" },
+            { name: "Integration order: MCP via Gateway, MCP direct, REST, CLI", value: "tool-preferences" },
             { name: "All shared settings (JSON): dark theme, guardrails, memory, MCP, optional modes", value: "json" },
             { name: "Project settings (JSON): repo, folders, scripts, preview port, instructions and MCP", value: "project" },
             { name: "View effective committed system prompt", value: "preview" },
@@ -911,6 +928,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           ].map((option) => ({ ...option, description: "" }))} onSelect={(_, option) => { void perform(async () => {
             switch (option?.value) {
               case "appearance": setMode("themes"); break;
+              case "tool-preferences": if (!session) throw new Error("Choose a chat before using /tool-preferences to review or rank this profile's integration methods."); await slashResult(await client.slash(session.id, "/tool-preferences", "tui")); break;
               case "prompt": openSettingsEditor(true); break;
               case "json": openSettingsEditor(false); break;
               case "project": await openProjectEditor(); break;
@@ -1047,6 +1065,11 @@ Existing shortcut aliases remain available for compatibility.
 /trace | /details | /reload-draft | /keep-draft
 /policy all | /policy protected
 /settings | /settings edit | /settings reset SECTION
+/tool-preferences [mcp-gateway mcp-direct rest cli|reset]
+/impeccable [PROMPT] | /continue (original task, no new prompt)
+/suggestions [all|session|run DIGEST|run-all DIGEST]
+/orchestrate PROMPT | /spawn PROMPT | /spar PROMPT
+/critique PROMPT | /roast-me PROMPT (read-only work critique)
 /project-settings [edit] | /project-sources | /porto
 /prompt | /prompt view | /prompt reset
 /memory index|graph|search TEXT|remember CONVENTION
@@ -1168,7 +1191,8 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <text fg={colors.muted} height={compact ? 1 : 2} wrapMode={compact ? "none" : "word"} truncate flexShrink={0}>{compact ? "Enter answers | Cmd/Ctrl+Enter holds" : "Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted."}</text>
         </box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
-        {notice || error ? <text fg={colors.error}>{safe(notice || error || "")}</text> : null}
+        {notice || error ? <TerminalAlert key={`${client.profileId}:${selectedId}:${notice?.id ?? error}`} text={notice?.text || error || ""}
+          error={notice?.error ?? Boolean(error)} keyboard={mode === "compose" && !navigationFocus && !sidebarOnly} /> : null}
         {snapshot?.jobs.filter((job) => job.status === "running" && (!job.sessionId || job.sessionId === session?.id)).slice(-2).map((job) => <text key={job.id} fg={colors.accent}>{safe(`${job.kind}: ${job.progress} (${job.id})`)}</text>)}
         {latestTranscript && <text fg={colors.accent}>Local transcript ready. F4 inserts it into the draft; it is never sent automatically.</text>}
         {mode === "compose" && session && editor && <TuiComposer key={session.id} editor={editor} session={session} focused={!navigationFocus && !sidebarOnly} compact={compact}

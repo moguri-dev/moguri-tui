@@ -48,6 +48,9 @@ repository-backed marketplace bundles. Imports/updates/rollbacks stay disabled;
 knowledge injection has a separate default-off consent. Nothing self-approves
 or starts a model merely because it was installed.
 
+**Local Git built-ins** cover status/history/diff, branch creation/switch/rename,
+exact staging, selected staged commits, history-preserving rollback and new-branch
+pushes through the same SDK and agent tools. [Usage and boundaries](docs/setup.md#reliable-session-controls-and-built-in-git).
 **GitHub workflows** expose exact-root reviewed main/force-with-lease pushes,
 rebases, tags, two-way issue/PR/review work, pinned CI watching, releases and
 exact-head PR merges. **Linear workflows** add team-scoped issue/project/comment
@@ -55,7 +58,7 @@ operations and explicit conflict-checked ticket pull/push. Both retain original
 intent/results without replaying ambiguous writes. Dependency caching extends
 to explicit private npm registries, npm/pnpm workspaces, Python, Rust/Cargo and
 Go; mutable installs remain private and executable builds are not implied.
-Desktop exposes the same APIs under Settings; shared `/github`, `/linear`,
+Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
 Whole-descendant containment can be required explicitly through **Guardrails /
@@ -141,14 +144,21 @@ existing approvals and per-command PTY lifecycle, not shared shell state.
 compact recoverable results, deterministic file/data/document operations and
 browser-free search. Root-bound main/child messaging and orchestration preserve
 read-only side chats, actual actors, approvals and aggregate budgets. Shared
-workflows are `/review`, `/security`, `/performance` and `/debug`.
+workflows include `/review`, `/security`, `/performance`, `/debug` and the
+[new design, continuation, child-session and critique commands](docs/architecture/command-tool-preferences.md).
+Rank equivalent integrations in Settings: Gateway MCP, direct MCP, REST, then
+CLI by default. Direct schemas keep the same exact MCP execution approvals.
 
 The [workspace experience](docs/architecture/workspace-experience.md) adds
 chart-first **My work, Usage, Cost and Velocity** dashboard pages and a
 profile-private **skill gateway** for local folders and refreshed remote
 archives. Settings use compact information/copy controls and contain Artifacts,
-Candidates and unified Sandbox management. Suggestions starts globally with
-local usage-gap checks; model generation still requires exact source review.
+Candidates and unified Sandbox management. Suggestions offers global local
+usage-gap checks; `/suggestions` defaults to the current project's scope.
+Model generation still requires exact source review.
+Alerts have a dismissible X without clearing the underlying work or draft.
+Read-only Kanban sync retains its exact source across presentation updates;
+see the [alert and observation contract](docs/architecture/alerts-kanban-sync.md).
 Automations remain unimplemented. Work item links the project's Kanban cards or
 GitHub issues; session PRs open in Code change. Copilot connection status stays in Settings,
 not the left sidebar.

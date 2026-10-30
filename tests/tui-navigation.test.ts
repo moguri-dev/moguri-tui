@@ -226,6 +226,25 @@ test("batched keyboard navigation cannot submit a configured session's existing 
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
+test("native terminal notices are informational and dismiss by X or Escape without consuming the draft", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk }))); await frameUntil(setup, "Write a prompt");
+    await setup.mockInput.typeText("Generated unchanged notice draft.");
+    await waitFor(() => fixture.session().draft.text === "Generated unchanged notice draft.");
+    setup.mockInput.pressKey("F6"); await frameUntil(setup, "No actual pending question");
+    assert.ok(setup.renderer.root.findDescendantById("tui-alert-info"));
+    await click(setup, "tui-alert-dismiss"); await setup.flush();
+    assert.equal(setup.captureCharFrame().includes("No actual pending question"), false);
+    setup.mockInput.pressKey("F6"); await frameUntil(setup, "No actual pending question");
+    setup.mockInput.pressEscape(); await waitFor(() => !setup.renderer.root.findDescendantById("tui-alert-info")); await setup.flush();
+    assert.equal(setup.captureCharFrame().includes("No actual pending question"), false);
+    assert.equal(fixture.session().draft.text, "Generated unchanged notice draft.");
+    assert.equal(fixture.session().turnId, null); assert.equal(fixture.requests.length, 0);
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
+});
+
 test("native terminal slash actions use the shared ordered queue and actual rendered-view acknowledgement", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   await fixture.configure();
