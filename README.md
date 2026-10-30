@@ -44,6 +44,10 @@ session/settings search and compact settings controls share the
 The [Dashboard](docs/setup.md#workspace-experience-and-skill-gateway) follows
 active sessions and opens their exact conversations. Project settings select
 registered projects; project-group menus fold only their member folders.
+Built-in work-item views remove hidden Markdown comments.
+[Repository-script review](docs/architecture/content-review.md) delivers the
+full exact source to the agent before execution approval; unsafe findings need
+separate actual-user force and never lift hard policy.
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable

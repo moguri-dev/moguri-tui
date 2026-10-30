@@ -1164,14 +1164,16 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <text fg={colors.attention} height={1} wrapMode="none" truncate><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
           {mode === "approval-choices" ? <ThemedSelect focused flexGrow={1} options={[
             { name: "Approve only this action", description: "No remembered grant.", value: "once" },
+            ...(session.pendingApproval.call.name === "run_script" ? [] : [
             { name: "Approve for this session", description: "Same exact command/arguments or MCP tool.", value: "session:exact" },
             ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: "Approve for this project", description: "All sessions of the selected repository, current environment.", value: "project:exact" }] : []),
             { name: "Always approve across this profile", description: "Same exact command/arguments or schema-bound MCP tool.", value: "global:exact" },
-            ...(!["run_command", "command_job", "debug", "mcp_gateway"].includes(session.pendingApproval.call.name) ? [
+            ...(!["run_command", "run_script", "command_job", "debug", "mcp_gateway"].includes(session.pendingApproval.call.name) ? [
               { name: `Always approve ${session.pendingApproval.call.name} for this session`, description: "New arguments, same actual session and environment.", value: "session:tool" },
               ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: `Always approve ${session.pendingApproval.call.name} for this project`, description: "New arguments in the selected repository; hard restrictions still apply.", value: "project:tool" }] : []),
               { name: `Always approve ${session.pendingApproval.call.name} globally`, description: "Current profile and environment; not a command or MCP wildcard.", value: "global:tool" },
             ] : []),
+            ]),
             ...((session.pendingApproval.call.name === "run_command" || session.pendingApproval.call.name === "command_job" && session.pendingApproval.call.arguments.action === "start") &&
               typeof session.pendingApproval.call.arguments.command === "string" && commandFamily(session.pendingApproval.call.arguments.command) ? [
                 ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} for this project`, description: "Any simple command arguments in this repository; compound expressions still ask.", value: "project:family" }] : []),
@@ -1182,7 +1184,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             const [scope, match] = String(option.value).split(":");
             void perform(async () => { await client.approvals.respond(session.id, session.pendingApproval!.id, true, scope === "once" ? undefined : parse(RememberApprovalSchema, { scope, match })); setMode("compose"); });
           }} /> : <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>}
-          <text fg={colors.attention} height={compact ? 2 : undefined}>{session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}{compact ? "\nCtrl+Y approve | Ctrl+D deny | Ctrl+V args" : "/approve once | Ctrl+D deny | Ctrl+V args | Ctrl+Y approve"}</text>
+          <text fg={colors.attention} height={compact ? 2 : undefined}>{session.pendingApproval.call.name === "run_script" ? "Exact reviewed bytes, unsandboxed Local. Agent advice is not permission. " : session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}{compact ? "\nCtrl+Y approve | Ctrl+D deny | Ctrl+V args" : "/approve once | Ctrl+D deny | Ctrl+V args | Ctrl+Y approve"}</text>
         </box>}
         {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1} height={compact ? 6 : recommendation ? 11 : 9} flexShrink={0}>
           <text fg={colors.attention} height={1} wrapMode="none" truncate flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text>
