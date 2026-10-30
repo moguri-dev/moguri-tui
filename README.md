@@ -156,6 +156,9 @@ archives. Settings use compact information/copy controls and contain Artifacts,
 Candidates and unified Sandbox management. Suggestions offers global local
 usage-gap checks; `/suggestions` defaults to the current project's scope.
 Model generation still requires exact source review.
+Alerts have a dismissible X without clearing the underlying work or draft.
+Read-only Kanban sync retains its exact source across presentation updates;
+see the [alert and observation contract](docs/architecture/alerts-kanban-sync.md).
 Automations remain unimplemented. Work item links the project's Kanban cards or
 GitHub issues; session PRs open in Code change. Copilot connection status stays in Settings,
 not the left sidebar.
