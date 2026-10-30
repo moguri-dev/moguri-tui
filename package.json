@@ -84,7 +84,8 @@
     "docs/architecture/themes-and-tui.md",
     "docs/architecture/workspace-experience.md",
     "docs/architecture/cli-launcher.md",
-    "docs/architecture/lean-tooling.md"
+    "docs/architecture/lean-tooling.md",
+    "docs/architecture/file-access.md"
   ],
   "engines": {
     "node": ">=26.4.0 <27"
