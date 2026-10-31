@@ -43,6 +43,7 @@ export function removeRecoveryFixtureMarkers(db: DatabaseSync, events: readonly 
   db.exec("DELETE FROM retention_metadata WHERE id IN ('session_request_recovery_schema','builtin_git_schema')");
 }
 export function removeCommandToolFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeContentReviewFixtureMarkers(db, events);
   if (events.some((event) => event.event_type === "session.resumed" && event.payload.continuation ||
     event.event_type === "settings.updated" && event.payload.settings.toolPreferences !== undefined ||
     (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && (event.payload.item.spawnPromptOrigin ||
@@ -53,6 +54,15 @@ export function removeCommandToolFixtureMarkers(db: DatabaseSync, events: readon
     throw new Error("Generate genuine pre-82 history; actual command/tool preferences cannot become older state.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('workflow_commands_schema','tool_preferences_schema')");
+}
+export function removeContentReviewFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "script.review_recorded" ||
+    (event.event_type === "tool.requested" ? event.payload.approval.call : event.event_type === "tool.started" || event.event_type === "tool.completed" ? event.payload.call : null)?.name === "review_script" ||
+    (event.event_type === "tool.requested" ? event.payload.approval.call : event.event_type === "tool.started" || event.event_type === "tool.completed" ? event.payload.call : null)?.name === "run_script" ||
+    (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && event.payload.item.command?.name === "script-review")) {
+    throw new Error("Generate genuine pre-83 history; actual source/review/force intent cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('work_item_comments_schema','repository_script_review_schema')");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);

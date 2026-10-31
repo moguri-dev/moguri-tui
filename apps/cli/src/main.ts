@@ -50,6 +50,8 @@ moguri firewall [list|add session|project|global HOST_ORIGIN|remove ID] --sessio
 moguri home [status] --session ID  Captured Home and independently retained original writers
 moguri home acknowledge WRITER REV confirm-inspected --session ID  Actual-user risk acknowledgement, never cleanup proof
 moguri tool NAME SCHEMA_SHA ARGUMENTS_JSON --session ID  Exact approved Local job
+moguri script-review list|read ID --session ID  Original complete script source and agent advice
+moguri script-review force ID REVIEW_REV SHA SESSION_REV confirm-unsafe --session ID  User force; normal execution approval still applies
 moguri tool-result STEP CALL [OFFSET] --session ID  Original retained source
 moguri state SELECT_SQL --session ID  Canonical todo/memory views
 moguri watch read JOB [OFFSET] --session ID  Real logs, outcome and observed statistics
@@ -460,6 +462,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (values.digest || values["confirm-review"]) throw new Error("Use both --digest SHA256 and --confirm-review after inspecting the source snapshot.");
         else output(action === "folder" ? await sdk.attachments.folderPreview(values.session, args[0]) : action === "github" ? await sdk.attachments.githubPreview(values.session, args[0]) : await sdk.attachments.sessionPreview(values.session, args[0]));
       } else throw new Error("Use context file/image/document/document-read/document-search/original/cancel/folder/github/session/read. No source is attached implicitly.");
+    } else if (group === "script-review") {
+      if (!values.session) throw new Error("Choose --session ID for the exact original script owner.");
+      const result = await sdk.slash(values.session, `/script-review ${[action ?? "list", ...args].join(" ")}`, "cli");
+      output(result.kind === "text" ? JSON.parse(result.text) : result);
     } else if (group === "question") {
       if (action === "list") output(snapshot.questions.filter((question) => !values.session || question.sessionId === values.session));
       else if (action === "read" && args[0]) { const question = snapshot.questions.find((question) => question.id === args[0]); if (!question) throw new Error("Choose an actual question ID from this profile."); output(question); }
