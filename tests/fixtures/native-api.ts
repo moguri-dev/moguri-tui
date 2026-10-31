@@ -9,7 +9,7 @@ import { GeneratedFileVault } from "./generated-vault.ts";
 import type { SandboxDns } from "../../apps/service/src/sandbox-network.ts";
 import type { IntakeClock } from "../../apps/service/src/session-intake.ts";
 
-export async function nativeApiFixture(configuration: SandboxConfiguration, options: { providerBaseUrl?: string; dns?: SandboxDns; distribution?: string; group?: boolean; intakeClock?: IntakeClock; scenario?: "decisions" } = {}) {
+export async function nativeApiFixture(configuration: SandboxConfiguration, options: { providerBaseUrl?: string; dns?: SandboxDns; distribution?: string; group?: boolean; intakeClock?: IntakeClock; scenario?: "decisions" | "finishing" } = {}) {
   assert.ok(configuration.qualification);
   await mkdir(".native/qualification", { recursive: true, mode: 0o700 });
   const root = await realpath(await mkdtemp(".native/qualification/native-service-")), state = join(root, "state"), project = join(root, "project");
