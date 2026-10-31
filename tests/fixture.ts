@@ -11,7 +11,7 @@ import { runProgram } from "../apps/service/src/program.ts";
 import type { TaskProgressInput } from "../packages/protocol/src/progress.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
 import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
-import { supportedThinking } from "../apps/service/src/model-controls.ts";
+import { kupoThinkingMinimumOutput, qualifiedKupoThinking, supportedThinking } from "../apps/service/src/model-controls.ts";
 import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
 import type { MoguriSdk } from "../packages/sdk/src/index.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
@@ -44,6 +44,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
 export interface GeneratedProviderOptions {
+  httpFailure?: { status: number; message: string; remaining?: number; afterRequests?: number };
   modelId?: string;
   respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> }; hold?: boolean };
   issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
@@ -51,6 +52,7 @@ export interface GeneratedProviderOptions {
   stateSqlStatements?: { sql: string; parameters?: (string | number | boolean | null)[] }[];
   coordinationChildId?: string;
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
+  thinkingLevelMap?: PreparedModel["model"]["thinkingLevelMap"];
   reasoningText?: string;
   toolCall?: { name: string; args: Record<string, unknown> };
   toolCalls?: { name: string; args: Record<string, unknown> }[];
@@ -87,6 +89,12 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
       const userIndex = messages.findLastIndex((message) => message.role === "user");
       const prompt = String(messages[userIndex]?.content ?? "");
       const toolMessages = messages.slice(userIndex + 1).filter((message) => message.role === "tool");
+      if (options.httpFailure && (options.httpFailure.remaining ?? Infinity) > 0 && requests.length > (options.httpFailure.afterRequests ?? 0)) {
+        if (options.httpFailure.remaining !== undefined) options.httpFailure.remaining--;
+        response.writeHead(options.httpFailure.status, { "Content-Type": "application/json" }).end(JSON.stringify({
+          error: { message: `${options.httpFailure.status} ${options.httpFailure.message}`, type: "generated_upstream_error" },
+        })); return;
+      }
       if (prompt.includes("generated provider failure")) { response.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ error: { message: "Generated unavailable provider", type: "authentication_error" } })); return; }
       response.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
       const chunk = (delta: unknown, finish_reason: string | null = null) => response.write(`data: ${JSON.stringify({
@@ -207,8 +215,8 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture bind failed.");
-  const model = { ...base, id: apiModelId, ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}), ...(options.supportedContextWindows ? { supportedContextWindows: options.supportedContextWindows } : {}), ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
-  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, ...(model.supportedContextWindows ? { supportedContextWindows: model.supportedContextWindows } : {}), maxTokens: model.maxTokens, imageInput: options.imageInput ?? false, ...(options.toolInput !== undefined ? { toolInput: options.toolInput } : {}), thinkingLevels: supportedThinking(model) }];
+  const model = { ...base, id: apiModelId, ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}), ...(options.supportedContextWindows ? { supportedContextWindows: options.supportedContextWindows } : {}), ...(options.maxOutputTokens ? { maxTokens: options.maxOutputTokens } : {}), ...(options.imageInput ? { input: ["text", "image"] as ("text" | "image")[] } : {}), ...(options.reasoning ? { reasoning: true, compat: { ...base.compat, supportsReasoningEffort: true } } : {}), ...(options.thinkingLevelMap ? { thinkingLevelMap: options.thinkingLevelMap } : {}), name: "Generated Copilot model", baseUrl: `http://127.0.0.1:${address.port}` };
+  const catalog = [{ id: model.id, name: model.name, contextWindow: model.contextWindow, ...(model.supportedContextWindows ? { supportedContextWindows: model.supportedContextWindows } : {}), maxTokens: model.maxTokens, imageInput: options.imageInput ?? false, ...(options.toolInput !== undefined ? { toolInput: options.toolInput } : {}), thinkingLevels: supportedThinking(model), kupoThinkingLevels: qualifiedKupoThinking(model), kupoThinkingMinimumOutput: kupoThinkingMinimumOutput(model) }];
   class FixtureProvider implements ProviderAdapter {
     state: ProviderState = { status: "connected", models: catalog, login: null, diagnostic: null };
     onChange = () => {};

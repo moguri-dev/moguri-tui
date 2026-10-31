@@ -5,6 +5,7 @@ export const tuiTabs = [
   { id: "sessions", label: "Sessions", command: "/sessions" },
   { id: "work-items", label: "Work items", command: "/work-items" },
   { id: "code-requests", label: "Code requests", command: "/code-requests" },
+  { id: "automations", label: "Automations", command: "F9" },
 ] as const;
 export type TuiTab = typeof tuiTabs[number]["id"];
 interface TuiCommand { name: string; description: string; argument?: string }

@@ -38,6 +38,7 @@
     "docs/architecture/decision-primitives.md",
     "docs/architecture/routing.md",
     "docs/architecture/automatic-kupo.md",
+    "docs/architecture/recovery-scheduling-kupo.md",
     "docs/architecture/execution-transports.md",
     "docs/architecture/managed-sandbox.md",
     "docs/architecture/sendbox-0.2.4-qualification.md",
@@ -126,7 +127,6 @@
     "@types/node": "26.6.5",
     "@types/ws": "8.18.2",
     "ajv": "8.20.0",
-    "cacache": "21.0.1",
     "cheerio": "1.2.0",
     "docx": "9.14.0",
     "fflate": "0.8.3",
@@ -158,6 +158,7 @@
     "yauzl": "3.4.0"
   },
   "devDependencies": {
+    "cacache": "21.0.1",
     "@electron/packager": "20.3.0",
     "@playwright/test": "1.64.1",
     "@resvg/resvg-js": "2.6.2",
@@ -177,6 +178,8 @@
   },
   "main": "dist/desktop/main.mjs",
   "overrides": {
+    "glob": "14.0.3",
+    "minimatch": "11.0.3",
     "encoding-sniffer": "1.0.2",
     "node-fetch": "npm:node-fetch-native@1.6.7"
   },

@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { prepareSpeech } from "./prepare-speech.mjs";
 import { buildIcons } from "./build-icons.mjs";
 import { bundledCliLauncher } from "../apps/desktop/src/cli-installation.ts";
+import { buildCache, cacheImports } from "./build-cache.mjs";
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist/desktop", { recursive: true });
@@ -14,14 +15,15 @@ const speech = await prepareSpeech();
 await cp(new URL("../.native/speech", import.meta.url), "dist/native/speech", { recursive: true });
 const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
 const define = { __MOGURI_BUILD_VERSION__: JSON.stringify(version) };
-const nodeBuild = { bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", define };
+await buildCache();
+const nodeBuild = { bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", define, plugins: [cacheImports] };
 await Promise.all([
   build({ ...nodeBuild, entryPoints: ["apps/service/src/main.ts"], outfile: "dist/service.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/update-installer.ts"], outfile: "dist/update-installer.mjs", packages: "bundle" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/bundle-tree.ts"], outfile: "dist/update-tools.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/sandbox-distribution.ts"], outfile: "dist/sandbox-tools.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/server.ts"], outfile: "dist/runtime.mjs" }),
-  build({ entryPoints: ["apps/service/src/worker.ts"], outfile: "dist/worker.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external" }),
+  build({ entryPoints: ["apps/service/src/worker.ts"], outfile: "dist/worker.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", plugins: [cacheImports] }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/mcp-worker.ts"], outfile: "dist/mcp-worker.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/remote-bridge.ts"], outfile: "dist/remote-bridge.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/terminal-broker.ts"], outfile: "dist/terminal-broker.mjs" }),
