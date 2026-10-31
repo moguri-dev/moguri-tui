@@ -90,7 +90,16 @@ export function removeIntakeFixtureMarkers(db: DatabaseSync, events: readonly St
     event.event_type === "global.controls_changed" && event.payload.values.kupoMode !== undefined)) {
     throw new Error("Generate genuine pre-84 history; original scheduling/recovery/mode intent cannot become older state.");
   }
+  removeOwnedTransportFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('model_failure_recovery_schema','scheduled_prompts_schema','kupo_modes_schema')");
+}
+export function removeOwnedTransportFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "sandbox.workspace_recorded" && event.payload.workspace.preparation?.version === 2 ||
+    event.event_type === "decision.recorded" && Object.hasOwn(event.payload.decision, "transport") ||
+    event.event_type === "winddown.recorded" && Object.hasOwn(event.payload.winddown, "transport"))) {
+    throw new Error("Generate genuine pre-85 history; scheduled native/owned model/finishing intent cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('scheduled_native_preparation_schema','owned_model_transport_schema','transport_finishing_schema')");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);

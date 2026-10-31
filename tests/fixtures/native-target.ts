@@ -18,8 +18,9 @@ export async function nativeConfiguration(preserveReviewedNetwork = false): Prom
       resources: { cpus: 2, memoryMb: 2048, diskMb: 2048 } },
   });
 }
-export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false): Promise<string[]> {
-  const source = `globalThis.MOGURI_GENERATED_NATIVE_MODEL=${JSON.stringify(modelId)};globalThis.MOGURI_GENERATED_NATIVE_BASE=${JSON.stringify(baseUrl)};\n${await readFile(new URL(group ? "./native-group-provider.mjs" : "./native-provider.mjs", import.meta.url), "utf8")}`;
+export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions"): Promise<string[]> {
+  const source = `globalThis.MOGURI_GENERATED_NATIVE_MODEL=${JSON.stringify(modelId)};globalThis.MOGURI_GENERATED_NATIVE_BASE=${JSON.stringify(baseUrl)};\n${await readFile(new URL(scenario === "decisions" ? "./native-decisions-provider.mjs" :
+    group ? "./native-group-provider.mjs" : "./native-provider.mjs", import.meta.url), "utf8")}`;
   const { code } = await transform(source, { minify: true, format: "esm", target: "node26" });
   const preload = `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
   if (preload.length > 4096) throw new MoguriError("native_fixture", "The generated no-network provider exceeded the existing reviewed argv boundary.");
