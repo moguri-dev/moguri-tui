@@ -56,6 +56,8 @@ share the same service and SDK. Transient model failures use current-profile
 The primary button retries the original eligible failure without sending a new
 draft. Idle scheduling offers local-time controls, unsent ghost prompts and an
 Automations / Scheduled prompts group, with one-at-most queue admission.
+Local and SSH continuation are qualified. A rolled-back native workspace keeps
+its explicit inspection/preparation gate instead of automatic root substitution.
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
@@ -106,6 +108,8 @@ Critique retain original role results, and explicit opt-in text compaction
 preserves readable history and source provenance. Finite automatic Local work
 uses complete all-role holds plus the existing reserved checkpoint. Unqualified
 System One and Remote/native wind-down paths stay visibly unavailable.
+Prepared SendBox 0.2.4 workspaces qualify Balanced Single, scheduling and Stop;
+native retry after rollback remains blocked.
 
 **Settings / Models / Providers** can disable providers or unwanted models per
 profile. Matching upstream model IDs share one explicit provider choice, without

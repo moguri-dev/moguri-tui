@@ -53,7 +53,7 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
     options.replyText = JSON.stringify({ pattern: "single", modelId: model.id, confidence: 0.95, reason: "Generated classifier advice, never user instructions or permissions." });
     if (configuration.configured !== false) await sdk.settings.update(configured, sdk.settings.get()!.revision);
     return { ...fixture, sdk, solver, options, solverOptions, solverId: model.id, workspace,
-      select: () => configuration.legacy !== false ? appendLegacyKupoSelection(sdk, fixture.service.controller, fixture.sessionId, remote ? "Remote" : "Local") :
+      select: () => configuration.legacy !== false && sdk.settings.get()?.values.kupo.workflow !== "single" ? appendLegacyKupoSelection(sdk, fixture.service.controller, fixture.sessionId, remote ? "Remote" : "Local") :
         sdk.sessions.configure(fixture.sessionId, { ...fixture.session().controls, env: remote ? "Remote" : "Local", modelId: KUPO_MODEL_ID }, undefined, false),
       close };
   } catch (error) { try { await close(); } catch (cleanup) { throw new AggregateError([error, cleanup], "Generated routed fixture setup and cleanup failed."); } throw error; }
