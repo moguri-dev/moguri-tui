@@ -9,7 +9,8 @@ import { GeneratedFileVault } from "./generated-vault.ts";
 import type { SandboxDns } from "../../apps/service/src/sandbox-network.ts";
 import type { IntakeClock } from "../../apps/service/src/session-intake.ts";
 
-export async function nativeApiFixture(configuration: SandboxConfiguration, options: { providerBaseUrl?: string; dns?: SandboxDns; distribution?: string; group?: boolean; intakeClock?: IntakeClock; scenario?: "decisions" | "finishing" } = {}) {
+export async function nativeApiFixture(configuration: SandboxConfiguration, options: { providerBaseUrl?: string; dns?: SandboxDns; distribution?: string; group?: boolean; intakeClock?: IntakeClock;
+  scenario?: "decisions" | "finishing" | "steering"; behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" } = {}) {
   assert.ok(configuration.qualification);
   await mkdir(".native/qualification", { recursive: true, mode: 0o700 });
   const root = await realpath(await mkdtemp(".native/qualification/native-service-")), state = join(root, "state"), project = join(root, "project");
@@ -23,7 +24,7 @@ export async function nativeApiFixture(configuration: SandboxConfiguration, opti
     return { ...value, model: { ...value.model, baseUrl }, auth: { ...value.auth, baseUrl } };
   };
   const service = await startService({ stateDir: state, provider: provider.provider, retentionKey: GENERATED_RETENTION_KEY,
-    platform: { vault, intakeClock: options.intakeClock, sandbox: { vault, command: await nativeFixtureCommand(provider.modelId, baseUrl, options.group, options.scenario),
+    platform: { vault, intakeClock: options.intakeClock, sandbox: { vault, command: await nativeFixtureCommand(provider.modelId, baseUrl, options.group, options.scenario, options.behavior),
       dns: options.dns, distribution: options.distribution, setup: { automatic: false } } } });
   const sdk = await new MoguriSdk(service.connection).ready();
   const reviewedConfiguration: SandboxConfiguration = { ...configuration,

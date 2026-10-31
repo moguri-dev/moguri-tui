@@ -105,11 +105,13 @@ thinking effort. It selects actual supported effort and maximum context within
 the selected boundary; Savings/Performance require reviewed evaluation and
 reference-price profiles, never guessed frontier classes. Bounded Cascade and
 Critique retain original role results, and explicit opt-in text compaction
-preserves readable history and source provenance. Finite automatic Local work
-uses complete all-role holds plus the existing reserved checkpoint. Unqualified
-System One and Remote/native wind-down paths stay visibly unavailable.
-Prepared SendBox 0.2.4 workspaces qualify Balanced Single, scheduling and Stop;
-native retry after rollback remains blocked.
+preserves readable history and source provenance. Finite automatic work uses
+complete all-role holds and selected-boundary finishing. The
+[owned transport contract](docs/architecture/owned-model-transports.md) keeps
+SSH/native bounded decisions and metadata finishing on their original parent;
+neither approves code or Local Git. Managed native scheduling can prepare its
+source without a model turn. Jev/System One, automatic native retry after
+rollback and Remote/native accepted-work Git integration remain explicit gates.
 
 **Settings / Models / Providers** can disable providers or unwanted models per
 profile. Matching upstream model IDs share one explicit provider choice, without

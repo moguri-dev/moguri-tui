@@ -1041,7 +1041,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               void perform(async () => { try { await client.sessions.kupoMode(session.id, mode.id, session.revision); setMode("compose"); }
                 finally { kupoPending.current = false; setKupoSaving(false); } });
             }} />}
-          <text fg={colors.muted} height={3}>Autonomous compaction, finite automatic wind-down and missing System One transports stay unavailable. /kupo inspects the exact policy; Esc returns without changing it.</text>
+          <text fg={colors.muted} height={3}>Automatic text compaction is opt-in. Finite roles require a qualified selected-Env finishing hold. Jev/System One stays unavailable. /kupo inspects exact policy; Esc returns without changing it.</text>
         </box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
           {availableModels.length ? <ThemedSelect focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
@@ -1162,13 +1162,15 @@ by its exact /sandbox enable command. Managed workspaces and selected-provider
 DNS aliases are automatic; /sandbox updates never changes the selected version.
 Advanced exact-file staging remains optional. Source publication is separate
 actual-user acceptance. /compound owns reviewed Local Cascade/Critique
-and separately approved project tests. /winddown reviews reserved Local finishing
-and separate accepted-work Git checkpoints. Local Max needs an explicitly
+and separately approved project tests. /winddown inspects reserved finishing at
+its actual Local/SSH/native boundary; accepted-work Git remains separately Local.
+Max technical/steering advice needs an explicitly
 configured bounded decision provider; /decisions status/set/read exposes only
 shared policy and actual evidence, never a fake user answer or new permission.
-Jev and Remote/native Max remain unqualified.
+SSH/native advice stays inside the original parent, not a Local fallback. Jev is unqualified.
 Kupo is always listed. Select /model kupo to use configured eligible models.
-/kupo status shows capability categories and policy. Finite automatic caps stay blocked;
+/kupo status shows capability categories and policy. Finite automatic caps need
+complete all-role reservations and qualified selected-Env finishing;
 legacy Single and reviewed worktree workflows need explicit reserved
 wind-down; images and model tuning remain blocked for Single. Guided needs a human.
 Selecting Autopilot/Max enables automatic tool approvals, never hard-policy overrides.

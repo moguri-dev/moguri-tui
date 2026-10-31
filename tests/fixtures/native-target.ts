@@ -18,8 +18,9 @@ export async function nativeConfiguration(preserveReviewedNetwork = false): Prom
       resources: { cpus: 2, memoryMb: 2048, diskMb: 2048 } },
   });
 }
-export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing"): Promise<string[]> {
-  const source = `globalThis.MOGURI_GENERATED_NATIVE_MODEL=${JSON.stringify(modelId)};globalThis.MOGURI_GENERATED_NATIVE_BASE=${JSON.stringify(baseUrl)};${scenario ? `globalThis.MOGURI_GENERATED_NATIVE_SCENARIO=${JSON.stringify(scenario)};` : ""}\n${await readFile(new URL(scenario ? "./native-decisions-provider.mjs" :
+export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing" | "steering",
+  behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint"): Promise<string[]> {
+  const source = `globalThis.MOGURI_GENERATED_NATIVE_MODEL=${JSON.stringify(modelId)};globalThis.MOGURI_GENERATED_NATIVE_BASE=${JSON.stringify(baseUrl)};${scenario ? `globalThis.MOGURI_GENERATED_NATIVE_SCENARIO=${JSON.stringify(scenario)};` : ""}${behavior ? `globalThis.MOGURI_GENERATED_NATIVE_BEHAVIOR=${JSON.stringify(behavior)};` : ""}\n${await readFile(new URL(scenario ? "./native-decisions-provider.mjs" :
     group ? "./native-group-provider.mjs" : "./native-provider.mjs", import.meta.url), "utf8")}`;
   const { code } = await transform(source, { minify: true, format: "esm", target: "node26" });
   const preload = `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
