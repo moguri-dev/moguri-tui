@@ -13,9 +13,10 @@ file operations with script/unlisted-website approvals, persistent drafts and qu
 Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 
-The TUI uses Enter to send and Shift+Enter for newlines; Cmd/Ctrl+Enter still
-holds. Its original JRPG-style menus have clickable Current session, Sessions,
-Work items and Code requests tabs, a focus-safe arrow-controlled sidebar and
+The TUI uses Enter to send and Shift+Enter for newlines; Cmd/Ctrl+Enter holds
+active-turn prompts or opens scheduling when idle. Its original JRPG-style
+menus have clickable Current session, Sessions, Work items, Code requests and
+Automations tabs, a focus-safe arrow-controlled sidebar and
 slash-command discovery. [Shared themes](docs/architecture/themes-and-tui.md)
 include ten presets in Dark and Light, without changing saved choices or factory
 Dark. Moguri includes its own verified [source setup instructions](docs/setup.md)
@@ -48,6 +49,15 @@ Built-in work-item views remove hidden Markdown comments.
 [Repository-script review](docs/architecture/content-review.md) delivers the
 full exact source to the agent before execution approval; unsafe findings need
 separate actual-user force and never lift hard policy.
+
+[Model recovery and scheduled prompts](docs/architecture/recovery-scheduling-kupo.md)
+share the same service and SDK. Transient model failures use current-profile
+30/90/120/180-second recovery rounds, without replaying earlier tools or hooks.
+The primary button retries the original eligible failure without sending a new
+draft. Idle scheduling offers local-time controls, unsent ghost prompts and an
+Automations / Scheduled prompts group, with one-at-most queue admission.
+Local and SSH continuation are qualified. A rolled-back native workspace keeps
+its explicit inspection/preparation gate instead of automatic root substitution.
 
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
@@ -89,6 +99,22 @@ worker, permissions and accounting as Copilot. Endpoint discovery never scans
 hosts or downloads weights. New sessions resolve snapshotted global,
 current-profile and project controls, with explicit session overrides and
 visible provenance; existing sessions are not rewritten.
+
+Automatic **Kupo** exposes Balanced, Savings and Performance instead of user
+thinking effort. It selects actual supported effort and maximum context within
+the selected boundary; Savings/Performance require reviewed evaluation and
+reference-price profiles, never guessed frontier classes. Bounded Cascade and
+Critique retain original role results, and explicit opt-in text compaction
+preserves readable history and source provenance. Finite automatic work uses
+complete all-role holds and selected-boundary finishing. The
+[owned transport contract](docs/architecture/owned-model-transports.md) keeps
+SSH/native bounded decisions and metadata finishing on their original parent;
+neither approves code or Local Git. Managed native scheduling can prepare its
+source without a model turn. [Snapshot retries and transport checkpoints](docs/architecture/native-retry-checkpoints.md)
+add explicit opt-in original-snapshot restaging, separately accepted peer Git
+and disclosed native-model/Local-Git publication. Jev/System One still needs a
+real bounded output/accounting contract; generated fixtures are not live-model
+quality or billing evidence.
 
 **Settings / Models / Providers** can disable providers or unwanted models per
 profile. Matching upstream model IDs share one explicit provider choice, without

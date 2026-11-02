@@ -32,7 +32,7 @@ test("CLI attaches real documents and exposes bounded reads/searches through the
   } finally { await fixture.close(); }
 });
 
-test("actual TUI keys attach all three document types, inspect bounded content and hold the complete context", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
+test("actual TUI keys attach all three document types, inspect bounded content and schedule the complete unsent context", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 180, height: 70, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -41,6 +41,7 @@ test("actual TUI keys attach all three document types, inspect bounded content a
     throw new Error(`Generated document TUI did not show ${text}:\n${setup.captureCharFrame()}`);
   };
   try {
+    await fixture.configure(); await sdk.refresh();
     flushSync(() => root.render(createElement(TuiApp, { client: sdk }))); await frameUntil("Write a prompt");
     for (const [format, bytes] of [["docx", generatedDocx()], ["xlsx", generatedXlsx()], ["pdf", generatedPdf()]] as const) {
       const path = join(fixture.directory, `generated-tui.${format}`); await writeFile(path, bytes);
@@ -53,8 +54,12 @@ test("actual TUI keys attach all three document types, inspect bounded content a
     await frameUntil("GENERATED_DOCUMENT_SECRET"); await frameUntil('"paragraph": 2');
     setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
     await setup.mockInput.typeText("Generated held document question."); setup.mockInput.pressEnter({ ctrl: true });
-    await waitFor(() => fixture.session().queue[0]?.held);
-    assert.equal(fixture.session().queue[0]?.attachments.length, 3); assert.equal(fixture.requests.length, 0);
+    await frameUntil("Send now instead of scheduling?"); setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter();
+    await frameUntil("5 minutes"); setup.mockInput.pressEnter();
+    const prompt = await waitFor(() => fixture.service.controller.snapshot().scheduledPrompts[0]?.status === "scheduled" &&
+      fixture.service.controller.snapshot().scheduledPrompts[0]);
+    assert.equal(prompt.attachments.length, 3); assert.equal(prompt.text, "Generated held document question.");
+    assert.equal(fixture.session().queue.length, 0); assert.equal(fixture.session().messages.length, 0); assert.equal(fixture.requests.length, 0);
   } finally { await closeTui(root, setup, sdk, fixture.close); }
 });
 

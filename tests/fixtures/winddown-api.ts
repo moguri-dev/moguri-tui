@@ -2,9 +2,49 @@ import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { budgetCharges } from "../../apps/service/src/budgets.ts";
 import { digest } from "../../apps/service/src/store.ts";
-import { fixtureProvider } from "../fixture.ts";
+import { fixtureProvider, waitFor } from "../fixture.ts";
 import { routedFixture } from "./single-routing.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
+import { defaultKupoSettings, type StoredEvent, type RemoteTarget } from "../../packages/sdk/src/index.ts";
+import type { SecretVault } from "../../apps/service/src/gateway.ts";
+import { envelope } from "../../apps/service/src/controller.ts";
+import { generatedKupoProfile } from "./kupo-profiles.ts";
+
+export async function remoteWinddownApiFixture(options: { unknown?: boolean; kupo?: boolean; target?: { target: RemoteTarget; workspace: string }; vault?: SecretVault } = {}) {
+  const f = await routedFixture({ env: "Remote", configured: false, legacy: false, remoteTarget: options.target,
+    platform: options.vault ? { remote: { vault: options.vault, modelsVault: options.vault } } : undefined });
+  let tightened: Promise<unknown> | undefined;
+  const change = (events: StoredEvent[]) => {
+    if (tightened || !events.some((event) => event.event_type === "model.completed" && event.session_id === f.sessionId && event.payload.usage.role === "solver")) return;
+    const record = f.service.controller.snapshot().winddowns[0]!;
+    if (!record) throw new Error("Generated selected-transport finishing hold was not retained.");
+    f.solverOptions.omitUsage = options.unknown ?? false;
+    tightened = f.service.controller.dispatch(envelope({ type: "budget.policy", expectedRevision: f.service.controller.snapshot().budgetPolicy.revision,
+      limit: { basis: "estimate", tokens: 42 + record.step.inputBound + record.step.outputBound }, confirmRisk: true }));
+  };
+  try {
+    const settings = structuredClone(f.sdk.settings.get()!.values);
+    settings.winddown = { ...settings.winddown, enabled: true, modelId: f.solverId, outputTokens: 128 };
+    settings.kupo = { ...defaultKupoSettings(), approvedModelIds: [f.solverId] };
+    await f.sdk.settings.update(settings, f.sdk.settings.get()!.revision);
+    if (options.kupo) {
+      const profile = await generatedKupoProfile(f.sdk, f.solverId, { category: "economy", score: 0.4, price: 0 });
+      await f.sdk.routing.configure({ ...defaultKupoSettings(), approvedModelIds: [f.solverId], modelProfiles: [profile] }, f.sdk.settings.get()!.revision);
+    }
+    await f.sdk.sessions.configure(f.sessionId, { ...f.session().controls, env: "Remote", modelId: options.kupo ? "kupo" : f.solverId,
+      budget: { kind: "limited", basis: "estimate", tokens: 50_000 } });
+    if (options.kupo) await f.sdk.sessions.kupoMode(f.sessionId, "savings");
+    f.solverOptions.respond = (request) => JSON.stringify(request.messages).includes("untrustedCheckpointMetadata") ?
+      { text: '{"summary":"Generated source-independent SSH finishing data."}' } : !JSON.stringify(request.messages).includes('"role":"tool"') ?
+        { tool: { name: "read_file", args: { path: "fixture.txt" } } } : { text: "Generated ordinary answer." };
+    return { ...f, run: async () => {
+      f.service.controller.on("change", change); await f.send("GENERATED_ORIGINAL_TASK_NOT_FINISHING_CONTEXT");
+      await waitFor(() => !f.session().turnId && ["completed", "partial", "failed", "stopped"].includes(f.session().status), 20_000);
+      await tightened;
+      return f.sdk.winddown.read(f.sdk.winddown.list(f.sessionId)[0]!.id);
+    }, close: async () => { f.service.controller.off("change", change); try { await tightened; } finally { await f.close(); } } };
+  } catch (error) { await f.close(); throw error; }
+}
 
 export async function winddownApiFixture(options: { git?: boolean; capDelta?: number } = {}) {
   const f = await routedFixture(), checkpointOptions = { modelId: "generated-winddown-api", responseMode: "text" as const, exposeModels: true, replyText: JSON.stringify({

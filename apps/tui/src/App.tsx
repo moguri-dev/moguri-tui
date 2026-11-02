@@ -10,6 +10,7 @@ import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem
 import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
+import { kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 function terminalColors(appearance: Appearance, mode: ThemeMode) {
@@ -54,7 +55,7 @@ async function waitForCommandFrame(renderer: ReturnType<typeof useRenderer>, sig
   }
 }
 const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 type ArchiveReview = {
   session: Pick<Session, "id" | "title" | "revision">;
@@ -88,13 +89,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const setNavigationIndex = (value: number) => { navigationIndexRef.current = value; renderNavigationIndex(value); };
   const sidebarVisible = sidebar ?? width >= 100, sidebarOnly = sidebarVisible && width < 80;
   const compact = width < 80 || height < 30;
-  const activeTab: TuiTab = mode === "sessions" ? "sessions" : mode === "work-items" || mode === "issues" ? "work-items" : mode === "code-requests" ? "code-requests" : "session";
+  const activeTab: TuiTab = mode === "sessions" ? "sessions" : mode === "work-items" || mode === "issues" ? "work-items" : mode === "code-requests" ? "code-requests" : mode === "automations" ? "automations" : "session";
   const [notice, storeNotice] = useState<{ id: number; text: string; error: boolean } | null>(null), noticeSequence = useRef(0);
   const setNotice = React.useCallback((text: string, error = false) => storeNotice(text ? { id: ++noticeSequence.current, text, error } : null), []);
   const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
   const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
   const queuedContinue = useRef<{ context: CommandViewContext; pending: boolean; cancelling?: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
   const [continuePending, setContinuePending] = useState(false);
+  const [scheduleInitial, setScheduleInitial] = useState<"ask" | "schedule">("ask"), schedulePending = useRef(false);
+  const [kupoOptions, setKupoOptions] = useState<KupoModeAvailability[]>([]), [kupoOptionError, setKupoOptionError] = useState("");
+  const [kupoSaving, setKupoSaving] = useState(false), kupoPending = useRef(false);
   const [archiveReview, setArchiveReview] = useState<ArchiveReview | null>(null);
   const queuedArchive = useRef<{ context: CommandViewContext; pending: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
   const [archivePending, setArchivePending] = useState(false);
@@ -127,8 +131,17 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); for (const client of clients.current) client.disconnect(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
+  const retry = session && snapshot ? retryFailure(session, snapshot.modelFailures) : undefined, retryPending = useRef(false);
   githubOwner.current = JSON.stringify([client.profileId, session?.id, session?.projectId, session?.workspaceId, session?.controls.env]);
   const taskProgress = useTaskProgress(client, session, status === "connected");
+  useEffect(() => {
+    if (mode !== "kupo-mode" || !session) return;
+    let active = true;
+    setKupoOptions([]); setKupoOptionError("");
+    void client.routing.modes(session.id).then(({ modes }) => { if (active) setKupoOptions(modes); })
+      .catch((error: unknown) => { if (active) setKupoOptionError(error instanceof Error ? error.message : "The actual mode readiness is unavailable."); });
+    return () => { active = false; };
+  }, [client, mode, session?.id, session?.controls.env, snapshot?.settings.revision]);
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
   const compactDecision = compact && Boolean(session?.pendingApproval || pendingQuestion);
@@ -170,7 +183,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   };
   const command = (command: Command) => perform(() => client.command(command));
   const requireNavigation = () => {
-    if (editorModes.includes(modeRef.current) || modeRef.current === "mcp-token" || queuedContinue.current || queuedArchive.current || planSaving.current || switchingProfile.current || githubPending.current) {
+    if (editorModes.includes(modeRef.current) || ["mcp-token", "schedule"].includes(modeRef.current) || kupoPending.current || queuedContinue.current || queuedArchive.current || planSaving.current || switchingProfile.current || githubPending.current) {
       throw new Error("Save or discard this editor and let the owned operation settle before navigating. Your input is preserved.");
     }
   };
@@ -478,6 +491,18 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       setStartupCommand(""); return;
     }
     if (!text.startsWith("/")) {
+      if (!held && retry) {
+        if (retryPending.current) return;
+        retryPending.current = true;
+        try { await client.sessions.retry(session.id, retry.id, retry.revision); }
+        finally { retryPending.current = false; }
+        return;
+      }
+      if (held && !session.turnId) {
+        const choice = snapshot?.settings.values.interactions.idleScheduleAction ?? "ask";
+        if (choice === "send") { await submit(text, false); return; }
+        setScheduleInitial(choice); setMode("schedule"); return;
+      }
       if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
       if (!held && session.projectId && !text.startsWith("/") && continueWorkInput(text)) {
         setContinueReview(await editor.reviewContinueWork()); setMode("continue-work"); return;
@@ -498,7 +523,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const commandUi = useRef<{ canApply(execution: CommandExecution): boolean; apply(context: CommandViewContext): Promise<CommandViewOutcome> } | null>(null);
   commandUi.current = {
     canApply: (execution) => execution.sessionId === selectedId && execution.profileId === client.profileId && !editorModes.includes(modeRef.current) &&
-      !["mcp-token", "continue-work", "session-action"].includes(modeRef.current) && !planSaving.current && !switchingProfile.current && !githubPending.current && !profilePending,
+      !["mcp-token", "continue-work", "session-action", "schedule"].includes(modeRef.current) && !planSaving.current && !switchingProfile.current && !githubPending.current && !profilePending,
     apply: async (context) => {
       context.signal.throwIfAborted(); requireNavigation();
       if (context.sdk !== client || context.sessionId !== selectedId) throw new Error("The original terminal conversation/profile changed before applying its queued view.");
@@ -613,6 +638,15 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (key.defaultPrevented) return;
     if (["return", "kpenter"].includes(key.name) && modeRef.current !== mode) { key.preventDefault(); key.stopPropagation(); return; }
     if (switchingProfile.current) { key.preventDefault(); key.stopPropagation(); return; }
+    if (kupoPending.current) { key.preventDefault(); key.stopPropagation(); setNotice("The original Kupo mode selection is still awaiting acknowledgement. Your draft is preserved."); return; }
+    if (mode === "schedule") {
+      if (key.name === "escape") {
+        key.preventDefault(); key.stopPropagation();
+        if (schedulePending.current) setNotice("The original scheduled input is still awaiting acknowledgement. No replacement was sent.");
+        else setMode("compose");
+      }
+      return;
+    }
     if (mode === "plan-editor" && planSaving.current) {
       if (key.name === "escape" || key.ctrl && ["q", "c"].includes(key.name)) {
         key.preventDefault(); key.stopPropagation();
@@ -691,6 +725,13 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       }); return;
     }
     if (key.name === "f8") { key.preventDefault(); void perform(openProfiles); return; }
+    if (key.name === "f9") { key.preventDefault(); void perform(() => navigate("automations")); return; }
+    if (mode === "compose" && key.name === "f10" && retry && session) {
+      key.preventDefault(); void perform(() => submit(editor?.getState().text ?? "")); return;
+    }
+    if (mode === "compose" && key.name === "f11" && session?.controls.modelId === "kupo") {
+      key.preventDefault(); setMode("kupo-mode"); return;
+    }
     if (key.name === "f6") { key.preventDefault(); if (pendingQuestion) setMode("question"); else setNotice("No actual pending question is owned by this turn."); return; }
     if (mode === "compose" && ["return", "kpenter"].includes(key.name) && (key.ctrl || key.meta || key.super)) {
       key.preventDefault(); key.stopPropagation();
@@ -886,6 +927,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               });
             } }} />
         </box> :
+        mode === "schedule" && session && editor ? <TuiScheduleDialog sdk={client} editor={editor} initial={scheduleInitial}
+          lock={(pending) => { schedulePending.current = pending; }} close={() => setMode("compose")} /> :
+        mode === "automations" ? <TuiScheduledPrompts sdk={client} prompts={snapshot?.scheduledPrompts ?? []} run={perform} /> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={compact ? 4 : 10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
@@ -950,7 +994,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           {mode === "artifact-editor" && snapshot?.decisions.some((record) => record.id === artifactEditor.current?.id) ?
             <text fg={colors.accent} height={4} flexShrink={0}>Decision metadata only. Original typed request, actual model input/result, actor and applied/rejected observations are immutable. Ctrl+Enter saves metadata; Esc discards. /decisions inspects data, never answers, approves or infers user facts.</text> :
             mode === "artifact-editor" && snapshot?.winddowns.some((record) => record.id === artifactEditor.current?.id) ?
-            <text fg={colors.accent} height={4} flexShrink={0}>Wind-down metadata only. Reserved capacity, actual model input/result and separate actual-user Git approval/publication are immutable. Ctrl+Enter saves metadata; Esc discards. /winddown inspects data, not permission or source acceptance.</text> :
+            <text fg={colors.accent} height={4} flexShrink={0}>Wind-down metadata only. Reserved capacity, actual model input/result and separate user source/Git reviews are immutable. Ctrl+Enter saves metadata; Esc discards. /winddown reads exact source/Git/effect reviews; acceptance never comes from metadata or model advice.</text> :
             mode === "artifact-editor" && snapshot?.compoundWorkflows.some((workflow) => workflow.id === artifactEditor.current?.id) ?
             <text fg={colors.accent} height={4} flexShrink={0}>Compound workflow metadata only. Exact source/cost intent, actual role results, user staging/test decisions and command evidence are immutable. Ctrl+Enter saves metadata; Esc discards. /compound reads data, not permission or source acceptance.</text> :
             mode === "artifact-editor" && (snapshot?.sandboxExecutions?.some((value) => value.id === artifactEditor.current?.id) || snapshot?.sandboxPublications?.some((value) => value.id === artifactEditor.current?.id)) ?
@@ -982,6 +1026,23 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
           <ThemedInput focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
+        mode === "kupo-mode" ? <box flexGrow={1} flexDirection="column" padding={1}><text fg={colors.accent} height={2}>Kupo modes / actual effort is model-selected</text>
+          <text fg={colors.muted} height={4}>Balanced uses declared capabilities. Savings/Performance require reviewed evaluation and reference-price profiles. Performance never drops below xhigh. Context is always the selected model's qualified maximum. No permission or source acceptance is delegated here.</text>
+          {kupoOptionError && <text fg={colors.error} height={3}>{safe(kupoOptionError)}</text>}
+          {!kupoOptions.length ? <text fg={colors.muted}>Reading shared mode readiness...</text> : <ThemedSelect focused={!kupoSaving} flexGrow={1}
+            options={kupoModes.map((mode) => {
+              const ready = kupoOptions.find((option) => option.mode === mode.id);
+              return { name: `${session?.controls.kupoMode === mode.id ? "* " : ""}${mode.name}${ready?.available ? "" : " [unavailable]"}`, value: mode.id, description: ready?.reason ?? "Readiness unknown" };
+            })} onSelect={(_, option) => {
+              const mode = kupoModes.find((mode) => mode.id === option?.value), ready = kupoOptions.find((entry) => entry.mode === mode?.id);
+              if (!mode || !session || kupoPending.current) return;
+              if (!ready?.available || session.turnId) { setNotice(session.turnId ? "Stop the owning turn before changing its Kupo mode." : ready?.reason ?? "Mode readiness is unknown.", true); return; }
+              kupoPending.current = true; setKupoSaving(true);
+              void perform(async () => { try { await client.sessions.kupoMode(session.id, mode.id, session.revision); setMode("compose"); }
+                finally { kupoPending.current = false; setKupoSaving(false); } });
+            }} />}
+          <text fg={colors.muted} height={3}>Automatic text compaction is opt-in. Finite roles require a qualified selected-Env finishing hold. Jev/System One stays unavailable. /kupo inspects exact policy; Esc returns without changing it.</text>
+        </box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
           {availableModels.length ? <ThemedSelect focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
             model.environments && !model.environments.includes(session?.controls.env ?? "Local") ? `Unavailable: ${snapshot?.routingDiagnostics?.join(" ") ?? "No eligible model in this environment."}` :
@@ -994,7 +1055,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               if (option?.value) void perform(async () => { await client.sessions.selectModel(session.id, String(option.value), session.revision); setMode("compose"); });
             }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
-          <text fg={colors.muted} height={4} flexShrink={0}>Kupo uses configured models by default. One eligible model runs directly; multiple models support automatic Single, gated Cascade or eligible Critique. /kupo status shows capabilities and policy. Normal approvals remain authoritative. /compound keeps separate worktree/test review.</text></box> :
+          <text fg={colors.muted} height={4} flexShrink={0}>Kupo uses configured models. F11 selects Balanced, Savings or Performance instead of user thinking effort. One eligible model runs directly; eligible bounded workflows share normal approvals. /kupo status shows policy. /compound keeps separate worktree/test review.</text></box> :
         mode === "sessions" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Choose a session</text>
           <ThemedSelect focused={!navigationFocus} flexGrow={1} options={options}
             onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} />
@@ -1101,13 +1162,17 @@ by its exact /sandbox enable command. Managed workspaces and selected-provider
 DNS aliases are automatic; /sandbox updates never changes the selected version.
 Advanced exact-file staging remains optional. Source publication is separate
 actual-user acceptance. /compound owns reviewed Local Cascade/Critique
-and separately approved project tests. /winddown reviews reserved Local finishing
-and separate accepted-work Git checkpoints. Local Max needs an explicitly
+and separately approved project tests. /winddown inspects reserved finishing at
+its actual Local/SSH/native boundary. Accepted-work Git needs separate source
+and branch reviews on the original peer or disclosed native-model/Local source.
+Partial effects require their exact inspect/reconcile confirmation, never replay.
+Max technical/steering advice needs an explicitly
 configured bounded decision provider; /decisions status/set/read exposes only
 shared policy and actual evidence, never a fake user answer or new permission.
-Jev and Remote/native Max remain unqualified.
+SSH/native advice stays inside the original parent, not a Local fallback. Jev is unqualified.
 Kupo is always listed. Select /model kupo to use configured eligible models.
-/kupo status shows capability categories and policy. Finite automatic caps stay blocked;
+/kupo status shows capability categories and policy. Finite automatic caps need
+complete all-role reservations and qualified selected-Env finishing;
 legacy Single and reviewed worktree workflows need explicit reserved
 wind-down; images and model tuning remain blocked for Single. Guided needs a human.
 Selecting Autopilot/Max enables automatic tool approvals, never hard-policy overrides.
@@ -1145,12 +1210,21 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
               {detailed && message.reasoning && <text fg={colors.muted}>{safe(`Provider-exposed reasoning:\n${message.reasoning}`)}</text>}
               {message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) => <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>)}
             </box>)}
+            {snapshot?.scheduledPrompts.filter((prompt) => prompt.sessionId === session?.id && ["scheduled", "blocked"].includes(prompt.status)).map((prompt) =>
+              <box key={prompt.id} flexDirection="column" border borderColor={colors.border} padding={1} marginTop={1}>
+                <text fg={colors.muted}>{safe(`[clock] ${prompt.status === "blocked" ? "Paused" : "Scheduled"}, not sent / ${new Date(prompt.dueAt).toLocaleString()}\n${prompt.text}${prompt.diagnostic ? `\n${prompt.diagnostic}` : ""}\nF9 / Automations: Send now or Cancel`)}</text>
+              </box>)}
             {commandResponses.map((response) => <box key={response.id} id={`tui-command-response-${response.id}`} flexDirection="column" paddingY={1}
               onMouseDown={(event) => { if (event.button !== 0 || modeRef.current !== "compose") return; event.preventDefault(); event.stopPropagation(); void perform(async () => { requireNavigation(); show(response.text); }); }}>
               <text fg={colors.accent}>{safe(`Command /${response.name} / ${response.id}`)}</text>
               <text fg={colors.muted}>Retained separately. Click to read, or /commands for keyboard history.</text>
             </box>)}
           </scrollbox>}
+        {mode === "compose" && retry && <box id="tui-retry-model" border borderColor={colors.error} paddingX={1} flexShrink={0}
+          onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); void perform(() => submit(editor?.getState().text ?? "")); }}>
+          <text fg={colors.error}>{safe(`[X] Model request failed / ${retry.status}. [Retry] Enter or F10 retries the original request, not this draft.\n${retry.diagnostic}`)}</text>
+        </box>}
+        {mode === "compose" && session?.controls.modelId === "kupo" && <text fg={colors.muted} height={1} flexShrink={0}>{safe(`Kupo mode: ${kupoModes.find((mode) => mode.id === session.controls.kupoMode)?.name ?? "Legacy / choose a mode"} | F11 modes | Context: dynamic / maximum per model`)}</text>}
         {mode === "compose" && continuedWork && <box flexDirection="column" border borderColor={colors.accent} padding={1} flexShrink={0}>
           <text fg={colors.accent}>{safe(`${continuedWork.source.title}: ${continuedWork.status} / one delegated task to its PR`)}</text>
           <text fg={colors.muted}>{safe(continuedWork.diagnostic ?? (continuedWork.prUrl ? `PR: ${continuedWork.prUrl}` : `Open its child in the sessions list, or inspect /kanban work ${continuedWork.id}.`))}</text>
@@ -1212,8 +1286,69 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
       </box>
     </box>
     <box height={compact ? 2 : 3} paddingLeft={1} flexShrink={0} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>{navigationFocus ? "Left/Right sidebar | Up/Down tabs | Enter choose | Tab/Esc back" :
-      compact ? "/help commands | Tab navigation | Esc prompt" : "/help commands | Tab navigation | /sidebar | Enter send | Shift+Enter newline | Cmd/Ctrl+Enter hold"}</text></box>
+      compact ? "/help commands | F9 schedules | Esc prompt" : "/help commands | Tab navigation | F9 scheduled prompts | Enter send | Shift+Enter newline | Cmd/Ctrl+Enter hold/schedule"}</text></box>
   </box></NavigationContext.Provider></ThemeContext.Provider>;
+}
+function TuiScheduleDialog({ sdk, editor, initial, lock, close }: { sdk: MoguriSdk; editor: DraftEditor; initial: "ask" | "schedule"; lock: (pending: boolean) => void; close: () => void }) {
+  const colors = React.useContext(ThemeContext);
+  const [phase, setPhase] = useState<"ask" | "schedule" | "custom" | "occurrence">(initial), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const pending = useRef(false);
+  const [original] = useState(() => ({ profileId: sdk.profileId, text: editor.getState().text, attachments: JSON.stringify(editor.getState().attachments) }));
+  const [zone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [local, setLocal] = useState(() => scheduleLocalTime(Date.now() + 30 * 60_000, zone).localTime);
+  const [choices, setChoices] = useState<Array<Extract<ScheduledTiming, { kind: "at" }>>>([]);
+  const act = async (choice: "send" | "schedule", remember = false, timing?: ScheduledTiming) => {
+    if (pending.current) return;
+    pending.current = true; setBusy(true); lock(true); setError("");
+    try {
+      if (sdk.profileId !== original.profileId || editor.getState().text !== original.text || JSON.stringify(editor.getState().attachments) !== original.attachments) throw new Error("The original draft changed. Esc and review the current draft; newer text was preserved.");
+      if (remember) {
+        const current = sdk.settings.get();
+        if (!current) throw new Error("Reconnect this profile before remembering the choice.");
+        await sdk.settings.update({ ...current.values, interactions: { ...current.values.interactions, idleScheduleAction: choice } }, current.revision);
+      }
+      if (choice === "send") { await editor.send("queue", false); close(); }
+      else if (!timing) setPhase("schedule");
+      else { await editor.submit((revision) => sdk.scheduledPrompts.create(editor.sessionId, timing, revision)); close(); }
+    } catch (error) { setError(error instanceof Error ? error.message : "The original scheduled prompt was not acknowledged. Draft preserved."); }
+    finally { pending.current = false; setBusy(false); lock(false); }
+  };
+  return <box flexDirection="column" flexGrow={1} padding={1}>
+    <text fg={colors.accent} height={2}>{phase === "ask" ? "Nothing is running. Send now instead of scheduling?" : `Schedule prompt / local timezone ${zone}`}</text>
+    <text fg={colors.muted} height={3}>Original prompt stays unsent. Esc cancels. Current controls, permissions and budgets still apply.</text>
+    {error && <text fg={colors.error} height={4}>{safe(error)}</text>}
+    {busy ? <text fg={colors.attention}>Saving the original choice. No replacement request will be sent.</text> :
+      phase === "ask" ? <ThemedSelect focused flexGrow={1} options={[
+        { name: "Send now", value: "send", description: "Use the normal prompt intake" },
+        { name: "No, schedule", value: "schedule", description: "Choose a delay or exact local date/time" },
+        { name: "Send now; don't ask again", value: "send:remember", description: "Remember Send now in this profile" },
+        { name: "Schedule; don't ask again", value: "schedule:remember", description: "Always open scheduling for idle Hold" },
+      ]} onSelect={(_, option) => { if (!option) return; const [choice, memory] = String(option.value).split(":"); if (choice === "send" || choice === "schedule") void act(choice, memory === "remember"); }} /> :
+      phase === "schedule" ? <ThemedSelect focused flexGrow={1} options={[...[5, 10, 30, 60].map((minutes) => ({ name: `${minutes} minutes`, value: String(minutes), description: "Send once after this delay, including after restart" })),
+        { name: "Custom local date and time", value: "custom", description: "Review the exact timezone and UTC occurrence" }]}
+        onSelect={(_, option) => { if (!option) return; if (option.value === "custom") setPhase("custom"); else void act("schedule", false, { kind: "delay", minutes: Number(option.value), timeZone: zone }); }} /> :
+      phase === "custom" ? <><text fg={colors.muted} height={2}>Local date/time: YYYY-MM-DDTHH:mm. Enter reviews its exact UTC occurrence.</text>
+        <ThemedInput focused value={local} onInput={setLocal} onSubmit={(text) => {
+          try { setChoices(scheduleLocalChoices(text, zone)); setPhase("occurrence"); setError(""); }
+          catch (error) { setError(error instanceof Error ? error.message : "Choose a valid local date and time."); }
+        }} /></> :
+      <ThemedSelect focused flexGrow={1} options={choices.map((timing, index) => ({ name: `${timing.localTime} / UTC offset ${timing.offsetMinutes} minutes${choices.length > 1 ? ` / occurrence ${index + 1}` : ""}`, value: timing.at, description: `${zone}; actual instant ${timing.at}` }))}
+        onSelect={(_, option) => { const timing = choices.find((timing) => timing.at === option?.value); if (timing) void act("schedule", false, timing); }} />}
+  </box>;
+}
+function TuiScheduledPrompts({ sdk, prompts, run }: { sdk: MoguriSdk; prompts: ScheduledPrompt[]; run: (operation: () => Promise<unknown>) => Promise<void> }) {
+  const colors = React.useContext(ThemeContext), [busy, setBusy] = useState(false), pending = useRef(false);
+  const entries = prompts.filter((prompt) => ["scheduled", "blocked", "queued"].includes(prompt.status));
+  return <box flexDirection="column" flexGrow={1} padding={1}><text fg={colors.accent} height={2}>Automations / Scheduled prompts</text>
+    <text fg={colors.muted} height={3}>One-time unsent prompts in this profile. Enter sends/cancels the exact input. Your current composer is not consumed.</text>
+    {!entries.length ? <text fg={colors.muted}>No scheduled prompts. Cmd/Ctrl+Enter in an idle chat opens scheduling.</text> :
+      <ThemedSelect focused={!busy} flexGrow={1} options={entries.flatMap((prompt) => [
+        { name: `Send now / ${safe(prompt.text.split("\n")[0]!.slice(0, 60))}`, value: `send:${prompt.id}`, description: `${new Date(prompt.dueAt).toLocaleString()} / ${prompt.status} / ${prompt.id}` },
+        { name: `Cancel / ${safe(prompt.text.split("\n")[0]!.slice(0, 60))}`, value: `cancel:${prompt.id}`, description: prompt.diagnostic ?? "Cancel before admission; never stop another turn" },
+      ])} onSelect={(_, option) => { if (!option || pending.current) return; const [action, id] = String(option.value).split(":"), prompt = entries.find((entry) => entry.id === id); if (!prompt) return;
+        pending.current = true; setBusy(true); void run(async () => { try { if (action === "send") await sdk.scheduledPrompts.sendNow(prompt.id, prompt.revision); else await sdk.scheduledPrompts.cancel(prompt.id, prompt.revision); } finally { pending.current = false; setBusy(false); } });
+      }} />}
+  </box>;
 }
 function TuiComposer({ editor, session, focused, compact, focus, submit, run }: { editor: DraftEditor; session: Session; focused: boolean; compact: boolean; focus: () => void; submit: () => void; run: (operation: () => Promise<void>) => Promise<void> }) {
   const colors = React.useContext(ThemeContext);

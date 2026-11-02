@@ -11,6 +11,7 @@ globalThis.fetch = async (input, options) => {
   if (body.model !== model || request.headers.get("authorization") !== "Bearer generated-test-only") throw Error("Generated native model or request credential changed.");
   calls.push({ model, bytes: text.length, tail: text.includes("GENERATED_PASTE_END_NOT_SENT"), tools: body.tools?.map((tool) => tool.function.name) ?? [] });
   await save();
+  if (prompt.includes("generated native recovery")) return Response.json({ error: { message: "408 Generated owned upstream outage." } }, { status: 408 });
   const chunk = (delta, finish_reason = null) => `data: ${JSON.stringify({ id: `generated-${calls.length}`, object: "chat.completion.chunk", model,
     choices: [{ index: 0, delta, finish_reason }] })}\n\n`;
   if (prompt.includes("generated native slow")) return new Response(new ReadableStream({

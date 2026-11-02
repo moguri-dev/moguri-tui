@@ -16,6 +16,7 @@ import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../p
 import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "../../../packages/sdk/src/index.ts";
 import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
 import { queuedSlash } from "./queued-commands.ts";
+import { KupoModeSchema, ScheduledTimingSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -185,7 +186,9 @@ moguri session spawn side|agent [NAME] --session ID
 moguri session organize changes.json --session ID --revision N
 moguri session model-settings options.json --session ID --revision N
 moguri session context --session ID
-moguri session archive|restore|stop|resume --session ID [--children archive|detach]
+moguri session archive|restore|stop|resume|retry --session ID [--children archive|detach]
+moguri session kupo-mode balanced|savings|performance --session ID
+moguri scheduled list|create TIMING_JSON_FILE|send-now ID|cancel ID [--session ID]
 moguri session delete --session ID --revision N --confirm-remove [--children delete|detach]
   Child-tree actions can also use the saved Settings / Retention preference. Deletion preserves ordinary artifacts and Git resources.
 moguri session from-pr URL|from-issue ID --project ID
@@ -703,6 +706,15 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (action === "list") output(snapshot.attention.filter((entry) => entry.active));
       else if (action === "read" && args[0]) output(await sdk.attention.acknowledge([args[0]]));
       else throw new Error("Use attention list or read ATTENTION_ID. Reading never approves or answers.");
+    } else if (group === "scheduled") {
+      if (action === "list") output(sdk.scheduledPrompts.list(values.session));
+      else if (action === "create" && values.session && args[0]) {
+        const file = await stat(args[0]);
+        if (!file.isFile() || file.size > 16384) throw new Error("Choose a bounded scheduling-timing JSON file. The saved composer is not replaced.");
+        output(await sdk.scheduledPrompts.create(values.session, parse(ScheduledTimingSchema, JSON.parse(await readFile(args[0], "utf8")))));
+      } else if (action === "send-now" && args[0]) output(await sdk.scheduledPrompts.sendNow(args[0]));
+      else if (action === "cancel" && args[0]) output(await sdk.scheduledPrompts.cancel(args[0]));
+      else throw new Error("Use scheduled list, create TIMING_JSON_FILE --session ID, send-now ID or cancel ID. Creation consumes only the exact existing saved draft.");
     } else if (group === "session") {
       if (action === "create") {
         let overrides: ControlDefaults | undefined;
@@ -722,6 +734,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           output(await sdk.sessions.modelOptions(values.session, options, expectedRevision(), Object.hasOwn(options, "thinkingEffort") || undefined));
         }
         else if (action === "context") output(await sdk.sessions.context(values.session));
+        else if (action === "retry") output(await sdk.sessions.retry(values.session));
+        else if (action === "kupo-mode" && args[0]) output(await sdk.sessions.kupoMode(values.session, parse(KupoModeSchema, args[0])));
         else if (action === "delete" && values["confirm-remove"]) {
           if (!snapshot.sessions.some((session) => session.id === values.session)) throw new Error("Choose an existing session for deletion.");
           output(await sdk.sessions.delete(values.session, true, expectedRevision(), childrenReview(values.session, "delete")));

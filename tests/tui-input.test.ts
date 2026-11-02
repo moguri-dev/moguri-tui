@@ -42,23 +42,24 @@ test("TUI Enter sends one message in legacy and enhanced keyboard modes without 
   });
 });
 
-test("TUI Shift+Enter inserts a newline and Cmd/Ctrl+Enter still holds the exact multiline draft without inference", { skip: process.platform !== "darwin" }, async () => {
+test("TUI Shift+Enter inserts a newline and active-turn Cmd/Ctrl+Enter holds the exact multiline draft without another call", { skip: process.platform !== "darwin" }, async () => {
   const fixture = await setupFixture(), client = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 40, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
+    await fixture.configure(); await fixture.send("generated slow existing TUI owner"); await waitFor(() => fixture.requests.length === 1);
     flushSync(() => root.render(createElement(TuiApp, { client })));
     await ready(setup);
     await setup.mockInput.typeText("Generated first line.");
     setup.mockInput.pressEnter({ shift: true });
     await setup.mockInput.typeText("Generated second line.");
     await waitFor(() => fixture.session().draft.text === "Generated first line.\nGenerated second line.");
-    assert.equal(fixture.session().queue.length, 0); assert.equal(fixture.requests.length, 0);
+    assert.equal(fixture.session().queue.length, 0); assert.equal(fixture.requests.length, 1);
     setup.mockInput.pressKey("j", { ctrl: true });
     await setup.mockInput.typeText("Generated third line.");
     await waitFor(() => fixture.session().draft.text === "Generated first line.\nGenerated second line.\nGenerated third line.");
     setup.mockInput.pressEnter({ ctrl: true });
     const held = await waitFor(() => fixture.session().queue[0]);
     assert.equal(held.held, true); assert.equal(held.text, "Generated first line.\nGenerated second line.\nGenerated third line.");
-    assert.equal(fixture.session().turnId, null); assert.equal(fixture.requests.length, 0);
+    assert.ok(fixture.session().turnId); assert.equal(fixture.requests.length, 1);
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });

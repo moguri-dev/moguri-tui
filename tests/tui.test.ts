@@ -188,7 +188,7 @@ test("native TUI keys review retained Sandbox outputs and confirm separate sourc
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("actual native TUI qualifies the guest, prepares reviewed source, holds a queued prompt and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: 90_000 }, async () => {
+test("actual native TUI qualifies the guest, prepares reviewed source, schedules unsent input and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: 90_000 }, async () => {
   assert.ok(nativeSandbox);
   const fixture = await nativeApiFixture(nativeSandbox), { sdk, provider, project, service } = fixture;
   await reviewNativeTools(sdk);
@@ -215,11 +215,17 @@ test("actual native TUI qualifies the guest, prepares reviewed source, holds a q
     await slash(`/sandbox prepare ${JSON.stringify({ paths: ["fixture.txt"], expectedDigest: preview.digest, expectedRevision: session().revision })} confirm-stage`, "private native stage prepared");
     setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
     await setup.mockInput.typeText("generated native write"); setup.mockInput.pressEnter({ ctrl: true });
-    const held = await waitFor(() => session().queue.find((item) => item.held));
+    await frameUntil("Send now instead of scheduling?");
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter();
+    await frameUntil("5 minutes"); setup.mockInput.pressEnter();
+    const scheduled = await waitFor(() => service.controller.snapshot().scheduledPrompts.find((prompt) => prompt.sessionId === created.id && prompt.status === "scheduled"));
+    await frameUntil("not sent");
     assert.equal(session().turnId, null); assert.equal(service.controller.snapshot().budgetEntries.length, 0);
-    await slash(`/run ${held.id}`, "Write a prompt");
+    setup.mockInput.pressKey("F9"); await frameUntil("Automations / Scheduled prompts"); setup.mockInput.pressEnter();
+    await waitFor(() => service.controller.snapshot().scheduledPrompts.find((prompt) => prompt.id === scheduled.id)?.status === "admitted");
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
     await waitFor(() => session().pendingApproval?.call.name === "read_file", 20_000);
-    await frameUntil("read_file"); await frameUntil("Ctrl+Y once");
+    await frameUntil("read_file"); await frameUntil("Ctrl+Y approve");
     setup.mockInput.pressKey("y", { ctrl: true });
     await waitFor(() => session().pendingApproval?.call.name === "write_file", 20_000);
     await frameUntil("write_file");
@@ -247,6 +253,7 @@ test("native bracketed paste preserves exact long text in a scoped file after a 
     throw new Error(`Generated paste composer did not show ${text}:\n${setup.captureCharFrame()}`);
   };
   try {
+    await fixture.configure(); await fixture.send("generated slow existing paste owner"); await waitFor(() => fixture.requests.length === 1);
     flushSync(() => root.render(createElement(TuiApp, { client })));
     await frameUntil("Write a prompt");
     await setup.mockInput.pasteBracketedText("Before \u754c \u{1f34a} ");
@@ -260,7 +267,7 @@ test("native bracketed paste preserves exact long text in a scoped file after a 
     setup.mockInput.pressEnter({ ctrl: true });
     await waitFor(() => fixture.session().queue[0]?.held);
     assert.equal(fixture.session().queue[0]?.text, "Before \u754c \u{1f34a} ");
-    assert.equal(fixture.requests.length, 0);
+    assert.equal(fixture.requests.length, 1);
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
@@ -917,6 +924,7 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
   };
   const slash = async (text: string) => { await setup.mockInput.typeText(text); setup.mockInput.pressEnter(); };
   try {
+    await fixture.configure(); await fixture.send("generated slow existing held-queue owner"); await waitFor(() => fixture.requests.length === 1);
     flushSync(() => root.render(createElement(TuiApp, { client, native })));
     await frameUntil("Write a prompt");
     await setup.mockInput.typeText("Generated first held prompt");
@@ -927,7 +935,8 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
     setup.mockInput.pressEnter({ ctrl: true });
     await waitFor(() => fixture.session().queue.length === 2);
     assert.ok(fixture.session().queue.every((item) => item.held));
-    assert.equal(fixture.requests.length, 0);
+    assert.equal(fixture.requests.length, 1);
+    await client.command({ type: "session.stop", sessionId: fixture.sessionId }); await fixture.terminal();
     await slash("/read-only");
     await waitFor(() => fixture.session().mode === "read-only");
     await frameUntil("read-only");
@@ -941,11 +950,13 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
     await frameUntil("Write a prompt");
     await setup.mockInput.typeText("Generated held side question");
     setup.mockInput.pressEnter({ super: true });
-    await waitFor(() => fixture.service.controller.snapshot().sessions.find((session) => session.id === side.id)?.queue.length === 1);
-    assert.equal(fixture.service.controller.snapshot().sessions.find((session) => session.id === side.id)?.queue[0]?.held, true);
+    await frameUntil("Send now instead of scheduling?"); setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter();
+    await frameUntil("5 minutes"); setup.mockInput.pressEnter();
+    await waitFor(() => fixture.service.controller.snapshot().scheduledPrompts.some((prompt) => prompt.sessionId === side.id && prompt.status === "scheduled"));
+    await frameUntil("Scheduled, not sent"); await frameUntil("Draft saved");
     await slash("/termnial");
     await frameUntil("already a terminal");
-    assert.equal(fixture.requests.length, 0);
+    assert.equal(fixture.requests.length, 1);
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 

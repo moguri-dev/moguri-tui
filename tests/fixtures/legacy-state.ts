@@ -16,6 +16,14 @@ export async function appendLegacyProjectFreeSession(client: MoguriSdk, control:
   control.store.commit([{ event_type: "session.created", profile_id: snapshot.profileId, session_id: id, payload: { title, ...startup } }]);
   control.refreshProfile(); await client.refresh(); return { id };
 }
+export async function appendLegacyKupoSelection(client: MoguriSdk, control: ControlPlane, sessionId: string, env: "Local" | "Remote") {
+  const session = control.snapshot().sessions.find((session) => session.id === sessionId);
+  if (!session || session.turnId || session.controls.kupoMode !== undefined) throw new Error("Generate an original pre-mode Kupo selection, not a relabelled new mode.");
+  control.store.commit([{ event_type: "session.configured", profile_id: client.profileId, project_id: session.projectId, session_id: sessionId,
+    payload: { controls: { ...session.controls, env, modelId: "kupo" } } }]);
+  control.refreshProfile(); await client.refresh();
+  return { revision: control.snapshot().sessions.find((session) => session.id === sessionId)!.revision };
+}
 
 export function assertCurrentSchema(store: { db: DatabaseSync }): void {
   assert.equal(store.db.prepare("PRAGMA user_version").get()?.user_version, PROTOCOL_VERSION);
@@ -62,7 +70,46 @@ export function removeContentReviewFixtureMarkers(db: DatabaseSync, events: read
     (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && event.payload.item.command?.name === "script-review")) {
     throw new Error("Generate genuine pre-83 history; actual source/review/force intent cannot become older state.");
   }
+  removeIntakeFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('work_item_comments_schema','repository_script_review_schema')");
+}
+export function removeIntakeFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => ["prompt.schedule_recorded", "model.request_bound", "model.authorization_changed", "model.failure_recorded", "recovery.cycle_recorded", "turn.retry_started", "routing.roles_planned", "routing.role_started"].includes(event.event_type) ||
+    event.event_type === "budget.plan_recorded" && event.payload.plan.purpose === "routing" ||
+    event.event_type === "compaction.saved" && event.payload.compaction.automatic !== undefined ||
+    event.event_type === "context.changed" && event.payload.actor === "kupo-policy" || event.event_type === "routing.context_rebound" ||
+    (event.event_type === "tool.requested" ? event.payload.approval.call : event.event_type === "tool.started" || event.event_type === "tool.completed" ? event.payload.call : null)?.name === "read_tool_result" &&
+      (event.event_type === "tool.requested" ? event.payload.approval.call : event.event_type === "tool.started" || event.event_type === "tool.completed" ? event.payload.call : null)?.arguments.action === "history" ||
+    (event.event_type === "session.created" || event.event_type === "session.configured") && event.payload.controls.kupoMode !== undefined ||
+    event.event_type === "model.selection_remembered" && event.payload.selection?.kupoMode !== undefined ||
+    event.event_type === "routing.started" && event.payload.routing.mode !== undefined ||
+    event.event_type === "settings.updated" && (event.payload.settings.interactions?.idleScheduleAction !== undefined ||
+      event.payload.settings.startup?.global?.kupoMode !== undefined || event.payload.settings.startup?.profile?.kupoMode !== undefined ||
+      event.payload.settings.kupo?.workflow === "auto" && (event.payload.settings.kupo.modelProfiles !== undefined || event.payload.settings.kupo.automaticLimits !== undefined || event.payload.settings.kupo.autoCompaction !== undefined)) ||
+    event.event_type === "project.configured" && event.payload.configuration.values?.defaults?.kupoMode !== undefined ||
+    event.event_type === "global.controls_changed" && event.payload.values.kupoMode !== undefined)) {
+    throw new Error("Generate genuine pre-84 history; original scheduling/recovery/mode intent cannot become older state.");
+  }
+  removeOwnedTransportFixtureMarkers(db, events);
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('model_failure_recovery_schema','scheduled_prompts_schema','kupo_modes_schema')");
+}
+export function removeOwnedTransportFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "sandbox.workspace_recorded" && event.payload.workspace.preparation?.version === 2 ||
+    event.event_type === "decision.recorded" && Object.hasOwn(event.payload.decision, "transport") ||
+    event.event_type === "winddown.recorded" && Object.hasOwn(event.payload.winddown, "transport"))) {
+    throw new Error("Generate genuine pre-85 history; scheduled native/owned model/finishing intent cannot become older state.");
+  }
+  removeRetryCheckpointFixtureMarkers(db, events);
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('scheduled_native_preparation_schema','owned_model_transport_schema','transport_finishing_schema')");
+}
+export function removeRetryCheckpointFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "model.request_bound" && event.payload.nativeRestaging ||
+    event.event_type === "sandbox.workspace_recorded" && event.payload.workspace.preparation?.version === 3 ||
+    event.event_type === "settings.updated" && event.payload.settings.interactions?.nativeRetryRestaging !== undefined ||
+    event.event_type === "winddown.recorded" && (event.payload.winddown.version === 3 || event.payload.winddown.commit?.inspection))) {
+    throw new Error("Generate genuine pre-86 history; private retry/checkpoint authority cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('native_retry_restaging_schema','transport_checkpoint_schema')");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);
