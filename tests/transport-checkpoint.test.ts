@@ -1,13 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { remoteWinddownApiFixture } from "./fixtures/winddown-api.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
-import { MoguriError, unsettledWinddownCommit } from "../packages/sdk/src/index.ts";
+import { MoguriError, parse, unsettledWinddownCommit, WinddownCommandSchema, WinddownQuerySchema } from "../packages/sdk/src/index.ts";
 import { EventStore } from "../apps/service/src/store.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+
+test("typed checkpoint source paths use the full file-path bounds, not artifact-ID bounds", () => {
+  const paths = ["generated/".repeat(14) + "fixture.txt", "a".repeat(4096)];
+  const preview = parse(WinddownQuerySchema, { type: "winddown.source.preview", winddownId: "generated-report", paths });
+  assert.ok(preview.type === "winddown.source.preview"); assert.deepEqual(preview.paths, paths);
+  const accepted = parse(WinddownCommandSchema, { type: "winddown.source.accept", winddownId: "generated-report", paths,
+    expectedRevision: 0, expectedDigest: "a".repeat(64), confirm: true });
+  assert.ok(accepted.type === "winddown.source.accept"); assert.deepEqual(accepted.paths, paths);
+  assert.throws(() => parse(WinddownQuerySchema, { type: "winddown.source.preview", winddownId: "generated-report", paths: ["a".repeat(4097)] }), /protocol schema/);
+  assert.throws(() => parse(WinddownCommandSchema, { type: "winddown.source.accept", winddownId: "generated-report", paths: ["a".repeat(4097)],
+    expectedRevision: 0, expectedDigest: "a".repeat(64), confirm: true }), /protocol schema/);
+});
 
 test("actual SSH checkpoint separately accepts source then publishes only at its pinned peer, preserving source index/HEAD and all-role charges", { skip: process.platform !== "darwin", timeout: 40000 }, async () => {
   const f = await remoteWinddownApiFixture();
@@ -22,12 +34,14 @@ test("actual SSH checkpoint separately accepts source then publishes only at its
       branch: "moguri/generated-peer-checkpoint", message: "Retain exact separately accepted peer work" };
     await assert.rejects(() => f.sdk.winddown.commitPreview(input), /accept|source/i);
     await writeFile(join(f.workspace, "fixture.txt"), "Generated actual-user accepted peer bytes.\n");
+    const deepPath = "generated/".repeat(14) + "fixture.txt";
+    await mkdir(join(f.workspace, dirname(deepPath)), { recursive: true }); await writeFile(join(f.workspace, deepPath), "Generated exact deeply nested peer source.\n");
     await writeFile(join(f.workspace, "generated-unrelated.txt"), "Generated unrelated staged bytes.\n");
     git(["add", "--", "generated-unrelated.txt"]);
     const head = git(["rev-parse", "HEAD"]), index = await readFile(join(f.workspace, ".git/index"));
-    const source = await f.sdk.winddown.sourcePreview(id, ["fixture.txt"]);
+    const source = await f.sdk.winddown.sourcePreview(id, ["fixture.txt", deepPath]);
     assert.equal(source.preview.document.source.env, "Remote");
-    await f.sdk.winddown.acceptSource(id, ["fixture.txt"], source.preview.revision, source.preview.digest, true);
+    await f.sdk.winddown.acceptSource(id, ["fixture.txt", deepPath], source.preview.revision, source.preview.digest, true);
     const preview = await f.sdk.winddown.commitPreview(input);
     assert.equal(preview.preview.document.version, 3); assert.equal(preview.preview.document.source.env, "Remote");
     await f.sdk.winddown.commit(input, preview.preview.revision, preview.preview.digest, true);
@@ -36,7 +50,8 @@ test("actual SSH checkpoint separately accepts source then publishes only at its
     assert.ok(result.winddown.commit?.publishedCommit); assert.equal(result.winddown.commit.actor, "user");
     assert.equal(git(["rev-parse", `refs/heads/${input.branch}`]), result.winddown.commit.publishedCommit);
     assert.equal(git(["show", `${input.branch}:fixture.txt`]), "Generated actual-user accepted peer bytes.");
-    assert.equal(git(["diff-tree", "--no-commit-id", "--name-only", "-r", input.branch]), "fixture.txt");
+    assert.equal(git(["show", `${input.branch}:${deepPath}`]), "Generated exact deeply nested peer source.");
+    assert.equal(git(["diff-tree", "--no-commit-id", "--name-only", "-r", input.branch]), ["fixture.txt", deepPath].sort().join("\n"));
     assert.equal(git(["rev-parse", "HEAD"]), head); assert.deepEqual(await readFile(join(f.workspace, ".git/index")), index);
     const inspection = await f.sdk.winddown.inspectCommit(id);
     assert.equal(inspection.inspection.result?.commit, result.winddown.commit.publishedCommit);
