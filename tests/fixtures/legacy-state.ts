@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import type { startService } from "../../apps/service/src/server.ts";
-import { hasCombinedWorkspaceHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
+import { hasCombinedWorkspaceHistory, hasSessionControlsHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
 import { randomUUID } from "node:crypto";
 import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
@@ -113,10 +113,7 @@ export function removeRetryCheckpointFixtureMarkers(db: DatabaseSync, events: re
   db.exec("DELETE FROM retention_metadata WHERE id IN ('native_retry_restaging_schema','transport_checkpoint_schema')");
 }
 export function removeSessionControlsFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
-  if (events.some((event) => event.event_type === "session.wait_recorded" || event.event_type === "session.pr_associated" ||
-    event.event_type === "coordination.linked" && event.payload.link.kind === "peer" ||
-    event.event_type === "settings.updated" && (event.payload.settings.voice.enabled !== undefined || event.payload.settings.voice.standby !== undefined ||
-      event.payload.settings.retention.confirmBulkArchive !== undefined || event.payload.settings.retention.confirmBulkDelete !== undefined))) {
+  if (hasSessionControlsHistory(events)) {
     throw new Error("Generate genuine pre-87 history; voice lifecycle, peer/dependency and bulk authority cannot become older state.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('session_coordination_controls_schema','session_pr_associations_schema','voice_lifecycle_schema','chat_outputs_schema','language_app_tools_schema')");
