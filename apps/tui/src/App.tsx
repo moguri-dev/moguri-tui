@@ -994,7 +994,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           {mode === "artifact-editor" && snapshot?.decisions.some((record) => record.id === artifactEditor.current?.id) ?
             <text fg={colors.accent} height={4} flexShrink={0}>Decision metadata only. Original typed request, actual model input/result, actor and applied/rejected observations are immutable. Ctrl+Enter saves metadata; Esc discards. /decisions inspects data, never answers, approves or infers user facts.</text> :
             mode === "artifact-editor" && snapshot?.winddowns.some((record) => record.id === artifactEditor.current?.id) ?
-            <text fg={colors.accent} height={4} flexShrink={0}>Wind-down metadata only. Reserved capacity, actual model input/result and separate actual-user Git approval/publication are immutable. Ctrl+Enter saves metadata; Esc discards. /winddown inspects data, not permission or source acceptance.</text> :
+            <text fg={colors.accent} height={4} flexShrink={0}>Reserved capacity, actual model input/result and separate user source/Git reviews are immutable. Ctrl+Enter saves metadata; Esc discards. /winddown reads exact source/Git/effect reviews; acceptance never comes from metadata or model advice.</text> :
             mode === "artifact-editor" && snapshot?.compoundWorkflows.some((workflow) => workflow.id === artifactEditor.current?.id) ?
             <text fg={colors.accent} height={4} flexShrink={0}>Compound workflow metadata only. Exact source/cost intent, actual role results, user staging/test decisions and command evidence are immutable. Ctrl+Enter saves metadata; Esc discards. /compound reads data, not permission or source acceptance.</text> :
             mode === "artifact-editor" && (snapshot?.sandboxExecutions?.some((value) => value.id === artifactEditor.current?.id) || snapshot?.sandboxPublications?.some((value) => value.id === artifactEditor.current?.id)) ?
@@ -1163,7 +1163,9 @@ DNS aliases are automatic; /sandbox updates never changes the selected version.
 Advanced exact-file staging remains optional. Source publication is separate
 actual-user acceptance. /compound owns reviewed Local Cascade/Critique
 and separately approved project tests. /winddown inspects reserved finishing at
-its actual Local/SSH/native boundary; accepted-work Git remains separately Local.
+its actual Local/SSH/native boundary. Accepted-work Git needs separate source
+and branch reviews on the original peer or disclosed native-model/Local source.
+Partial effects require their exact inspect/reconcile confirmation, never replay.
 Max technical/steering advice needs an explicitly
 configured bounded decision provider; /decisions status/set/read exposes only
 shared policy and actual evidence, never a fake user answer or new permission.

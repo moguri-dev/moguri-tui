@@ -110,8 +110,11 @@ complete all-role holds and selected-boundary finishing. The
 [owned transport contract](docs/architecture/owned-model-transports.md) keeps
 SSH/native bounded decisions and metadata finishing on their original parent;
 neither approves code or Local Git. Managed native scheduling can prepare its
-source without a model turn. Jev/System One, automatic native retry after
-rollback and Remote/native accepted-work Git integration remain explicit gates.
+source without a model turn. [Snapshot retries and transport checkpoints](docs/architecture/native-retry-checkpoints.md)
+add explicit opt-in original-snapshot restaging, separately accepted peer Git
+and disclosed native-model/Local-Git publication. Jev/System One still needs a
+real bounded output/accounting contract; generated fixtures are not live-model
+quality or billing evidence.
 
 **Settings / Models / Providers** can disable providers or unwanted models per
 profile. Matching upstream model IDs share one explicit provider choice, without

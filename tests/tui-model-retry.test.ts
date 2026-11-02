@@ -9,6 +9,8 @@ import { setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
 import { generatedKupoProfile } from "./fixtures/kupo-profiles.ts";
+import { remoteWinddownApiFixture } from "./fixtures/winddown-api.ts";
+import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 
 async function frame(terminal: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
   const deadline = Date.now() + 8000;
@@ -34,6 +36,25 @@ test("native TUI Retry uses the retained original request, not its newly typed p
     assert.deepEqual(fixture.requests[0]!.messages, fixture.requests[1]!.messages);
     assert.equal(fixture.session().messages.filter((message) => message.role === "user").length, 1);
   } finally { await closeTui(root, terminal, sdk, () => fixture.close()); }
+});
+
+test("native TUI reads and separately accepts exact peer checkpoint source without another model or Git approval", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
+  const fixture = await remoteWinddownApiFixture();
+  assert.ok(fixture.workspace); initializeGeneratedRepository(fixture.workspace);
+  const report = await fixture.run(), preview = await fixture.sdk.winddown.sourcePreview(report.winddown.id, ["fixture.txt"]);
+  const terminal = await createTestRenderer({ width: 140, height: 50, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(terminal.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk }))); await frame(terminal, "Write a prompt");
+    await terminal.mockInput.typeText(`/winddown source-preview ${report.winddown.id} ["fixture.txt"]`); terminal.mockInput.pressEnter();
+    await frame(terminal, "moguri-remote-checkpoint-source"); terminal.mockInput.pressEscape(); await frame(terminal, "Write a prompt");
+    await terminal.mockInput.typeText(`/winddown source-accept ${report.winddown.id} ${preview.preview.revision} ${preview.preview.digest} confirm-source ["fixture.txt"]`);
+    terminal.mockInput.pressEnter(); await frame(terminal, "Only the exact peer source was accepted");
+    const retained = await fixture.sdk.winddown.read(report.winddown.id);
+    assert.ok(retained.winddown.version === 3 && retained.winddown.remoteAcceptance?.actor === "user");
+    assert.equal(retained.winddown.commit, null); assert.equal(retained.winddown.status, "ready");
+    assert.equal(fixture.requests.length, 0); assert.equal(fixture.solver.requests.length, 2);
+    assert.equal(fixture.session().messages.filter((message) => message.role === "user").length, 1);
+  } finally { await closeTui(root, terminal, fixture.sdk, () => fixture.close()); }
 });
 
 test("native TUI mode selection actually excludes frontier models in Savings without changing autonomy or draft", { skip: process.platform !== "darwin" }, async () => {

@@ -6,11 +6,14 @@ import type { PlatformOptions } from "../../apps/service/src/platform.ts";
 import { createSshTarget } from "./ssh-target.ts";
 import { fileURLToPath } from "node:url";
 import { appendLegacyKupoSelection } from "./legacy-state.ts";
+import type { RemoteTarget } from "../../packages/sdk/src/index.ts";
 
-export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean; platform?: PlatformOptions; legacy?: boolean } = {}) {
+export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean; platform?: PlatformOptions; legacy?: boolean;
+  remoteTarget?: { target: RemoteTarget; workspace: string } } = {}) {
   const remote = configuration.env === "Remote";
-  const secrets = new Map<string, string>(), vault = { read: async (id: string) => secrets.get(id) ?? null, write: async (id: string, value: string) => { secrets.set(id, value); }, remove: async (id: string) => { secrets.delete(id); } };
-  const options: GeneratedProviderOptions & { platform?: PlatformOptions; workerPath?: string } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text", platform: { ...configuration.platform, remote: { ...configuration.platform?.remote, vault, modelsVault: vault } } };
+  const secrets = new Map<string, string>(), generatedVault = { read: async (id: string) => secrets.get(id) ?? null, write: async (id: string, value: string) => { secrets.set(id, value); }, remove: async (id: string) => { secrets.delete(id); } };
+  const vault = configuration.platform?.remote?.vault ?? generatedVault;
+  const options: GeneratedProviderOptions & { platform?: PlatformOptions; workerPath?: string } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text", platform: { ...configuration.platform, remote: { ...configuration.platform?.remote, vault, modelsVault: configuration.platform?.remote?.modelsVault ?? vault } } };
   const solverOptions: GeneratedProviderOptions = { modelId: "generated-routed-solver-api", maxOutputTokens: 128, exposeModels: true, replyText: "Generated routed solver answer." };
   if (!remote && configuration.legacy !== false) options.workerPath = fileURLToPath(new URL("./legacy-worker-83.ts", import.meta.url));
   const fixture = await setupFixture(options), solver = await fixtureProvider(solverOptions);
@@ -34,9 +37,12 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
     const endpoint = { id: "generated-routed-solver", name: "Generated routed solver", enabled: true, baseUrl: `${solver.baseUrl}/v1`, auth: "none" as const,
       models: [{ id: solver.modelId, name: "Generated routed solver", contextWindow: 16384, maxTokens: 128, imageInput: false }] };
     if (remote) {
-      const root = await realpath(fixture.directory), targetRoot = join(root, "generated-routing-ssh"); workspace = join(root, "generated-routing-remote");
-      await mkdir(targetRoot); await mkdir(workspace); await writeFile(join(workspace, "fixture.txt"), "Generated actual routed SSH source.\n");
-      ssh = await createSshTarget(targetRoot); settings.remote = { ...ssh.target, models: [endpoint] };
+      if (configuration.remoteTarget) { workspace = configuration.remoteTarget.workspace; settings.remote = { ...configuration.remoteTarget.target, models: [endpoint] }; }
+      else {
+        const root = await realpath(fixture.directory), targetRoot = join(root, "generated-routing-ssh"); workspace = join(root, "generated-routing-remote");
+        await mkdir(targetRoot); await mkdir(workspace); await writeFile(join(workspace, "fixture.txt"), "Generated actual routed SSH source.\n");
+        ssh = await createSshTarget(targetRoot); settings.remote = { ...ssh.target, models: [endpoint] };
+      }
     } else settings.localModels = [endpoint];
     await sdk.settings.update(settings, sdk.settings.get()!.revision);
     if (remote) {

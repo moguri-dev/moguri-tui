@@ -99,7 +99,17 @@ export function removeOwnedTransportFixtureMarkers(db: DatabaseSync, events: rea
     event.event_type === "winddown.recorded" && Object.hasOwn(event.payload.winddown, "transport"))) {
     throw new Error("Generate genuine pre-85 history; scheduled native/owned model/finishing intent cannot become older state.");
   }
+  removeRetryCheckpointFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('scheduled_native_preparation_schema','owned_model_transport_schema','transport_finishing_schema')");
+}
+export function removeRetryCheckpointFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "model.request_bound" && event.payload.nativeRestaging ||
+    event.event_type === "sandbox.workspace_recorded" && event.payload.workspace.preparation?.version === 3 ||
+    event.event_type === "settings.updated" && event.payload.settings.interactions?.nativeRetryRestaging !== undefined ||
+    event.event_type === "winddown.recorded" && (event.payload.winddown.version === 3 || event.payload.winddown.commit?.inspection))) {
+    throw new Error("Generate genuine pre-86 history; private retry/checkpoint authority cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('native_retry_restaging_schema','transport_checkpoint_schema')");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);

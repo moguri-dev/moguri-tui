@@ -10,6 +10,16 @@ export async function winddownCommand(sdk: MoguriSdk, action: string | undefined
   if (action === "list" && !args.length) return sdk.winddown.list(options.session);
   if (action === "status" && options.session && !args.length) return sdk.winddown.status(options.session);
   if (action === "read" && args.length === 1) return sdk.winddown.read(args[0]!);
+  if (action === "inspect" && args.length === 1) return sdk.winddown.inspectCommit(args[0]!);
+  if (action === "reconcile" && args.length === 1 && options.revision && /^\d+$/.test(options.revision) && options.digest && options["confirm-review"]) {
+    return sdk.winddown.reconcileCommit(args[0]!, Number(options.revision), options.digest, true);
+  }
+  if ((action === "source-preview" || action === "source-accept") && args.length >= 2) {
+    const [id, ...paths] = args;
+    if (action === "source-preview") return sdk.winddown.sourcePreview(id!, paths);
+    if (!options["confirm-review"] || !options.digest || !options.revision || !/^\d+$/.test(options.revision)) throw new Error("Separate source acceptance requires exact --revision, --digest and --confirm-review. No Git permission or source was inferred.");
+    return sdk.winddown.acceptSource(id!, paths, Number(options.revision), options.digest, true);
+  }
   if (action === "stop" && args.length === 1) return sdk.winddown.stop(args[0]!);
   if (action === "decline" && args.length === 1 && options.revision && /^\d+$/.test(options.revision) && options["confirm-review"]) return sdk.winddown.decline(args[0]!, Number(options.revision), true);
   if ((action === "preview" || action === "commit") && args.length === 1 && options.session) {
@@ -28,5 +38,5 @@ export async function winddownCommand(sdk: MoguriSdk, action: string | undefined
     try { return await sdk.winddown.waitCommit(created.id); }
     finally { process.removeListener("SIGINT", stop); }
   }
-  throw new Error("Use winddown status --session ID, list/read/stop ID, decline ID --revision N --confirm-review, preview INPUT.json --session ID or commit INPUT.json --session ID --revision N --digest SHA --confirm-git.");
+  throw new Error("Use winddown status --session ID, list/read/stop/inspect ID, source-preview ID PATH..., source-accept ID PATH... --revision N --digest SHA --confirm-review, reconcile ID --revision N --digest SHA --confirm-review, decline ID --revision N --confirm-review, preview INPUT.json --session ID or commit INPUT.json --session ID --revision N --digest SHA --confirm-git.");
 }

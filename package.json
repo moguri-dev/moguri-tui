@@ -40,6 +40,7 @@
     "docs/architecture/automatic-kupo.md",
     "docs/architecture/recovery-scheduling-kupo.md",
     "docs/architecture/owned-model-transports.md",
+    "docs/architecture/native-retry-checkpoints.md",
     "docs/architecture/owned-decisions.md",
     "docs/architecture/budget-winddown.md",
     "docs/architecture/execution-transports.md",

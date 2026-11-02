@@ -5,12 +5,14 @@ import { digest } from "../../apps/service/src/store.ts";
 import { fixtureProvider, waitFor } from "../fixture.ts";
 import { routedFixture } from "./single-routing.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
-import { defaultKupoSettings, type StoredEvent } from "../../packages/sdk/src/index.ts";
+import { defaultKupoSettings, type StoredEvent, type RemoteTarget } from "../../packages/sdk/src/index.ts";
+import type { SecretVault } from "../../apps/service/src/gateway.ts";
 import { envelope } from "../../apps/service/src/controller.ts";
 import { generatedKupoProfile } from "./kupo-profiles.ts";
 
-export async function remoteWinddownApiFixture(options: { unknown?: boolean; kupo?: boolean } = {}) {
-  const f = await routedFixture({ env: "Remote", configured: false, legacy: false });
+export async function remoteWinddownApiFixture(options: { unknown?: boolean; kupo?: boolean; target?: { target: RemoteTarget; workspace: string }; vault?: SecretVault } = {}) {
+  const f = await routedFixture({ env: "Remote", configured: false, legacy: false, remoteTarget: options.target,
+    platform: options.vault ? { remote: { vault: options.vault, modelsVault: options.vault } } : undefined });
   let tightened: Promise<unknown> | undefined;
   const change = (events: StoredEvent[]) => {
     if (tightened || !events.some((event) => event.event_type === "model.completed" && event.session_id === f.sessionId && event.payload.usage.role === "solver")) return;
