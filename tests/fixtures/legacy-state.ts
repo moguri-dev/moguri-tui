@@ -103,6 +103,7 @@ export function removeOwnedTransportFixtureMarkers(db: DatabaseSync, events: rea
   db.exec("DELETE FROM retention_metadata WHERE id IN ('scheduled_native_preparation_schema','owned_model_transport_schema','transport_finishing_schema')");
 }
 export function removeRetryCheckpointFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeSessionControlsFixtureMarkers(db, events);
   if (events.some((event) => event.event_type === "model.request_bound" && event.payload.nativeRestaging ||
     event.event_type === "sandbox.workspace_recorded" && event.payload.workspace.preparation?.version === 3 ||
     event.event_type === "settings.updated" && event.payload.settings.interactions?.nativeRetryRestaging !== undefined ||
@@ -110,6 +111,15 @@ export function removeRetryCheckpointFixtureMarkers(db: DatabaseSync, events: re
     throw new Error("Generate genuine pre-86 history; private retry/checkpoint authority cannot become older state.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('native_retry_restaging_schema','transport_checkpoint_schema')");
+}
+export function removeSessionControlsFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "session.wait_recorded" || event.event_type === "session.pr_associated" ||
+    event.event_type === "coordination.linked" && event.payload.link.kind === "peer" ||
+    event.event_type === "settings.updated" && (event.payload.settings.voice.enabled !== undefined || event.payload.settings.voice.standby !== undefined ||
+      event.payload.settings.retention.confirmBulkArchive !== undefined || event.payload.settings.retention.confirmBulkDelete !== undefined))) {
+    throw new Error("Generate genuine pre-87 history; voice lifecycle, peer/dependency and bulk authority cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('session_coordination_controls_schema','session_pr_associations_schema','voice_lifecycle_schema','chat_outputs_schema','language_app_tools_schema')");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);
