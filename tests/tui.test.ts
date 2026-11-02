@@ -188,7 +188,7 @@ test("native TUI keys review retained Sandbox outputs and confirm separate sourc
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("actual native TUI qualifies the guest, prepares reviewed source, holds a queued prompt and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: 90_000 }, async () => {
+test("actual native TUI qualifies the guest, prepares reviewed source, schedules unsent input and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: 90_000 }, async () => {
   assert.ok(nativeSandbox);
   const fixture = await nativeApiFixture(nativeSandbox), { sdk, provider, project, service } = fixture;
   await reviewNativeTools(sdk);
@@ -215,11 +215,17 @@ test("actual native TUI qualifies the guest, prepares reviewed source, holds a q
     await slash(`/sandbox prepare ${JSON.stringify({ paths: ["fixture.txt"], expectedDigest: preview.digest, expectedRevision: session().revision })} confirm-stage`, "private native stage prepared");
     setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
     await setup.mockInput.typeText("generated native write"); setup.mockInput.pressEnter({ ctrl: true });
-    const held = await waitFor(() => session().queue.find((item) => item.held));
+    await frameUntil("Send now instead of scheduling?");
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter();
+    await frameUntil("5 minutes"); setup.mockInput.pressEnter();
+    const scheduled = await waitFor(() => service.controller.snapshot().scheduledPrompts.find((prompt) => prompt.sessionId === created.id && prompt.status === "scheduled"));
+    await frameUntil("not sent");
     assert.equal(session().turnId, null); assert.equal(service.controller.snapshot().budgetEntries.length, 0);
-    await slash(`/run ${held.id}`, "Write a prompt");
+    setup.mockInput.pressKey("F9"); await frameUntil("Automations / Scheduled prompts"); setup.mockInput.pressEnter();
+    await waitFor(() => service.controller.snapshot().scheduledPrompts.find((prompt) => prompt.id === scheduled.id)?.status === "admitted");
+    setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
     await waitFor(() => session().pendingApproval?.call.name === "read_file", 20_000);
-    await frameUntil("read_file"); await frameUntil("Ctrl+Y once");
+    await frameUntil("read_file"); await frameUntil("Ctrl+Y approve");
     setup.mockInput.pressKey("y", { ctrl: true });
     await waitFor(() => session().pendingApproval?.call.name === "write_file", 20_000);
     await frameUntil("write_file");
