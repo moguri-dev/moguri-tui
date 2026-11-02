@@ -5,8 +5,9 @@ import { MoguriSdk } from "../../packages/sdk/src/index.ts";
 import { startService } from "../../apps/service/src/server.ts";
 import type { PlatformOptions } from "../../apps/service/src/platform.ts";
 import { fixtureProvider } from "../fixture.ts";
+import { legacySessionControlsJournal } from "./legacy-session-controls-journal.ts";
 
-export async function profileFixture(extra?: (profileId: string, directory: string) => PlatformOptions, workerPath?: string, holdAfterTool = false) {
+export async function profileFixture(extra?: (profileId: string, directory: string) => PlatformOptions, workerPath?: string, holdAfterTool = false, legacySessionControls = false) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-profiles-")), stateDir = join(directory, "state"), key = Buffer.alloc(32, 0x6a);
   const home = join(directory, "home"); await mkdir(home);
   const providers = await Promise.all([fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool }), fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool }), fixtureProvider({ maxOutputTokens: 128, exposeModels: true, holdAfterTool })]);
@@ -25,6 +26,7 @@ export async function profileFixture(extra?: (profileId: string, directory: stri
     },
   } };
   const service = await startService(options), sdk = await new MoguriSdk(service.connection).ready(), clients: MoguriSdk[] = [sdk];
+  const restoreJournal = legacySessionControls ? legacySessionControlsJournal(service.store, true) : () => {};
   const create = async (name: string) => {
     const command = await sdk.profiles.create(name, "#557799");
     const profile = await sdk.profiles.wait(command.id!), client = await sdk.profiles.open(profile.id); clients.push(client);
@@ -40,5 +42,5 @@ export async function profileFixture(extra?: (profileId: string, directory: stri
     await client.command({ type: "message.send", sessionId: id, expectedRevision: current.draft.revision + 1, delivery: "queue" });
   };
   return { directory, stateDir, key, options, providers, assigned, vaults, service, sdk, clients, create, session, send,
-    close: async () => { for (const client of clients) client.disconnect(); await service.close(); for (const provider of providers) await provider.close(); await rm(directory, { recursive: true, force: true }); } };
+    close: async () => { for (const client of clients) client.disconnect(); await service.close(); restoreJournal(); for (const provider of providers) await provider.close(); await rm(directory, { recursive: true, force: true }); } };
 }

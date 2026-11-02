@@ -46,8 +46,8 @@ export async function remoteWinddownApiFixture(options: { unknown?: boolean; kup
   } catch (error) { await f.close(); throw error; }
 }
 
-export async function winddownApiFixture(options: { git?: boolean; capDelta?: number } = {}) {
-  const f = await routedFixture(), checkpointOptions = { modelId: "generated-winddown-api", responseMode: "text" as const, exposeModels: true, replyText: JSON.stringify({
+export async function winddownApiFixture(options: { git?: boolean; capDelta?: number; legacySessionControlsJournal?: boolean } = {}) {
+  const f = await routedFixture({ legacySessionControlsJournal: options.legacySessionControlsJournal }), checkpointOptions = { modelId: "generated-winddown-api", responseMode: "text" as const, exposeModels: true, replyText: JSON.stringify({
     summary: "Generated wind-down: ordinary work was blocked by the actual cumulative cap. No code was accepted or committed.",
   }) }, checkpoint = await fixtureProvider(checkpointOptions);
   let git: ReturnType<typeof initializeGeneratedRepository> | undefined;

@@ -9,11 +9,13 @@ import { appendLegacyKupoSelection } from "./legacy-state.ts";
 import type { RemoteTarget } from "../../packages/sdk/src/index.ts";
 
 export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean; platform?: PlatformOptions; legacy?: boolean;
-  remoteTarget?: { target: RemoteTarget; workspace: string } } = {}) {
+  remoteTarget?: { target: RemoteTarget; workspace: string }; legacySessionControlsJournal?: boolean } = {}) {
   const remote = configuration.env === "Remote";
   const secrets = new Map<string, string>(), generatedVault = { read: async (id: string) => secrets.get(id) ?? null, write: async (id: string, value: string) => { secrets.set(id, value); }, remove: async (id: string) => { secrets.delete(id); } };
   const vault = configuration.platform?.remote?.vault ?? generatedVault;
-  const options: GeneratedProviderOptions & { platform?: PlatformOptions; workerPath?: string } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text", platform: { ...configuration.platform, remote: { ...configuration.platform?.remote, vault, modelsVault: configuration.platform?.remote?.modelsVault ?? vault } } };
+  const options: GeneratedProviderOptions & { platform?: PlatformOptions; workerPath?: string; legacySessionControlsJournal?: boolean } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text",
+    legacySessionControlsJournal: configuration.legacySessionControlsJournal,
+    platform: { ...configuration.platform, remote: { ...configuration.platform?.remote, vault, modelsVault: configuration.platform?.remote?.modelsVault ?? vault } } };
   const solverOptions: GeneratedProviderOptions = { modelId: "generated-routed-solver-api", maxOutputTokens: 128, exposeModels: true, replyText: "Generated routed solver answer." };
   if (!remote && configuration.legacy !== false) options.workerPath = fileURLToPath(new URL("./legacy-worker-83.ts", import.meta.url));
   const fixture = await setupFixture(options), solver = await fixtureProvider(solverOptions);
