@@ -90,6 +90,7 @@
     "docs/architecture/themes-and-tui.md",
     "docs/architecture/workspace-experience.md",
     "docs/architecture/cli-launcher.md",
+    "docs/architecture/startup-responsiveness.md",
     "docs/architecture/lean-tooling.md",
     "docs/architecture/file-access.md",
     "docs/architecture/content-review.md"

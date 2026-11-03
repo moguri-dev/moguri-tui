@@ -121,7 +121,11 @@ export function removeSessionControlsFixtureMarkers(db: DatabaseSync, events: re
 }
 export function removeVoiceShortcutFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (hasVoiceShortcutHistory(events)) throw new Error("Generate genuine pre-88 history; an explicit shortcut choice cannot become a legacy button preference.");
+  removeEventReadFixtureMarker(db);
   db.exec("DELETE FROM retention_metadata WHERE id='voice_shortcut_schema'");
+}
+export function removeEventReadFixtureMarker(db: DatabaseSync): void {
+  db.exec("DROP INDEX IF EXISTS events_profile_sequence; DROP INDEX IF EXISTS events_type_sequence; DELETE FROM retention_metadata WHERE id='event_read_indexes_schema'");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);
