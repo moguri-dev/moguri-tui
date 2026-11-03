@@ -53,6 +53,94 @@ An interrupted operation is not replayed on startup. A leftover private staging
 file is not permission to overwrite or remove any command. Existing commands
 remain independent of session cancellation, retention and service restarts.
 
+## Packaged service entrypoint and ownership recovery
+
+The protocol-88 failure was reproduced from merged `60197e5` using its actual
+compiled CLI under a generated app layout and pinned Node 26.12.0. The installed
+shell selected `dist/cli.mjs` correctly. That bundle had inlined the Node SDK,
+whose `../service.mjs` was relative to `dist/sdk/node.mjs`, not to its new
+`dist/cli.mjs` location. It consequently requested
+`Contents/Resources/app/service.mjs` even though the shipped service was at
+`Contents/Resources/app/dist/service.mjs`. The same inlining affected cold
+generic CLI/TUI discovery. A separately built SDK consumer with an injected
+`servicePath`, or a launcher check limited to `--help`, did not exercise it.
+
+Client builds now retain a real relative import of `dist/sdk/node.mjs`. That
+module owns all Node runtime/worker paths and keeps its service import lazy.
+CLI, TUI and desktop do not relocate its `import.meta.url` by inlining it.
+There is no filesystem search, development-checkout fallback, alternate app or
+ambient Node selection.
+
+A second, independent reproduction showed `service restart` failing at its
+initial `lstat(connection.json)` after an unsuccessful launch or completed
+shutdown. `restartMoguriService` now captures one state root, verifies its
+selected service/runtime before interrupting anything, requests the existing
+authenticated terminal-preserving shutdown, and waits for authenticated ready
+health from the replacement. The unchanged 60-second readiness window is not a
+fix for a missing file. Lifecycle acceptance, stopping and unconfirmed cleanup
+are not readiness.
+
+Absence is narrowly classified. With no captured owner, absent connection,
+writer lock **and** recovery claim mean there is no registered service to stop;
+normal exclusive startup may proceed. A captured owner additionally requires
+its exact endpoint to refuse connections. A live or incomplete lock without a
+registry may be initializing or have unconfirmed cleanup; it is not permission
+to start or signal another process. A registered healthy owner is checked using
+its private token, PID, protocol and root fingerprint, including again after
+the asynchronous health read. Rotated/corrupt/private-file violations and lost
+lifecycle acknowledgements retain explicit failure rather than a replacement.
+
+Private metadata is read through bounded no-follow file handles and checked
+against its actual inode after reading. Shutdown removes only its original
+connection/lock bytes and identities. It can tolerate a missing connection
+after its own resource cleanup, but never deletes a replacement registry.
+Completed close stages are not repeated when later filesystem cleanup fails.
+A private exclusive `service.lock.recovery` serializes dead-writer lock
+reclamation; contenders recheck the original inode/bytes before unlinking it.
+PID absence is only a stale-lock prerequisite, never ownership or permission
+to signal. An interrupted or failed recovery claim remains unconfirmed and is
+not deleted or replayed automatically.
+
+This reuses Node filesystem/crypto/process APIs, esbuild, Electron and
+`node-pty`, all MIT-licensed, with no added dependency or runtime boundary.
+No domain event, durable schema marker, protocol bump or migration is needed:
+protocol 88, original encrypted state, receipts, budgets and terminal identities
+remain intact. The optional Node restart helper composes existing lifecycle
+and health endpoints; it does not require a new service API. Worker, SSH bridge,
+MCP worker and data-worker bytes are unchanged from `60197e5`; no older receipt
+is used to qualify changed native bytes.
+
+The regression executes the actual compiled CLI, generic CLI auto-start,
+shell/bin launchers and **unmodified built service entrypoint** in a generated
+installation. Only that private fixture's secret module is replaced with a
+generated persistent backend; the user's keychain is never read. It checks cold
+restart, already-stopped restart, drafts, held queues, independent artifacts,
+retention-key identity and an actual macOS PTY across restart with no input
+replay. The same fixture runs against the independently installed packed SDK
+and actual app's distributed bytes. Separate generated lifecycle checks cover
+missing/replaced registries, failed/lost acknowledgements, unconfirmed cleanup,
+early process exit, retained recovery claims, eight concurrent stale-lock
+clients, interrupted work and unknown charges.
+
+Before this repair, the Phase 0 baseline was rerun on macOS arm64:
+
+| Primitive | Result | Measurement |
+| --- | --- | --- |
+| Generated provider requests/cancellation | PASS | Six requests; cancellation 30.41 ms |
+| SQLite WAL/crash recovery | PASS | 1,000 events; append p95 0.066 ms; rebuild 0.597 ms |
+| Generated PTY group cancellation | PASS | 152.48 ms; zero surviving children |
+| OpenTUI React | PASS | 60 updates; mean 17.30 ms |
+| Hidden Electron | PASS | Ready 196.75 ms; 445.64 MiB; scroll mean 8.22 ms |
+| Generated filesystem/Git | PASS | 2,000 files; listing 0.84 ms; Git status 6.41 ms |
+
+The baseline's unavailable live-provider, Rust/Linux, signing/notarization,
+configured SSH, native SendBox and wider-roadmap gates still report FAIL. They
+are not supplied or requalified by this service-recovery repair. Focused source
+qualification passes 68 discovery/lifecycle/import/launcher/terminal checks in
+15.54 seconds and nine hidden source Electron checks in 9.5 seconds, with one
+actual-package-only case skipped. Final packed/app qualification is recorded
+with its exact delivery artifacts, not inferred from those source results.
+
 ## Qualification
 
 Before feature implementation, `npm run spike` was rerun on macOS arm64 with
