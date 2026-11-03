@@ -143,6 +143,40 @@ with its exact delivery artifacts, not inferred from those source results.
 
 ### Service recovery delivery qualification
 
+The corrected executable source is `fbe7650`, including synchronous admission
+cancellation before awaited metadata cleanup. It retains protocol 88 and
+package version `0.31.0-alpha.1`, without a new migration or native payload.
+These artifacts are frozen separately from the superseded cut below.
+
+| Check | Result |
+| --- | --- |
+| Typecheck and production build | PASS |
+| Focused source qualification | PASS; 73 checks in 15.30 s, including actual pending Remote secret-write cancellation and the direct synchronous-admission fence |
+| Hidden source Electron | PASS; nine launcher/shutdown/restart/terminal checks in 9.3 s, with one actual-package-only skip |
+| Independently installed packed SDK | PASS in 133.45 s; all four entrypoints/declarations, actual installed worker probes and zero consumer vulnerabilities |
+| Complete actual-package verifier | PASS in 63.68 s, including genuine packaged Electron/SDK/service hidden cold startup using a fixture-only generated secret module |
+| Untouched actual packaged Electron | PASS; nine checks in 15.1 s, with one unpackaged-only skip |
+| Actual ZIP/manifest through production update consumer | PASS; 814,520,622 bytes in 114.09 s, without app execution or quarantine bypass |
+| Actual read-only DMG/layout | PASS; exact signed application bytes, Applications shortcut, native icons and Finder geometry/background; Finder was not opened |
+
+Artifacts are under `release/qualification-builds/service-recovery-fbe7650/`:
+
+| File | Bytes | SHA-256 |
+| --- | --- | --- |
+| `Moguri-0.31.0-alpha.1-macos-arm64.dmg` | 830011884 | `ba2604274a6c339bfeca409a1e8e4d31be9ca7c29d9a0203c0d93175b93ba836` |
+| `Moguri-0.31.0-alpha.1-macos-arm64.zip` | 814520622 | `5ff15bbe25affb17e557beae6327fc65c04ccaf242e4ca7151c62815856d5a16` |
+
+The matching integrity manifest is
+`Moguri-0.31.0-alpha.1-macos-arm64.manifest.json`; the actual app is
+`builds.noindex/0.31.0-alpha.1/Moguri-darwin-arm64/Moguri.app`.
+These are ad-hoc-signed, **not notarized**, not published or installed over the
+user's app. The DMG exceeds chat's attachment limit and remains local.
+The exact previously built native distribution/archive below is reused
+unchanged; no new native VM qualification or inherited receipt is claimed.
+The warning and release-readiness limits below still apply.
+
+### Superseded service recovery validation cut
+
 **Superseded validation cut.** The full source sweep exposed an admission-fence
 regression in `603847d`: awaiting private metadata checks before invoking owned
 shutdown allowed a held Remote secret write to resume before cancellation.
