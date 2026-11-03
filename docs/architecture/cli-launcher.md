@@ -151,6 +151,8 @@ These artifacts are frozen separately from the superseded cut below.
 | Check | Result |
 | --- | --- |
 | Typecheck and production build | PASS |
+| Complete `npm test`, default file concurrency | PASS; 2,191 passed, 29 skipped, zero failures/cancellations in 1,753.47 s |
+| Complete `npm run test:e2e` | PASS; 323 passed, four skipped, zero failures in 577.03 s |
 | Focused source qualification | PASS; 73 checks in 15.30 s, including actual pending Remote secret-write cancellation and the direct synchronous-admission fence |
 | Hidden source Electron | PASS; nine launcher/shutdown/restart/terminal checks in 9.3 s, with one actual-package-only skip |
 | Independently installed packed SDK | PASS in 133.45 s; all four entrypoints/declarations, actual installed worker probes and zero consumer vulnerabilities |
@@ -174,6 +176,10 @@ user's app. The DMG exceeds chat's attachment limit and remains local.
 The exact previously built native distribution/archive below is reused
 unchanged; no new native VM qualification or inherited receipt is claimed.
 The warning and release-readiness limits below still apply.
+The failed earlier full sweep was not counted as qualification. The complete
+default-concurrency unit/native-TUI sweep and complete hidden Electron sweep
+were restarted on `fbe7650` and both completed successfully; physical-native
+and package-only skips remain disclosed rather than counted as exercised.
 
 ### Superseded service recovery validation cut
 
