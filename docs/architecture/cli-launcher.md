@@ -141,6 +141,59 @@ qualification passes 68 discovery/lifecycle/import/launcher/terminal checks in
 actual-package-only case skipped. Final packed/app qualification is recorded
 with its exact delivery artifacts, not inferred from those source results.
 
+### Service recovery delivery qualification
+
+The executable source cut is `603847d`, based directly on merged `60197e5`.
+Protocol 88 and package version `0.31.0-alpha.1` are unchanged. Final notes do
+not repack the following frozen development artifacts:
+
+| Check | Result |
+| --- | --- |
+| Typecheck and production build | PASS |
+| Root dependency audit | PASS; zero vulnerabilities |
+| Independently installed packed SDK | PASS in 138.09 s; all four entrypoints/declarations, actual installed worker probes and zero consumer vulnerabilities |
+| Installed cold-start regression | PASS; authenticated owner after 11,321 ms with original encrypted draft, without resetting or increasing the deadline |
+| Exact installed CLI/service recovery regression | PASS; real compiled shell/bin/generic CLI paths, original service bytes, held input/artifacts/keys and same authenticated macOS PTY without input replay |
+| Complete actual-package verifier | PASS in 60.17 s, including hidden Electron cold startup using copied actual app/SDK/service bytes and a fixture-only generated secret module |
+| Untouched actual packaged Electron | PASS; nine launcher/shutdown/restart/terminal checks in 16.4 s, with one unpackaged-only skip |
+| New distribution image build | PASS; no-cache pinned Linux arm64 build in 76.22 s; this is an image primitive, not VM/containment qualification |
+| Actual ZIP/manifest through production update consumer | PASS; 814,520,052 bytes in 110.98 s; no app execution or quarantine bypass |
+| Actual read-only DMG/layout | PASS; original signed app bytes, Applications shortcut, native icons and Finder geometry/background; Finder was not opened |
+
+Artifacts are under `release/qualification-builds/service-recovery-603847d/`:
+
+| File | Bytes | SHA-256 |
+| --- | --- | --- |
+| `Moguri-0.31.0-alpha.1-macos-arm64.dmg` | 830012888 | `a5c690837c400520d90481099ad38a091804127fbd41ac6e090ec6685b335b1b` |
+| `Moguri-0.31.0-alpha.1-macos-arm64.zip` | 814520052 | `bdeede47274328188b6919ef1562d816f26f6b684f99b041d1fbe02d6269e3c5` |
+
+The matching integrity manifest is
+`Moguri-0.31.0-alpha.1-macos-arm64.manifest.json`; the actual app is
+`builds.noindex/0.31.0-alpha.1/Moguri-darwin-arm64/Moguri.app`.
+These are ad-hoc-signed, **not notarized**, not published or installed over the
+user's app. The DMG exceeds chat's attachment limit and remains a local artifact.
+
+The new OCI image is
+`docker.io/library/moguri-worker@sha256:5d94ab00004165579b95b06d8f2dcbb7e0119db2a3c96112b7313307a89e5742`.
+Its 466,196,480-byte archive has SHA-512
+`634808a07019079cf4921a0578f9e7dac16346fd571208043be1c31c3393684f15b34c1ec5620abba8af3d77c40a78ea56ae81af6b13d9daf55c5f286601237b`.
+Unchanged worker payload hashes do not qualify a newly built image's native
+runtime by inheritance. This repair does not claim a fresh physical SendBox VM
+receipt, live inference, signing/notarization or wider milestone readiness.
+
+Warnings remain: experimental OpenTUI FFI, renderer chunks above 500 kB and the
+optional Apple `.icon` companion being unavailable while the normal `.icns`
+exists. The actual-package probe logged `sandbox_setup`/`sandbox_release_feed`
+diagnostics in generated state; that is not managed Sandbox readiness or proof
+of the supplied personal log's `sandbox_setup_cancelled` provenance.
+
+The separate main-only CI run
+[41602139750](https://github.com/mbianchidev/moguri/actions/runs/41602139750),
+on base `60197e5`, ended with **both jobs exceeding their 30-minute maximum
+during tests**. Annotations also disclosed the Ubuntu-26 label migration and
+macOS-arm64 capacity queues. It was not a successful full-source qualification;
+no trigger, timeout or rerun was changed to conceal it.
+
 ## Qualification
 
 Before feature implementation, `npm run spike` was rerun on macOS arm64 with
