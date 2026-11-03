@@ -251,6 +251,46 @@ imports. It fails on the previous actual `fbe7650` package with the reported
 error. Final artifact-specific evidence belongs below, not in those historical
 small-state results.
 
+#### Retained-history development installer
+
+The executable source cut is `2be78d1`, retaining protocol 88 and package
+version `0.31.0-alpha.1`. The measured fixtures use 62,836,224 bytes of generated
+retained events, never the user's database, keys, terminals or authorization.
+
+| Check | Result |
+| --- | --- |
+| Typecheck, production build and root audit | PASS; zero vulnerabilities |
+| Focused source checks | PASS; 65 handshake/reconnect/profile/notification/ownership checks in 15.33 s |
+| Independently installed packed SDK | PASS in 141.39 s; all four entrypoints, declarations, existing runtime/worker probes and zero consumer vulnerabilities |
+| Installed SDK large-history negotiation | PASS; 601.11 ms, no model call or state change |
+| Complete actual-package verifier | PASS in 79.24 s, including the new large-history native startup and earlier cold/restart/PTY checks |
+| Actual packaged large-history startup | PASS; SDK negotiation 650.74 ms; actual hidden desktop window/Settings ready in 4,024.88 ms, no model call or personal state |
+| Untouched actual packaged Electron | PASS; nine launcher/shutdown/restart/terminal checks in 16.1 s, with one unpackaged-only skip |
+| Actual ZIP/manifest through production update consumer | PASS; 814,523,015 bytes in 111.22 s; no app execution or quarantine bypass |
+| Actual read-only DMG/layout | PASS; exact signed application bytes, Applications shortcut, native icons and Finder geometry/background; Finder was not opened |
+
+Artifacts are frozen under
+`release/qualification-builds/service-negotiation-2be78d1/`:
+
+| File | Bytes | SHA-256 |
+| --- | --- | --- |
+| `Moguri-0.31.0-alpha.1-macos-arm64.dmg` | 830024432 | `33d0a2a332e44e0c79047bcd7c5e98ebb5c77717c0bfb143b37231d15ea1342f` |
+| `Moguri-0.31.0-alpha.1-macos-arm64.zip` | 814523015 | `f6eb0f61bc5279cec228002f7f95b4660dccc4face774e0743eabb81cc848c78` |
+
+The matching integrity manifest is
+`Moguri-0.31.0-alpha.1-macos-arm64.manifest.json`; the actual app is
+`builds.noindex/0.31.0-alpha.1/Moguri-darwin-arm64/Moguri.app`.
+These are ad-hoc-signed, **not notarized**, not published or installed over the
+user's app. The DMG exceeds chat's attachment limit and remains local.
+The prior `service-recovery-fbe7650` artifact is superseded for the
+large-history negotiation error and remains byte-identical.
+
+The worker/bridge/MCP/data bytes and exact native distribution below are reused
+unchanged. This is not a new SendBox VM qualification, live inference test or
+wider milestone acceptance. Existing FFI, renderer chunk-size, optional `.icon`
+and generated Sandbox-feed diagnostics remain disclosed; none is permission
+to substitute an environment, model, key backend or installed application.
+
 ### Superseded service recovery validation cut
 
 **Superseded validation cut.** The full source sweep exposed an admission-fence
