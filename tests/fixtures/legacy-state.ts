@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import type { startService } from "../../apps/service/src/server.ts";
-import { hasCombinedWorkspaceHistory, hasSessionControlsHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
+import { hasCombinedWorkspaceHistory, hasSessionControlsHistory, hasVoiceShortcutHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
 import { randomUUID } from "node:crypto";
 import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
@@ -116,7 +116,12 @@ export function removeSessionControlsFixtureMarkers(db: DatabaseSync, events: re
   if (hasSessionControlsHistory(events)) {
     throw new Error("Generate genuine pre-87 history; voice lifecycle, peer/dependency and bulk authority cannot become older state.");
   }
+  removeVoiceShortcutFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('session_coordination_controls_schema','session_pr_associations_schema','voice_lifecycle_schema','chat_outputs_schema','language_app_tools_schema')");
+}
+export function removeVoiceShortcutFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasVoiceShortcutHistory(events)) throw new Error("Generate genuine pre-88 history; an explicit shortcut choice cannot become a legacy button preference.");
+  db.exec("DELETE FROM retention_metadata WHERE id='voice_shortcut_schema'");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);

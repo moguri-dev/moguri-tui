@@ -158,10 +158,11 @@ explicit user toggle; GitHub commands need an explicit repository target.
 Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
 Enable local voice in Settings to download the sole pinned model; disabling
-voice deletes only that Moguri-managed model. Click the microphone or tap
-Ctrl+Space to start, then activate it again to finish. Optional held
-push-to-talk and explicitly consented focused-composer standby are separate
-settings. Words stream into the draft without an Insert step or automatic
+voice deletes only that Moguri-managed model. Click the microphone to record
+and click again to confirm; hold Ctrl+Space for push-to-talk and release to
+finish. Shortcut toggle mode is an explicit setting, independent of the
+microphone button and consented focused-composer standby. Words stream into
+the draft without an Insert step or automatic
 prompt submission. Side chat
 opens immediately, read-only, with inherited controls and captured main context.
 
