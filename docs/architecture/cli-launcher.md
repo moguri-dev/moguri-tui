@@ -4,6 +4,12 @@ The desktop distribution includes the CLI, TUI, OpenTUI dependencies and pinned
 Node runtime, including for desktop-only users. Copying `Moguri.app` does not run
 the TUI or install a shell command.
 
+The current [protocol-89 responsiveness follow-up](startup-responsiveness.md)
+supersedes the earlier protocol-88 startup artifacts below. It preserves those
+entrypoint/ownership fixes and adds indexed reads, visible startup, bounded
+same-owner health recovery and counted session navigation. Earlier artifact
+hashes remain historical, not qualification of current bytes.
+
 ## Installation contract
 
 **Settings > General > Command line > Install `moguri` command** is an explicit
