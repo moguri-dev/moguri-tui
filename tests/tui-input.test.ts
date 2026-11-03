@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { isRecord, MoguriSdk } from "../packages/sdk/src/index.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
 
@@ -62,4 +62,30 @@ test("TUI Shift+Enter inserts a newline and active-turn Cmd/Ctrl+Enter holds the
     assert.equal(held.held, true); assert.equal(held.text, "Generated first line.\nGenerated second line.\nGenerated third line.");
     assert.ok(fixture.session().turnId); assert.equal(fixture.requests.length, 1);
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
+});
+
+test("the native TUI keeps the submitted input visible before its original service acknowledgement", { skip: process.platform !== "darwin" }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriSdk(fixture.service.connection).ready(), gate = Promise.withResolvers<void>();
+  const dispatch = fixture.service.controller.dispatch.bind(fixture.service.controller);
+  let entered = false;
+  fixture.service.controller.dispatch = async (...args: Parameters<typeof dispatch>) => {
+    const envelope: unknown = args[0];
+    if (isRecord(envelope) && isRecord(envelope.command) && envelope.command.type === "message.send") { entered = true; await gate.promise; }
+    return dispatch(...args);
+  };
+  const setup = await createTestRenderer({ width: 120, height: 40, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    await fixture.configure(); flushSync(() => root.render(createElement(TuiApp, { client }))); await ready(setup);
+    await setup.mockInput.typeText("Generated native in-flight input.");
+    setup.mockInput.pressEnter();
+    await waitFor(() => entered); await setup.flush();
+    const frame = setup.captureCharFrame();
+    assert.ok(frame.includes("Awaiting service acknowledgement."));
+    assert.ok(frame.includes("Generated native in-flight input."));
+    assert.equal(fixture.session().messages.length, 0);
+    assert.equal(fixture.requests.length, 0);
+    gate.resolve(); await fixture.terminal(); await setup.flush();
+    assert.equal(setup.captureCharFrame().includes("Awaiting service acknowledgement."), false);
+    assert.equal(fixture.session().messages.filter((message) => message.role === "user").length, 1);
+  } finally { gate.resolve(); fixture.service.controller.dispatch = dispatch; await closeTui(root, setup, client, () => fixture.close()); }
 });

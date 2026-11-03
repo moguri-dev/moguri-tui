@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
-import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { continueWorkInput, DraftEditor, pendingInputStatus, MOGURI_ASCII, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
 import { kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
@@ -1199,7 +1199,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             });
           }} />
         </box> :
-        mode === "trace" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Recent events (last 200 received)</text>{events.filter((event) => !session || event.session_id === session.id).map((event) => <text key={event.id} fg={colors.muted}>{safe(`#${event.seq} ${event.event_type}\n${JSON.stringify(event.payload)}\n`)}</text>)}</scrollbox> :
+        mode === "trace" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Client request timings (transport, not server/model execution)</text><text fg={colors.muted}>{safe(JSON.stringify(client.getRequestTimings(), null, 2))}</text><text fg={colors.accent}>Recent events (last 200 received)</text>{events.filter((event) => !session || event.session_id === session.id).map((event) => <text key={event.id} fg={colors.muted}>{safe(`#${event.seq} ${event.event_type}\n${JSON.stringify(event.payload)}\n`)}</text>)}</scrollbox> :
         mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Held prompts do not run. /run ID releases one. /edit, /remove, /reorder and /copy ID manage prompts.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.held ? "held" : item.delivery}]\n${item.text}\n${item.attachments.map((attachment) => `${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`).join("\n")}\n`)}</text>)}</scrollbox> :
           <scrollbox key={`conversation-${session?.id ?? "empty"}`} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom">
             {!session?.messages.length && <box flexDirection="column" paddingY={1} gap={1}>
@@ -1211,6 +1211,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
               {detailed && message.reasoning && <text fg={colors.muted}>{safe(`Provider-exposed reasoning:\n${message.reasoning}`)}</text>}
               {message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) => <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>)}
             </box>)}
+            {editor && <TuiPendingInput editor={editor} />}
             {snapshot?.scheduledPrompts.filter((prompt) => prompt.sessionId === session?.id && ["scheduled", "blocked"].includes(prompt.status)).map((prompt) =>
               <box key={prompt.id} flexDirection="column" border borderColor={colors.border} padding={1} marginTop={1}>
                 <text fg={colors.muted}>{safe(`[clock] ${prompt.status === "blocked" ? "Paused" : "Scheduled"}, not sent / ${new Date(prompt.dueAt).toLocaleString()}\n${prompt.text}${prompt.diagnostic ? `\n${prompt.diagnostic}` : ""}\nF9 / Automations: Send now or Cancel`)}</text>
@@ -1350,6 +1351,16 @@ function TuiScheduledPrompts({ sdk, prompts, run }: { sdk: MoguriSdk; prompts: S
       ])} onSelect={(_, option) => { if (!option || pending.current) return; const [action, id] = String(option.value).split(":"), prompt = entries.find((entry) => entry.id === id); if (!prompt) return;
         pending.current = true; setBusy(true); void run(async () => { try { if (action === "send") await sdk.scheduledPrompts.sendNow(prompt.id, prompt.revision); else await sdk.scheduledPrompts.cancel(prompt.id, prompt.revision); } finally { pending.current = false; setBusy(false); } });
       }} />}
+  </box>;
+}
+function TuiPendingInput({ editor }: { editor: DraftEditor }) {
+  const colors = React.useContext(ThemeContext);
+  const input = useSyncExternalStore(editor.subscribe, () => editor.getState().pendingInput, () => editor.getState().pendingInput);
+  if (!input) return null;
+  return <box id="tui-pending-input" flexDirection="column" border borderColor={colors.border} padding={1}>
+    <text fg={colors.accent}>{pendingInputStatus(input)} Awaiting service acknowledgement.</text>
+    <text fg={colors.foreground}>{safe(input.text)}</text>
+    {input.attachments.length > 0 && <text fg={colors.muted}>{safe(input.attachments.map((attachment) => attachment.path).join("\n"))}</text>}
   </box>;
 }
 function TuiComposer({ editor, session, focused, compact, focus, submit, run }: { editor: DraftEditor; session: Session; focused: boolean; compact: boolean; focus: () => void; submit: () => void; run: (operation: () => Promise<void>) => Promise<void> }) {
