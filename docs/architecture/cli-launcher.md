@@ -143,6 +143,13 @@ with its exact delivery artifacts, not inferred from those source results.
 
 ### Service recovery delivery qualification
 
+**Retained-history follow-up required.** The `fbe7650` artifact below repaired
+entrypoint/ownership recovery but still reproduced the later user-reported
+`Moguri protocol negotiation did not complete` failure with large retained
+history. Its earlier small-state qualification is not evidence that such a
+store opens successfully. Use the subsequent snapshot-cursor repair, not this
+historical installer, for that failure.
+
 The corrected executable source is `fbe7650`, including synchronous admission
 cancellation before awaited metadata cleanup. It retains protocol 88 and
 package version `0.31.0-alpha.1`, without a new migration or native payload.
@@ -180,6 +187,69 @@ The failed earlier full sweep was not counted as qualification. The complete
 default-concurrency unit/native-TUI sweep and complete hidden Electron sweep
 were restarted on `fbe7650` and both completed successfully; physical-native
 and package-only skips remain disclosed rather than counted as exercised.
+
+### Retained-history negotiation follow-up
+
+The user's subsequent no-window error was reproduced from the actual
+`service-recovery-fbe7650` application's unchanged SDK/runtime bytes using
+1,000 generated encrypted draft revisions, over 62.8 MB of retained events.
+The HTTP snapshot succeeded, but a new client still authenticated its event
+socket with cursor zero. Replaying already-covered history filled the server's
+4-MiB buffered-output bound, repeatedly closed the socket for catch-up and
+consumed the existing ten-second SDK negotiation window. Desktop waits for that
+authenticated profile before creating its window. This reproduced the error,
+not the user's personal history or individual log provenance.
+
+The shared browser-safe client now advances its resume cursor only after
+accepting a same-generation, same-connection, exact-profile snapshot with a
+valid nonnegative safe-integer sequence. The event socket requests only events
+after that snapshot. Events committed between HTTP snapshot delivery and socket
+authentication are still delivered; no source mutation is resent and no store
+history is deleted, truncated or migrated. A late event-ready snapshot cannot
+roll back a newer accepted HTTP snapshot or resume cursor.
+
+`ClientState.events` remains the bounded live delivery window, not a second
+durable history database. Cold opening does not refill it with events already
+represented by the snapshot. Authoritative messages, drafts, queues, artifacts,
+receipts, accounting, retained activity and source-result paging remain in the
+service snapshot/APIs. Reconnects retain exact state/profile authority and
+unknown outcomes, rather than resetting or replaying effects.
+
+The existing ten-second handshake deadline is unchanged and now uses the
+monotonic clock. Service startup still has its separately qualified sixty-second
+authenticated-ready window. Event close 1008 retains a matching
+app/service/profile authentication diagnostic; close 1013 retains the replay
+recovery diagnostic. Negotiation failure includes that observed reason instead
+of only a generic timeout, without echoing arbitrary server frame contents.
+
+This reuses the existing Node/Chromium WebSocket clients, Node filesystem and
+crypto APIs, React and the MIT `ws` service transport, plus the existing SQLite
+store. It adds no dependency, service API, domain event, migration or protocol
+bump. CLI, TUI, desktop and packed SDK all use the same client fix, compatible
+with the current healthy protocol-88 service. Worker, SSH bridge, MCP worker
+and data-worker hashes remain unchanged; no new native qualification is implied.
+
+Before editing, the generated Phase 0 baseline was rerun on macOS arm64:
+
+| Primitive | Result | Measurement |
+| --- | --- | --- |
+| Generated provider requests/cancellation | PASS | Six requests; cancellation 31.74 ms |
+| SQLite WAL/crash recovery | PASS | 1,000 events; append p95 0.066 ms; rebuild 0.560 ms |
+| Generated PTY group cancellation | PASS | 151.30 ms; zero surviving children |
+| OpenTUI React | PASS | 60 updates; mean 17.19 ms |
+| Hidden Electron | PASS | Ready 327.86 ms; 444.95 MiB; scroll mean 8.22 ms |
+| Generated filesystem/Git | PASS | 2,000 files; listing 1.35 ms; Git status 13.52 ms |
+
+Unavailable live-provider, Rust/Linux, signing/notarization, native SendBox,
+configured-SSH and wider-roadmap gates still report FAIL in that baseline.
+The source regression preserves the full encrypted history and negotiates the
+generated 62.8-MB store in 659 ms with one exact snapshot cursor. The built
+SDK/hidden source desktop probe passes with zero model calls: SDK negotiation
+700 ms, hidden window/Settings ready in 3,912 ms. The same fixture is required
+by independent packed-SDK and actual-package verification, not just source
+imports. It fails on the previous actual `fbe7650` package with the reported
+error. Final artifact-specific evidence belongs below, not in those historical
+small-state results.
 
 ### Superseded service recovery validation cut
 
