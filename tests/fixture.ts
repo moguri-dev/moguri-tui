@@ -13,6 +13,7 @@ import type { PlatformOptions } from "../apps/service/src/platform.ts";
 import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
 import { kupoThinkingMinimumOutput, qualifiedKupoThinking, supportedThinking } from "../apps/service/src/model-controls.ts";
 import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
+import { legacySessionControlsJournal } from "./fixtures/legacy-session-controls-journal.ts";
 import type { MoguriSdk } from "../packages/sdk/src/index.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
 export async function reviewNativeTools(fixture: { service: Awaited<ReturnType<typeof startService>> } | MoguriSdk, names = ["read_file", "write_file"]) {
@@ -243,7 +244,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
     },
   };
 }
-export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean } = {}) {
+export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project"), home = join(directory, "home");
   const { mkdir } = await import("node:fs/promises");
@@ -263,6 +264,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     return runProgram(executable, args, request);
   }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
   const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
+  const restoreControlsJournal = options.legacySessionControlsJournal ? legacySessionControlsJournal(service.store) : () => {};
   const restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
   const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
@@ -286,6 +288,6 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
       return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));
     },
     terminal: async () => waitFor<Session>(() => { const current = session(); return !current.turnId && ["completed", "stopped", "partial", "failed"].includes(current.status) ? current : false; }),
-    close: async () => { await service.close(); restoreJournal(); await fixture.close(); await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); },
+    close: async () => { await service.close(); restoreJournal(); restoreControlsJournal(); await fixture.close(); await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); },
   };
 }

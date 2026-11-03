@@ -157,10 +157,22 @@ and command tools, without creating a project. Browser control keeps its
 explicit user toggle; GitHub commands need an explicit repository target.
 Opening Terminal or explicitly switching chats with it visible starts
 or reuses the exact selected console; + is independent of unrelated UI work.
-Click the microphone to record and click again to confirm, or hold Ctrl+Space
-and release to finish. Both stream into the draft without an Insert step or
-automatic prompt submission. Side chat
+Enable local voice in Settings to download the sole pinned model; disabling
+voice deletes only that Moguri-managed model. Click the microphone to record
+and click again to confirm; hold Ctrl+Space for push-to-talk and release to
+finish. Shortcut toggle mode is an explicit setting, independent of the
+microphone button and consented focused-composer standby. Words stream into
+the draft without an Insert step or automatic
+prompt submission. Side chat
 opens immediately, read-only, with inherited controls and captured main context.
+
+[Session controls and interactive tools](docs/architecture/session-controls-and-tools.md)
+add visible stable IDs, reviewed ID context, success-only dependencies,
+same-project bulk actions and pinning, multiple verified PRs with an
+Actions/reviews pane, real JS/TS definitions/references, typed array helpers,
+isolated interactive HTML and owned Local Playwright/browser screenshots
+attached to chat. These are bounded alpha capabilities, not native OS control
+or a general-purpose automation engine.
 
 [Chat activity](docs/setup.md#chat-activity-and-usage) uses small operation
 icons, expandable original arguments/results, observed timing/output quantities

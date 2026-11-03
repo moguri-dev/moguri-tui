@@ -110,6 +110,22 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       }
       else if (path.startsWith("repos/generated-owner/fixture/issues?")) data = issues;
       else if (path.startsWith("repos/generated-owner/fixture/pulls?")) data = pulls;
+      else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/files\?/.test(path)) data = [{ filename: "generated.ts", status: "modified", additions: 1, deletions: 1,
+        patch: "@@ -1 +1 @@\n-old generated line\n+new generated line", blob_url: "https://github.com/generated-owner/fixture/blob/generated-feature/generated.ts" }];
+      else if (path.startsWith("repos/generated-owner/fixture/actions/runs?")) data = { workflow_runs: [{ id: 80, name: "Generated CI", status: "completed", conclusion: "success",
+        head_sha: head, html_url: "https://github.com/generated-owner/fixture/actions/runs/80" }] };
+      else if (path === "repos/generated-owner/fixture/actions/runs/80") data = { id: 80, name: "Generated CI", status: "completed", conclusion: "success", head_sha: head };
+      else if (path.startsWith("repos/generated-owner/fixture/actions/runs/80/jobs?")) data = { jobs: [{ id: 81, name: "Generated build", status: "completed", conclusion: "success",
+        head_sha: head, steps: [{ name: "Generated install", status: "completed", conclusion: "success" }, { name: "Generated test", status: "completed", conclusion: "success" }] }] };
+      else if (/\/commits\/[a-f0-9]+\/check-runs\?/.test(path)) data = { check_runs: [{ id: 82, name: "Generated checks", status: "completed", conclusion: "success", head_sha: head }] };
+      else if (/\/commits\/[a-f0-9]+\/status\?/.test(path)) data = { sha: head, statuses: [] };
+      else if (/^repos\/generated-owner\/fixture\/commits\/[a-f0-9]+$/.test(path)) data = { sha: head };
+      else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/comments\?/.test(path)) data = [{ id: 83, body: "Generated inline review comment.", path: "generated.ts", line: 1,
+        state: "COMMENTED", user: { login: "generated-reviewer" }, html_url: "https://github.com/generated-owner/fixture/pull/11#discussion_r83" }];
+      else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/reviews\?/.test(path)) data = [{ id: 84, body: "Generated approved review.", state: "APPROVED", user: { login: "generated-reviewer" } }];
+      else if (path === "graphql") data = { data: { repository: { nameWithOwner: repository.full_name, pullRequest: { number: Number(fields.number ?? 11), headRefOid: head,
+        reviewThreads: { nodes: [{ id: "GENERATED_THREAD", isResolved: false, isOutdated: false, comments: { nodes: [{ databaseId: 83, body: "Generated unresolved thread.", updatedAt: "2026-01-01T00:00:00Z", author: { login: "generated-reviewer" } }] } }],
+          pageInfo: { hasNextPage: false, endCursor: null } } } } } };
       else if (/^repos\/generated-owner\/fixture\/issues\/\d+$/.test(path)) data = changedBody ? issue(Number(path.split("/").at(-1))) : issues.find((item) => item.number === Number(path.split("/").at(-1)));
       else if (/^repos\/generated-owner\/fixture\/pulls\/\d+$/.test(path)) {
         const selected = pulls.find((item) => item.number === Number(path.split("/").at(-1)))!;
@@ -143,5 +159,7 @@ process.exit(result.status ?? 67);
     }
     const board = defaultBoard(fixture.projectId);
     await fixture.sdk.issues.configure(fixture.projectId, { ...board, autoRefreshPrs: false }, 0);
-    return { ...fixture, calls, repository, changeSource: () => { changedBody = true; }, changeAccount: (id: number) => { accountId = id; }, writes: () => ({ issues: issueWrites, pulls: prWrites }) };
+    return { ...fixture, calls, repository, addPull: (number: number) => { pulls.push(pull(number, `Generated PR ${number}`)); },
+      changeHead: (value: string) => { head = value; for (const item of pulls) item.head.sha = value; },
+      changeSource: () => { changedBody = true; }, changeAccount: (id: number) => { accountId = id; }, writes: () => ({ issues: issueWrites, pulls: prWrites }) };
 }

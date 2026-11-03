@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import type { startService } from "../../apps/service/src/server.ts";
-import { hasCombinedWorkspaceHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
+import { hasCombinedWorkspaceHistory, hasSessionControlsHistory, hasVoiceShortcutHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
 import { randomUUID } from "node:crypto";
 import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
@@ -103,6 +103,7 @@ export function removeOwnedTransportFixtureMarkers(db: DatabaseSync, events: rea
   db.exec("DELETE FROM retention_metadata WHERE id IN ('scheduled_native_preparation_schema','owned_model_transport_schema','transport_finishing_schema')");
 }
 export function removeRetryCheckpointFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeSessionControlsFixtureMarkers(db, events);
   if (events.some((event) => event.event_type === "model.request_bound" && event.payload.nativeRestaging ||
     event.event_type === "sandbox.workspace_recorded" && event.payload.workspace.preparation?.version === 3 ||
     event.event_type === "settings.updated" && event.payload.settings.interactions?.nativeRetryRestaging !== undefined ||
@@ -110,6 +111,17 @@ export function removeRetryCheckpointFixtureMarkers(db: DatabaseSync, events: re
     throw new Error("Generate genuine pre-86 history; private retry/checkpoint authority cannot become older state.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('native_retry_restaging_schema','transport_checkpoint_schema')");
+}
+export function removeSessionControlsFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasSessionControlsHistory(events)) {
+    throw new Error("Generate genuine pre-87 history; voice lifecycle, peer/dependency and bulk authority cannot become older state.");
+  }
+  removeVoiceShortcutFixtureMarker(db, events);
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('session_coordination_controls_schema','session_pr_associations_schema','voice_lifecycle_schema','chat_outputs_schema','language_app_tools_schema')");
+}
+export function removeVoiceShortcutFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasVoiceShortcutHistory(events)) throw new Error("Generate genuine pre-88 history; an explicit shortcut choice cannot become a legacy button preference.");
+  db.exec("DELETE FROM retention_metadata WHERE id='voice_shortcut_schema'");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   assertPreWorkspaceHistory(events);

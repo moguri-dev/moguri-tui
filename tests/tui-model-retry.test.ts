@@ -40,8 +40,19 @@ test("native TUI Retry uses the retained original request, not its newly typed p
 
 test("native TUI reads and separately accepts exact peer checkpoint source without another model or Git approval", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
   const fixture = await remoteWinddownApiFixture();
-  assert.ok(fixture.workspace); initializeGeneratedRepository(fixture.workspace);
-  const report = await fixture.run(), preview = await fixture.sdk.winddown.sourcePreview(report.winddown.id, ["fixture.txt"]);
+  const prepare = async () => {
+    try {
+      assert.ok(fixture.workspace); initializeGeneratedRepository(fixture.workspace);
+      const report = await fixture.run();
+      await waitFor(() => {
+        const executions = fixture.service.controller.snapshot().executions.filter((execution) => execution.sessionId === fixture.sessionId);
+        return executions.length > 0 && executions.every((execution) => execution.cleanup === "owned-worker-stopped");
+      });
+      const preview = await fixture.sdk.winddown.sourcePreview(report.winddown.id, ["fixture.txt"]);
+      return { report, preview };
+    } catch (error) { await fixture.close(); throw error; }
+  };
+  const { report, preview } = await prepare();
   const terminal = await createTestRenderer({ width: 140, height: 50, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(terminal.renderer);
   try {
     flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk }))); await frame(terminal, "Write a prompt");
@@ -54,6 +65,9 @@ test("native TUI reads and separately accepts exact peer checkpoint source witho
     assert.equal(retained.winddown.commit, null); assert.equal(retained.winddown.status, "ready");
     assert.equal(fixture.requests.length, 0); assert.equal(fixture.solver.requests.length, 2);
     assert.equal(fixture.session().messages.filter((message) => message.role === "user").length, 1);
+  } catch (error) {
+    console.error("Generated peer checkpoint TUI qualification failed:", error);
+    throw error;
   } finally { await closeTui(root, terminal, fixture.sdk, () => fixture.close()); }
 });
 

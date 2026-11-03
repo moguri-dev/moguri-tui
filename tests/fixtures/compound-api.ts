@@ -7,9 +7,10 @@ import { digest } from "../../apps/service/src/store.ts";
 import { fixtureProvider, waitFor, type GeneratedProviderOptions } from "../fixture.ts";
 import { candidateApiFixture } from "./candidate-api.ts";
 
-export async function compoundApiFixture(configuration: { legacyNotifications?: boolean; legacyCandidateJournal?: boolean } = {}) {
-  const routerOptions: GeneratedProviderOptions & { workerPath: string; legacyCandidateJournal?: boolean } = { responseMode: "text", maxOutputTokens: 8192, contextWindow: 262144,
+export async function compoundApiFixture(configuration: { legacyNotifications?: boolean; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean } = {}) {
+  const routerOptions: GeneratedProviderOptions & { workerPath: string; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean } = { responseMode: "text", maxOutputTokens: 8192, contextWindow: 262144,
     exposeModels: true, replyText: "Generated pending compound classifier.", workerPath: fileURLToPath(new URL("../../apps/service/src/worker.ts", import.meta.url)),
+    legacySessionControlsJournal: configuration.legacySessionControlsJournal,
     ...(configuration.legacyCandidateJournal ? { legacyCandidateJournal: true } : {}) };
   const f = await candidateApiFixture(routerOptions);
   const providers: Array<Awaited<ReturnType<typeof fixtureProvider>>> = [], options: GeneratedProviderOptions[] = [];

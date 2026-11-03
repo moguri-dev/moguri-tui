@@ -5,7 +5,7 @@ import type { InputRenderable, TextareaRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessions, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, DraftEditor, MOGURI_ASCII, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
@@ -761,10 +761,11 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       type: "approval.respond", sessionId: session.id, approvalId: session.pendingApproval.id, allow: key.name === "y",
     });
   });
-  const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).sort(compareSessions).map((item) => {
+  const options = snapshot?.sessions.filter((item) => (item.status === "archived") === showArchived).sort((a, b) =>
+    (a.projectId ?? "").localeCompare(b.projectId ?? "") || compareSessionPriority(a, b, snapshot)).map((item) => {
     const attention = snapshot.settings.values.notifications.inApp ? snapshot.attention.findLast((entry) => entry.sessionId === item.id && entry.active) : undefined;
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
-    return { name: `${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home (no project)" : "No project")} / ${item.status}`, value: item.id };
+    return { name: `${item.pinned ? "* " : ""}${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home (no project)" : "No project")} / ${item.status} / ID ${item.id}`, value: item.id };
   }) ?? [];
   return <ThemeContext.Provider value={colors}><NavigationContext.Provider value={navigationFocus}><box id={`tui-profile-${client.profileId}`} width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
     <box height={3} paddingLeft={2} paddingRight={2} paddingTop={1} alignItems="flex-start" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
@@ -1340,6 +1341,7 @@ function TuiScheduledPrompts({ sdk, prompts, run }: { sdk: MoguriSdk; prompts: S
   const colors = React.useContext(ThemeContext), [busy, setBusy] = useState(false), pending = useRef(false);
   const entries = prompts.filter((prompt) => ["scheduled", "blocked", "queued"].includes(prompt.status));
   return <box flexDirection="column" flexGrow={1} padding={1}><text fg={colors.accent} height={2}>Automations / Scheduled prompts</text>
+    <text fg={colors.muted}>Automations cover actions, not just prompts. Currently: one-time prompts only; other actions unavailable.</text>
     <text fg={colors.muted} height={3}>One-time unsent prompts in this profile. Enter sends/cancels the exact input. Your current composer is not consumed.</text>
     {!entries.length ? <text fg={colors.muted}>No scheduled prompts. Cmd/Ctrl+Enter in an idle chat opens scheduling.</text> :
       <ThemedSelect focused={!busy} flexGrow={1} options={entries.flatMap((prompt) => [
