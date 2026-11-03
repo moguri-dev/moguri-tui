@@ -143,7 +143,16 @@ with its exact delivery artifacts, not inferred from those source results.
 
 ### Service recovery delivery qualification
 
-The executable source cut is `603847d`, based directly on merged `60197e5`.
+**Superseded validation cut.** The full source sweep exposed an admission-fence
+regression in `603847d`: awaiting private metadata checks before invoking owned
+shutdown allowed a held Remote secret write to resume before cancellation.
+The existing Remote concurrency test caught it. The repair now invokes owned
+shutdown synchronously before its first await, then checks/removes only its
+original metadata after real cleanup. A direct synchronous-fence regression
+accompanies the actual Remote admission test. The artifacts below remain
+frozen historical evidence, **not the final installer**.
+
+The earlier executable source cut is `603847d`, based directly on merged `60197e5`.
 Protocol 88 and package version `0.31.0-alpha.1` are unchanged. Final notes do
 not repack the following frozen development artifacts:
 
