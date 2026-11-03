@@ -260,6 +260,8 @@ retained events, never the user's database, keys, terminals or authorization.
 | Check | Result |
 | --- | --- |
 | Typecheck, production build and root audit | PASS; zero vulnerabilities |
+| Complete `npm test`, default file concurrency | PASS; 2,195 passed, 29 skipped, zero failures/cancellations in 1,760.25 s |
+| Complete `npm run test:e2e` | PASS; 323 passed, four skipped, zero failures in 559.47 s |
 | Focused source checks | PASS; 65 handshake/reconnect/profile/notification/ownership checks in 15.33 s |
 | Independently installed packed SDK | PASS in 141.39 s; all four entrypoints, declarations, existing runtime/worker probes and zero consumer vulnerabilities |
 | Installed SDK large-history negotiation | PASS; 601.11 ms, no model call or state change |
@@ -284,6 +286,10 @@ These are ad-hoc-signed, **not notarized**, not published or installed over the
 user's app. The DMG exceeds chat's attachment limit and remains local.
 The prior `service-recovery-fbe7650` artifact is superseded for the
 large-history negotiation error and remains byte-identical.
+The complete suites use executable source `2be78d1`; the separately strengthened
+late-ready regression also observes the actual reconnect authentication cursor
+and passes without changing distributed bytes. Final notes do not repack the
+qualified artifacts.
 
 The worker/bridge/MCP/data bytes and exact native distribution below are reused
 unchanged. This is not a new SendBox VM qualification, live inference test or
