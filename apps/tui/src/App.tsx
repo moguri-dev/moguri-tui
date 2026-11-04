@@ -507,7 +507,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       if (!held && session.projectId && !text.startsWith("/") && continueWorkInput(text)) {
         setContinueReview(await editor.reviewContinueWork()); setMode("continue-work"); return;
       }
-      await editor.send("queue", held);
+      await editor.send(held ? "queue" : "auto", held);
       return;
     }
     if (session.status === "archived" && name === "/restore" && !argument) {

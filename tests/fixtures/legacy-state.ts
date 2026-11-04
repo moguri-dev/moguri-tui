@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import type { startService } from "../../apps/service/src/server.ts";
-import { hasCombinedWorkspaceHistory, hasSessionControlsHistory, hasVoiceShortcutHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
+import { hasChatTitleHistory, hasLiveDeliveryHistory, hasCombinedWorkspaceHistory, hasSessionControlsHistory, hasVoiceShortcutHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
 import { randomUUID } from "node:crypto";
 import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
@@ -121,10 +121,15 @@ export function removeSessionControlsFixtureMarkers(db: DatabaseSync, events: re
 }
 export function removeVoiceShortcutFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (hasVoiceShortcutHistory(events)) throw new Error("Generate genuine pre-88 history; an explicit shortcut choice cannot become a legacy button preference.");
-  removeEventReadFixtureMarker(db);
+  removeEventReadFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='voice_shortcut_schema'");
 }
-export function removeEventReadFixtureMarker(db: DatabaseSync): void {
+export function removeChatTitleFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasChatTitleHistory(events) || hasLiveDeliveryHistory(events)) throw new Error("Generate genuine pre-90 history; actual naming/automatic live-delivery ownership cannot become older state.");
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('chat_titles_schema','live_delivery_schema')");
+}
+export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeChatTitleFixtureMarkers(db, events);
   db.exec("DROP INDEX IF EXISTS events_profile_sequence; DROP INDEX IF EXISTS events_type_sequence; DELETE FROM retention_metadata WHERE id='event_read_indexes_schema'");
 }
 export function removeWorkspaceFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
