@@ -54,5 +54,18 @@ test("native TUI intake reviews a URL list and starts only the exact confirmed s
     await terminal.flush();
     assert.equal(f.service.controller.snapshot().commandExecutions.filter((entry) => entry.name === "repositories").length, 2);
     assert.equal(f.requests.length, 0); assert.equal(f.session().projectId, f.service.controller.snapshot().projects[0]?.id);
+    const imported = (await sdk.projects.imports.read(batch.id)).batch.items[0]!, session = await sdk.sessions.create(imported.projectId!);
+    const remote = await sdk.slash(session.id!, '/git remote-preview {"remote":"origin","url":"git@github.com:generated-tui-moved/project.git"}', "tui");
+    assert.equal(remote.kind, "text");
+    if (remote.kind !== "text") throw new Error("Generated TUI remote review did not return its original source.");
+    const review = JSON.parse(remote.text).preview;
+    const changed = await sdk.slash(session.id!, `/git remote-set confirm-write ${JSON.stringify({
+      action: review.document.action, expectedDigest: review.digest, confirmations: review.document.confirmations,
+    })}`, "tui");
+    assert.equal(changed.kind, "text");
+    if (changed.kind !== "text") throw new Error("Generated TUI remote action did not return its retained identity.");
+    assert.equal((await sdk.github.wait(JSON.parse(changed.text).id)).operation.status, "completed");
+    assert.equal((await sdk.projects.git(imported.projectId!)).repository, "https://github.com/generated-tui-moved/project");
+    assert.equal(f.requests.length, 0);
   } finally { await closeTui(root, terminal, sdk, () => f.close()); await source.close(); }
 });
