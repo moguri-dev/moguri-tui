@@ -41,6 +41,13 @@ export async function main(argv: string[]): Promise<void> {
 moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
+moguri project import-preview LIST_FILE --root PARENT  Review all URL/bullet destinations
+moguri project import LIST_FILE --root PARENT --digest SHA --confirm-review
+moguri project imports             Retained batches, no replay
+moguri project import-read|import-stop|import-wait BATCH_ID
+moguri project import-acknowledge BATCH_ID LINE --revision N --confirm-review  Actual inspection, not cleanup proof
+moguri project remote-preview PROJECT_ID REMOTE URL  Review actual linked-worktree config
+moguri project remote-set PROJECT_ID REMOTE URL --digest SHA --confirmations JSON --confirm-write
 moguri slash '/COMMAND ARGUMENT' --session ID [--hold]  Actual ordered service intake
 moguri commands list|read EXECUTION_ID  Original outcomes and waiting UI results, never replay
 moguri progress --session ID       Checked plan items and untrusted task estimate
@@ -751,8 +758,32 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else throw new Error("Use session rename/mode/spawn/organize/archive/restore/stop/resume/delete. Deletion needs --confirm-remove and the observed --revision; child actions need --children or a saved disposition.");
       }
     } else if (group === "project") {
-      if (!args[0]) throw new Error("Choose the project ID from moguri status.");
-      if (action === "add") output(await sdk.projects.add(args[0]));
+      if (action === "imports") output(sdk.projects.imports.list());
+      else if (!args[0]) throw new Error("Choose the exact project, original batch or URL-list file shown in moguri --help.");
+      else if (action === "import-preview" || action === "import") {
+        if (!values.root) throw new Error("Choose an explicit --root parent folder before reviewing a repository list.");
+        const input = { text: await readFile(args[0], "utf8"), parent: values.root };
+        if (action === "import-preview") output(await sdk.projects.imports.preview(input));
+        else {
+          if (!values.digest || !values["confirm-review"]) throw new Error("Use the original preview --digest SHA and --confirm-review. No list/destination was guessed.");
+          const result = await sdk.command({ type: "projects.import.start", input, expectedDigest: values.digest, confirm: true });
+          output(await sdk.projects.imports.read(result.id!));
+        }
+      } else if (action === "import-read") output(await sdk.projects.imports.read(args[0]));
+      else if (action === "import-stop") output(await sdk.projects.imports.cancel(args[0]));
+      else if (action === "import-acknowledge" && args[1] && /^[1-9]\d*$/.test(args[1]) && Number.isSafeInteger(Number(args[1])) && values["confirm-review"]) output(await sdk.projects.imports.acknowledge(args[0], Number(args[1]), expectedRevision(), true));
+      else if (action === "import-wait") {
+        const original = await sdk.projects.imports.read(args[0]);
+        await waitForJob(original.batch.jobId, () => sdk.projects.imports.cancel(original.batch.id), "Reviewed repository import", () => sdk.projects.imports.read(original.batch.id));
+      } else if (action === "remote-preview" || action === "remote-set") {
+        if (!args[1] || !args[2] || args.length !== 3) throw new Error("Use project remote-preview PROJECT_ID REMOTE URL, then remote-set with its exact digest/confirmations.");
+        if (action === "remote-preview") output(await sdk.projects.remotePreview(args[0], args[1], args[2], values.workspace));
+        else {
+          if (!values.digest || !values.confirmations || !values["confirm-write"]) throw new Error("Remote changes need --digest SHA --confirmations JSON --confirm-write from the exact reviewed linked-worktree boundary.");
+          output(await sdk.command({ type: "github.execute", scope: { env: "Local", projectId: args[0], ...(values.workspace ? { workspaceId: values.workspace } : {}) },
+            action: { kind: "git.remote.set", remote: args[1], url: args[2] }, expectedDigest: values.digest, confirm: true, confirmations: JSON.parse(values.confirmations) }));
+        }
+      } else if (action === "add") output(await sdk.projects.add(args[0]));
       else if (action === "clone") {
         if (!args[1] || !values["confirm-write"]) throw new Error("Use project clone URL ABSOLUTE_NEW_PATH --confirm-write. Partial clone files are retained, never automatically removed or retried.");
         const result = await sdk.projects.clone(args[0], args[1], true);

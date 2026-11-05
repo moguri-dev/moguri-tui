@@ -125,8 +125,16 @@ export function removeVoiceShortcutFixtureMarker(db: DatabaseSync, events: reado
   db.exec("DELETE FROM retention_metadata WHERE id='voice_shortcut_schema'");
 }
 export function removeChatTitleFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeRepositoryManagementFixtureMarkers(db, events);
   if (hasChatTitleHistory(events) || hasLiveDeliveryHistory(events)) throw new Error("Generate genuine pre-90 history; actual naming/automatic live-delivery ownership cannot become older state.");
   db.exec("DELETE FROM retention_metadata WHERE id IN ('chat_titles_schema','live_delivery_schema')");
+}
+export function removeRepositoryManagementFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "repository.import_recorded" ||
+    event.event_type === "github.operation_recorded" && event.payload.operation.kind === "git.remote.set")) {
+    throw new Error("Generate genuine pre-91 history; actual reviewed repository import/remote ownership cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('repository_import_batches_schema','repository_remote_changes_schema')");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);
