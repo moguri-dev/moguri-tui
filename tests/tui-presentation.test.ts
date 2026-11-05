@@ -146,6 +146,7 @@ test("completed tool output stays compact until actual mouse or keyboard inspect
         await sdk.sessions.rename(created.id!, title);
       }
     }
+    await setup.flush();
     assert.ok(!setup.captureCharFrame().includes(marker));
     await saveFrame(setup, "chat-120x40");
     const target = setup.renderer.root.findDescendantById(`tui-tool-${result.id}`);
