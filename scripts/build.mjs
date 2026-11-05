@@ -6,6 +6,7 @@ import { prepareSpeech } from "./prepare-speech.mjs";
 import { buildIcons } from "./build-icons.mjs";
 import { bundledCliLauncher } from "../apps/desktop/src/cli-installation.ts";
 import { buildCache, cacheImports } from "./build-cache.mjs";
+import { dirname, relative, sep } from "node:path";
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist/desktop", { recursive: true });
@@ -16,7 +17,18 @@ await cp(new URL("../.native/speech", import.meta.url), "dist/native/speech", { 
 const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
 const define = { __MOGURI_BUILD_VERSION__: JSON.stringify(version) };
 await buildCache();
-const nodeBuild = { bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", define, plugins: [cacheImports] };
+const nodeSdkImports = {
+  name: "moguri-node-sdk-location",
+  setup(build) {
+    build.onResolve({ filter: /\/packages\/sdk\/src\/node\.ts$/ }, ({ kind }) => {
+      if (kind === "entry-point") return;
+      // Node SDK runtime paths belong to dist/sdk, not an inlining client's import.meta.url.
+      const path = relative(dirname(build.initialOptions.outfile), "dist/sdk/node.mjs").split(sep).join("/");
+      return { path: path.startsWith(".") ? path : `./${path}`, external: true };
+    });
+  },
+};
+const nodeBuild = { bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", define, plugins: [cacheImports, nodeSdkImports] };
 await Promise.all([
   build({ ...nodeBuild, entryPoints: ["apps/service/src/main.ts"], outfile: "dist/service.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/update-installer.ts"], outfile: "dist/update-installer.mjs", packages: "bundle" }),
@@ -37,8 +49,8 @@ await Promise.all([
   build({ ...nodeBuild, entryPoints: ["packages/sdk/src/node.ts"], outfile: "dist/sdk/node.mjs" }),
   build({ ...nodeBuild, entryPoints: ["packages/sdk/src/mcp-server.ts"], outfile: "dist/sdk/mcp.mjs" }),
   build({ entryPoints: ["packages/sdk/src/react.ts"], outfile: "dist/sdk/react.mjs", bundle: true, platform: "browser", format: "esm", target: "es2024", packages: "external" }),
-  build({ entryPoints: ["apps/tui/src/main.tsx"], outfile: "dist/tui.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", jsx: "automatic", jsxImportSource: "@opentui/react" }),
-  build({ entryPoints: ["apps/desktop/src/main.ts"], outfile: "dist/desktop/main.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external" }),
+  build({ entryPoints: ["apps/tui/src/main.tsx"], outfile: "dist/tui.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", plugins: [nodeSdkImports], jsx: "automatic", jsxImportSource: "@opentui/react" }),
+  build({ entryPoints: ["apps/desktop/src/main.ts"], outfile: "dist/desktop/main.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", plugins: [nodeSdkImports] }),
   build({ entryPoints: ["apps/desktop/src/preload.ts"], outfile: "dist/desktop/preload.cjs", bundle: true, platform: "node", format: "cjs", target: "node26", external: ["electron"] }),
   build({ entryPoints: ["apps/desktop/src/html-preload.ts"], outfile: "dist/desktop/html-preload.cjs", bundle: true, platform: "browser", format: "cjs", target: "es2024" }),
   viteBuild({ configFile: "apps/desktop/vite.config.ts" }),

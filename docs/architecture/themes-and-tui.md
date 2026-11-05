@@ -15,9 +15,12 @@ factory mode. Existing palette IDs, explicit modes and custom colors must surviv
 upgrade and restart unchanged. Desktop and TUI resolve the same SDK color tokens;
 neither client owns a second theme preference store.
 
-The terminal presentation uses restrained double-line menu frames, a crystal
-cursor and a compact session-status panel. Content and actual pending decisions
-take priority over decoration. Terminal fonts remain user-owned.
+The current terminal presentation is
+[compact and chat-first](sdk-platform.md#compact-chat-first-terminal), replacing
+the historical double-line menu frames and loading splash. A single-row header
+and navigation leave room for conversation; the growing composer's accent rail
+is the main visual landmark. Content and actual pending decisions take priority
+over decoration. Terminal fonts remain user-owned.
 Single-row metadata and session labels use OpenTUI's own truncation, not a
 Moguri text-width/VT implementation. At 52 by 24, the actual Env/model and
 autonomy/budget rows remain readable. Pending approvals/questions reserve
@@ -26,6 +29,10 @@ inline slash suggestion; expanded arguments/choices still use the existing
 focused views. Secondary plan/estimate detail stays available through `/progress`.
 Chat and command-result scroll surfaces have distinct native identities so a
 read result cannot inherit the chat's sticky bottom position or stale pixels.
+Completed tool output folds only in the view. F2 or `/details` exposes retained
+messages, including their full text; unconfirmed and unsuccessful outcomes are
+never hidden as ordinary success. PgUp/PgDn pauses following, while F3 explicitly
+returns to the latest output without changing or sending the draft.
 
 Navigation uses real OpenTUI mouse hit testing for Current session, Sessions,
 Work items and Code requests. Code requests means existing session-linked pull

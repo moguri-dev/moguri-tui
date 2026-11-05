@@ -8,6 +8,7 @@ globalThis.fetch = async (input, options) => {
   if (request.url !== `${base}/chat/completions` || request.method !== "POST") throw Error("Generated native fixture denies every actual network destination.");
   const text = await request.text(), body = JSON.parse(text), lastUser = body.messages.findLastIndex((message) => message.role === "user"),
     prompt = JSON.stringify(body.messages[lastUser]?.content), tools = body.messages.slice(lastUser + 1).filter((message) => message.role === "tool");
+  const naming = body.messages.some((message) => ["system", "developer"].includes(message.role) && String(message.content).startsWith("Summarize the topic of the supplied first user prompt"));
   if (body.model !== model || request.headers.get("authorization") !== "Bearer generated-test-only") throw Error("Generated native model or request credential changed.");
   calls.push({ model, bytes: text.length, tail: text.includes("GENERATED_PASTE_END_NOT_SENT"), tools: body.tools?.map((tool) => tool.function.name) ?? [] });
   await save();
@@ -23,11 +24,11 @@ globalThis.fetch = async (input, options) => {
     },
   }), { headers: { "Content-Type": "text/event-stream" } });
   const paste = prompt.match(/moguri-attachment\/[a-f0-9-]+\.txt/);
-  const call = tools.length === 0 && paste ? { name: "read_file", arguments: { path: paste[0], offset: 0, limit: 64 } } :
+  const call = naming ? null : tools.length === 0 && paste ? { name: "read_file", arguments: { path: paste[0], offset: 0, limit: 64 } } :
     prompt.includes("generated native write") && tools.length === 0 ? { name: "read_file", arguments: { path: "fixture.txt" } } :
     prompt.includes("generated native write") && tools.length === 1 ? { name: "write_file", arguments: { path: "fixture.txt", text: "generated native replacement\n", expectedDigest: JSON.parse(tools[0].content).digest } } : null;
   const delta = call ? { role: "assistant", tool_calls: [{ index: 0, id: `generated-native-tool-${calls.length}`, type: "function", function: { name: call.name, arguments: JSON.stringify(call.arguments) } }] } :
-    { role: "assistant", content: "Generated native model completed." };
+    { role: "assistant", content: naming ? '{"title":"Generated native topic summary"}' : "Generated native model completed." };
   return new Response(chunk(delta) + chunk({}, call ? "tool_calls" : "stop") +
     `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\ndata: [DONE]\n\n`,
   { headers: { "Content-Type": "text/event-stream" } });

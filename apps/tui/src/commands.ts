@@ -1,11 +1,11 @@
 import { slashCommands } from "../../../packages/sdk/src/index.ts";
 
 export const tuiTabs = [
-  { id: "session", label: "Current session", command: "/session" },
-  { id: "sessions", label: "Sessions", command: "/sessions" },
-  { id: "work-items", label: "Work items", command: "/work-items" },
-  { id: "code-requests", label: "Code requests", command: "/code-requests" },
-  { id: "automations", label: "Automations", command: "F9" },
+  { id: "session", label: "Current session", compact: "Chat", command: "/session" },
+  { id: "sessions", label: "Sessions", compact: "Chats", command: "/sessions" },
+  { id: "work-items", label: "Work items", compact: "Work", command: "/work-items" },
+  { id: "code-requests", label: "Code requests", compact: "Code", command: "/code-requests" },
+  { id: "automations", label: "Automations", compact: "Auto", command: "F9" },
 ] as const;
 export type TuiTab = typeof tuiTabs[number]["id"];
 interface TuiCommand { name: string; description: string; argument?: string }

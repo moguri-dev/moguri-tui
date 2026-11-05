@@ -5,17 +5,16 @@ import { createElement } from "react";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { connectMoguri } from "../../../packages/sdk/src/node.ts";
-import { MOGURI_ASCII, type MoguriSdk } from "../../../packages/sdk/src/index.ts";
+import type { MoguriSdk } from "../../../packages/sdk/src/index.ts";
 import { TuiApp } from "./App.tsx";
 import { nativeActions } from "./native.ts";
 
 const { values } = parseArgs({ options: { project: { type: "string" }, profile: { type: "string" }, help: { type: "boolean" } } });
 if (values.help) {
-  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nEnter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter holds; Shift+Cmd/Ctrl+Enter sends now.\nClick Current session, Sessions, Work items or Code requests. Tab focuses navigation;\nLeft closes and Right opens the sidebar there, never while editing the prompt.\n/help lists commands; Tab or click completes without executing.\n/connect signs in, /open PATH opens a project, /models selects a model,\n/profiles switches profiles, /theme lists shared palettes, /quit saves and leaves.\nSlash text joins the service queue. Only unheld /stop, /approve and /yolo are live.\nService-capable commands can finish after this client closes; UI-only actions need an actual compatible view.\nThe desktop and TUI share the same private local service.");
+  console.log("Moguri TUI\n\nnpm start -- [--project /path/to/project] [--profile ID]\n\nEnter sends; Shift+Enter inserts a newline. Cmd/Ctrl+Enter holds; Shift+Cmd/Ctrl+Enter sends now.\nClick the chat, session, work, code or automation tabs. Tab focuses navigation;\nLeft closes and Right opens the sidebar there, never while editing the prompt.\nF2 or /details inspects full retained messages and tool output. PgUp/PgDn scroll history;\nF3 or click latest resumes following new output. These controls never send the draft.\n/help lists commands; Tab or click completes without executing.\n/connect signs in, /open PATH opens a project, /models selects a model,\n/profiles switches profiles, /theme lists shared palettes, /quit saves and leaves.\nSlash text joins the service queue. Only unheld /stop, /approve and /yolo are live.\nService-capable commands can finish after this client closes; UI-only actions need an actual compatible view.\nThe desktop and TUI share the same private local service.");
 } else {
   let client: MoguriSdk | undefined;
   try {
-    if (process.stdout.isTTY) console.log(MOGURI_ASCII);
     client = await connectMoguri({ profileId: values.profile ?? process.env.MOGURI_PROFILE_ID });
     let initialSessionId: string | undefined;
     if (values.project) {

@@ -47,7 +47,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
 export interface GeneratedProviderOptions {
   httpFailure?: { status: number; message: string; remaining?: number; afterRequests?: number };
   modelId?: string;
-  respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> }; hold?: boolean };
+  respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> }; hold?: boolean; delayMs?: number };
   issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
   stateSql?: boolean;
   stateSqlStatements?: { sql: string; parameters?: (string | number | boolean | null)[] }[];
@@ -115,6 +115,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
       };
       if (options.respond) {
         const result = options.respond(body, requests.length);
+        if (result.delayMs) await new Promise((resolve) => setTimeout(resolve, result.delayMs));
         if (result.hold) { chunk({ role: "assistant", content: result.text ?? "Generated owned request held." }); held.add(response); response.on("close", () => held.delete(response)); }
         else finish(result.tool, result.text);
       } else if (options.stream) {
@@ -267,7 +268,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
   const restoreControlsJournal = options.legacySessionControlsJournal ? legacySessionControlsJournal(service.store) : () => {};
   const restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
   const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
-  const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id! }));
+  const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id!, title: "New session" }));
   const sessionId = sessionResult.id!;
   const session = () => {
     const value = service.controller.snapshot().sessions.find((session) => session.id === sessionId)!;

@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, ensureConnection, stateDirectory, sdkServicePath, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
+import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, restartMoguriService, ensureConnection, stateDirectory, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
 import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, sessionChildBindings, type ControlDefaults, type SessionChildrenReview } from "../../../packages/sdk/src/index.ts";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
@@ -304,10 +304,12 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
   }
   if (group === "service") {
     if (!action || !["stop", "restart", "info"].includes(action)) throw new Error("Use service info, service stop or service restart.");
-    if (action === "stop" || action === "restart") await stopMoguriService(undefined, { preserveTerminals: action === "restart" });
+    const stateDir = stateDirectory();
+    const options = { stateDir, explicitStateDir: Boolean(process.env.MOGURI_STATE_DIR && process.env.MOGURI_STATE_DIR_EXPLICIT !== "0") };
+    if (action === "stop") await stopMoguriService(stateDir);
     if (action !== "stop") {
-      const connection = await ensureConnection({ servicePath: sdkServicePath() });
-      console.log(JSON.stringify({ pid: connection.pid, protocolVersion: connection.protocolVersion, stateDir: stateDirectory() }));
+      const connection = await (action === "restart" ? restartMoguriService(options) : ensureConnection(options));
+      console.log(JSON.stringify({ pid: connection.pid, protocolVersion: connection.protocolVersion, stateDir }));
     }
     return;
   }
