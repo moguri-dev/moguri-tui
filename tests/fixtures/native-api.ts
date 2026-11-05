@@ -28,15 +28,26 @@ export async function nativeApiFixture(configuration: SandboxConfiguration, opti
   };
   let started: Awaited<ReturnType<typeof startService>> | undefined;
   try {
+    const distribution = options.distribution ?? process.env.MOGURI_SANDBOX_DISTRIBUTION;
     const runtimeOptions = { stateDir: state, provider: provider.provider, retentionKey: GENERATED_RETENTION_KEY,
       platform: { vault, terminal: { defaultRoot: home, vault }, intakeClock: options.intakeClock, sandbox: { vault, command: await nativeFixtureCommand(provider.modelId, baseUrl, options.group, options.scenario, options.behavior),
-        dns: options.dns ?? generatedModelDns, distribution: options.distribution, setup: { automatic: false } } } };
+        dns: options.dns ?? generatedModelDns, distribution, setup: { automatic: false } } } };
     const service = await startService(runtimeOptions);
     started = service;
     const sdk = await new MoguriSdk(service.connection).ready();
     const reviewedConfiguration: SandboxConfiguration = { ...configuration,
       qualification: { ...configuration.qualification, allowedDomains: ["api.githubcopilot.com"], allowCopilot: true } };
-    return { root, state, project, home, provider, service, sdk, runtimeOptions, reviewedConfiguration, close: async (passed: boolean) => {
+    const qualify = async () => {
+      assert.ok(distribution, "Native managed qualification requires its explicit reviewed distribution.");
+      const review = (await sdk.sandbox.setup.review()).review;
+      assert.equal(review.administratorRequired, false, "Generated qualification must reuse verified installed release files, never request an OS dialog.");
+      const admitted = await sdk.sandbox.setup.apply(review), outcome = await sdk.sandbox.setup.wait(admitted.id!);
+      assert.equal(outcome.operation.status, "completed", outcome.operation.diagnostic ?? "The original managed setup did not complete.");
+      await sdk.refresh();
+      assert.equal(sdk.getState().snapshot?.capabilities.find((capability) => capability.env === "Sandbox")?.ready, true);
+      return outcome;
+    };
+    return { root, state, project, home, provider, service, sdk, runtimeOptions, reviewedConfiguration, qualify, close: async (passed: boolean) => {
       sdk.disconnect(); await service.close(); await provider.close();
       if (passed) await rm(root, { recursive: true, force: true });
       else console.error("Generated native service diagnostics retained:", root);

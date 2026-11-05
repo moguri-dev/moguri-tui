@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { transform } from "esbuild";
 import { isRecord, MoguriError, parse, PROTOCOL_VERSION, SandboxConfigurationSchema, type SandboxConfiguration } from "../../packages/sdk/src/index.ts";
+import { distributionConfiguration, readSandboxDistribution } from "../../apps/service/src/sandbox-distribution.ts";
 
 export async function nativeConfiguration(preserveReviewedNetwork = false): Promise<SandboxConfiguration | null> {
   const installation = process.env.MOGURI_NATIVE_INSTALLATION, workload = process.env.MOGURI_NATIVE_WORKLOAD;
@@ -9,13 +10,22 @@ export async function nativeConfiguration(preserveReviewedNetwork = false): Prom
   const candidate: unknown = JSON.parse(await readFile(installation, "utf8")), image: unknown = JSON.parse(await readFile(workload, "utf8"));
   if (!isRecord(candidate) || !isRecord(image) || image.status !== "PASS" || !isRecord(image.payload) || image.payload.protocol !== PROTOCOL_VERSION ||
     !isRecord(image.payload.files)) throw new MoguriError("native_fixture", "Use the actual verified installation and current-protocol immutable workload receipt.");
+  let resources = { cpus: 2, memoryMb: 2048, diskMb: 2048 };
+  if (process.env.MOGURI_SANDBOX_DISTRIBUTION) {
+    const definition = await readSandboxDistribution(process.env.MOGURI_SANDBOX_DISTRIBUTION, AbortSignal.timeout(30_000));
+    if (definition.distribution.worker.image !== image.image || definition.distribution.worker.workerDigest !== image.payload.files["dist/worker.mjs"] ||
+      definition.distribution.worker.bridgeDigest !== image.payload.files["dist/remote-bridge.mjs"]) {
+      throw new MoguriError("native_fixture", "The explicitly reviewed distribution differs from this exact workload. No factory resources or image were substituted.");
+    }
+    resources = distributionConfiguration(definition.distribution).qualification!.resources;
+  }
   return parse(SandboxConfigurationSchema, {
     executable: candidate.executable, configPath: null, image: image.image, bundlePath: candidate.bundle, trustRootPath: candidate.key,
     qualification: { release: candidate.version ?? "0.2.3", hostSha256: candidate.hostSha256, keySha256: candidate.keySha256, manifestSha256: candidate.manifestSha256,
       workerDigest: image.payload.files["dist/worker.mjs"], bridgeDigest: image.payload.files["dist/remote-bridge.mjs"],
       trustRootId: candidate.trustRootId, minimumReleaseSequence: candidate.minimumReleaseSequence,
       allowedDomains: preserveReviewedNetwork ? candidate.allowedDomains : [], allowCopilot: preserveReviewedNetwork ? candidate.allowCopilot : false,
-      resources: { cpus: 2, memoryMb: 2048, diskMb: 2048 } },
+      resources },
   });
 }
 export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing" | "steering" | "checkpoint",
