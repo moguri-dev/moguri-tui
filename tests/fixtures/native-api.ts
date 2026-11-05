@@ -9,6 +9,9 @@ import { GeneratedFileVault } from "./generated-vault.ts";
 import type { SandboxDns } from "../../apps/service/src/sandbox-network.ts";
 import type { IntakeClock } from "../../apps/service/src/session-intake.ts";
 
+// Model HTTP is intercepted; real DNS and proxy access have separate qualification gates.
+const generatedModelDns: SandboxDns = { addresses: async () => ["1.1.1.1"], aliases: async () => [] };
+
 export async function nativeApiFixture(configuration: SandboxConfiguration, options: { providerBaseUrl?: string; dns?: SandboxDns; distribution?: string; group?: boolean; intakeClock?: IntakeClock;
   scenario?: "decisions" | "finishing" | "steering" | "checkpoint"; behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" | "recover-once" } = {}) {
   assert.ok(configuration.qualification);
@@ -27,7 +30,7 @@ export async function nativeApiFixture(configuration: SandboxConfiguration, opti
   try {
     const runtimeOptions = { stateDir: state, provider: provider.provider, retentionKey: GENERATED_RETENTION_KEY,
       platform: { vault, terminal: { defaultRoot: home, vault }, intakeClock: options.intakeClock, sandbox: { vault, command: await nativeFixtureCommand(provider.modelId, baseUrl, options.group, options.scenario, options.behavior),
-        dns: options.dns, distribution: options.distribution, setup: { automatic: false } } } };
+        dns: options.dns ?? generatedModelDns, distribution: options.distribution, setup: { automatic: false } } } };
     const service = await startService(runtimeOptions);
     started = service;
     const sdk = await new MoguriSdk(service.connection).ready();
