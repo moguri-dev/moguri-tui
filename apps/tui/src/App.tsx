@@ -1,13 +1,13 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
-import type { InputRenderable, TextareaRenderable } from "@opentui/core";
+import { SyntaxStyle, TextRenderable, type BoxOptions, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionSubtree, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
-import { continueWorkInput, DraftEditor, pendingInputStatus, MOGURI_ASCII, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { continueWorkInput, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
 import { kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
@@ -54,7 +54,7 @@ async function waitForCommandFrame(renderer: ReturnType<typeof useRenderer>, sig
     await delay(15, undefined, { signal: owner });
   }
 }
-const label = (session: Session) => session.messages.find((message) => message.role === "user")?.text.split("\n")[0]?.slice(0, 44) || session.title;
+const label = (session: Session) => sessionTitle(session, 44);
 type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 type ArchiveReview = {
@@ -75,6 +75,23 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   useEffect(() => { renderer.on("theme_mode", setTerminalMode); return () => { renderer.off("theme_mode", setTerminalMode); }; }, [renderer]);
   const appearance = snapshot?.settings.values.appearance ?? { theme: "dark" };
   const colors = terminalColors(appearance, appearance.theme === "system" ? terminalMode : appearance.theme);
+  const markdownStyle = React.useMemo(() => SyntaxStyle.fromStyles({
+    default: { fg: colors.foreground },
+    "markup.heading": { fg: colors.accent, bold: true },
+    "markup.strong": { fg: colors.foreground, bold: true },
+    "markup.italic": { fg: colors.foreground, italic: true },
+    "markup.raw": { fg: colors.accent },
+    "markup.link.label": { fg: colors.accent, underline: true },
+    "markup.link.url": { fg: colors.muted },
+    "markup.list": { fg: colors.accent },
+  }, renderer.nativeScene), [renderer, colors.foreground, colors.accent, colors.muted]);
+  useEffect(() => () => { if (!renderer.nativeScene.resourceContext.disposed) markdownStyle.destroy(); }, [renderer, markdownStyle]);
+  const renderMarkdownNode = React.useCallback<NonNullable<MarkdownOptions["renderNode"]>>((token, context) => {
+    if (token.type === "code" && typeof token.text === "string") {
+      return new TextRenderable(renderer, { content: safe(token.text), fg: colors.accent, bg: colors.surface, paddingX: 1, marginTop: 1, marginBottom: 1 });
+    }
+    return context.defaultRender();
+  }, [renderer, colors.accent, colors.surface]);
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null);
   const [mode, renderMode] = useState<Mode>("compose");
   const modeRef = useRef<Mode>("compose");
@@ -105,6 +122,15 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [otherQuestion, setOtherQuestion] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [detailed, setDetailed] = useState(false);
+  const detailedRef = useRef(false);
+  const [followTranscript, setFollowTranscript] = useState(true);
+  const transcript = useRef<ScrollBoxRenderable>(null);
+  const followLatest = () => { setFollowTranscript(true); transcript.current?.scrollTo(transcript.current.scrollHeight); };
+  const toggleDetails = () => {
+    detailedRef.current = !detailedRef.current; setDetailed(detailedRef.current);
+    if (detailedRef.current) setFollowTranscript(false); else followLatest();
+  };
+  useEffect(() => { setFollowTranscript(true); }, [client, selectedId]);
   const [projectPath, setProjectPath] = useState("");
   const [startupCommand, setStartupCommand] = useState("");
   const [settingsText, setSettingsText] = useState("");
@@ -426,7 +452,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         case "project-settings": await openProjectEditor(); return;
         case "prompt": openSettingsEditor(true); return;
         case "trace": setMode("trace"); return;
-        case "details": setDetailed((value) => !value); return;
+        case "details": toggleDetails(); return;
         case "archive":
           if (!session) throw new Error("The original archive owner was removed.");
           await requestArchive(session); return;
@@ -717,6 +743,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       key.preventDefault(); key.stopPropagation(); setNavigationFocus(true);
       setNavigationIndex(Math.max(0, tuiTabs.findIndex((tab) => tab.id === activeTab))); return;
     }
+    if (mode === "compose" && key.name === "f2") {
+      key.preventDefault(); key.stopPropagation(); toggleDetails();
+      return;
+    }
+    if (mode === "compose" && key.name === "f3") { key.preventDefault(); key.stopPropagation(); followLatest(); return; }
+    if (mode === "compose" && !key.ctrl && !key.meta && !key.super && !key.shift && ["pageup", "pagedown"].includes(key.name) && transcript.current) {
+      key.preventDefault(); key.stopPropagation(); setFollowTranscript(false);
+      transcript.current.scrollBy((key.name === "pageup" ? -1 : 1) * Math.max(1, transcript.current.viewport.height - 2));
+      return;
+    }
     if (key.name === "f5") { key.preventDefault(); setMode("artifacts"); return; }
     if (key.name === "f7") {
       key.preventDefault(); void perform(async () => {
@@ -765,36 +801,44 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     (a.projectId ?? "").localeCompare(b.projectId ?? "") || compareSessionPriority(a, b, snapshot)).map((item) => {
     const attention = snapshot.settings.values.notifications.inApp ? snapshot.attention.findLast((entry) => entry.sessionId === item.id && entry.active) : undefined;
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
-    return { name: `${item.pinned ? "* " : ""}${prefix}${safe(label(item))}`, description: `${snapshot.projects.find((project) => project.id === item.projectId)?.name ?? (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home (no project)" : "No project")} / ${item.status} / ID ${item.id}`, value: item.id };
+    const scope = snapshot.projects.find((project) => project.id === item.projectId)?.name ??
+      (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home" : "No project");
+    return { name: `${item.pinned ? "* " : ""}${prefix}${safe(label(item))}`, subtitle: `${scope} / ${item.status}`,
+      description: `${scope} / ${item.status} / ID ${item.id}`, value: item.id };
   }) ?? [];
+  const inlineControls = width - (sidebarVisible && !sidebarOnly ? 26 : 0) >= 90;
+  const sessionStateVisible = session && (session.mode !== "agent" || session.pendingMode || session.queue.length > 0 || !["idle", "completed"].includes(session.status));
+  const planVisible = session && !compactDecision && (taskProgress.error || (taskProgress.progress?.checklist.total ?? 0) > 0);
+  const estimateVisible = !compactDecision && taskProgress.progress?.longRunning && taskProgress.progress.model;
+  const settledToolCalls = new Set(session?.messages.filter((message) => message.role === "tool").flatMap((message) => message.toolCalls?.map((call) => call.id) ?? []));
   return <ThemeContext.Provider value={colors}><NavigationContext.Provider value={navigationFocus}><box id={`tui-profile-${client.profileId}`} width="100%" height="100%" flexDirection="column" backgroundColor={colors.background}>
-    <box height={3} paddingLeft={2} paddingRight={2} paddingTop={1} alignItems="flex-start" flexDirection="row" border={["bottom"]} borderColor={colors.border}>
+    <box id="tui-header" height={1} flexShrink={0} paddingLeft={1} paddingRight={1} flexDirection="row">
       <box id="tui-sidebar-toggle" width={10} height={1} onMouseDown={(event) => {
         if (event.button !== 0) return; event.preventDefault(); event.stopPropagation();
         void perform(async () => { requireNavigation(); setSidebar(!sidebarVisible); setNavigationFocus(true); });
       }}><text fg={colors.accent}>{sidebarVisible ? "[-] Menu" : "[+] Menu"}</text></box>
-      <text height={1} wrapMode="none" truncate fg={colors.accent}><strong>{"<> moguri"}</strong></text><text height={1} wrapMode="none" truncate fg={colors.muted}>  /  {safe(snapshot?.profile?.name ?? client.profileId)}{width >= 80 ? ` / ${safe(project?.name ?? (session?.repositories ? `${session.repositories.length} captured repositories` : session?.controls.env === "Local" && session.homeRoot ? "Home (no project)" : session ? "No project" : "Workspace"))}` : ""}  /  {profilePending ? "Updating profile..." : status}</text>
+      <text height={1} wrapMode="none" truncate fg={colors.accent}><strong>{"<> moguri"}</strong></text><text height={1} flexGrow={1} wrapMode="none" truncate fg={colors.muted}>  {safe(snapshot?.profile?.name ?? client.profileId)}{width >= 80 ? ` / ${safe(project?.name ?? (session?.repositories ? `${session.repositories.length} repositories` : session?.controls.env === "Local" && session.homeRoot ? "Home (no project)" : session ? "No project" : "Workspace"))}` : ""}{session && width >= 110 ? ` / ${safe(label(session))}` : ""}</text>
+      <text height={1} wrapMode="none" fg={status === "connected" ? colors.accent : colors.attention}>{profilePending ? "Updating profile..." : status}</text>
     </box>
-    <box id="tui-navigation" height={width < 80 ? 4 : 3} flexShrink={0} flexDirection="row" flexWrap="wrap" border borderStyle="double" borderColor={navigationFocus ? colors.accent : colors.border}
-      title={navigationFocus ? "Navigation / arrows: sidebar, up/down: tabs" : "Navigation / click or /help"} titleColor={colors.muted}>
-      {tuiTabs.map((tab, index) => <box id={`tui-tab-${tab.id}`} key={tab.id} width={width < 80 ? "50%" : "25%"} height={1} paddingLeft={1}
+    <box id="tui-navigation" height={width < 40 ? 2 : 1} flexShrink={0} flexDirection="row" flexWrap="wrap">
+      {tuiTabs.map((tab, index) => <box id={`tui-tab-${tab.id}`} key={tab.id} width={width < 40 ? "33.333%" : "20%"} height={1} paddingLeft={1}
         backgroundColor={activeTab === tab.id || navigationFocus && navigationIndex === index ? colors.panel : colors.background}
         onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); void perform(() => navigate(tab.id)); }}>
-        <text fg={activeTab === tab.id || navigationFocus && navigationIndex === index ? colors.selection : colors.muted}>
-          {navigationFocus && navigationIndex === index ? "> " : activeTab === tab.id ? "* " : "  "}{tab.label}
+        <text height={1} wrapMode="none" truncate fg={activeTab === tab.id || navigationFocus && navigationIndex === index ? colors.selection : colors.muted}>
+          {navigationFocus && navigationIndex === index ? "> " : activeTab === tab.id ? "* " : "  "}{width < 110 ? tab.compact : tab.label}
         </text>
       </box>)}
     </box>
     <box flexGrow={1} minHeight={0} flexDirection="row">
-      <box id="tui-sidebar" visible={sidebarVisible} width={sidebarOnly ? "100%" : 26} border borderStyle="double" borderColor={navigationFocus ? colors.accent : colors.border} backgroundColor={colors.sidebar} paddingX={1} flexDirection="column" title="Sessions" titleColor={colors.accent}>
-        <text fg={colors.muted}>{showArchived ? "Archived / /sessions" : "Active / /sessions"}</text>
-        <scrollbox flexGrow={1} minHeight={0}>{options.map((option) => <box key={option.value} flexDirection="column" paddingY={1}
+      <box id="tui-sidebar" visible={sidebarVisible} width={sidebarOnly ? "100%" : 26} border={["right"]} borderColor={navigationFocus ? colors.accent : colors.border} backgroundColor={colors.sidebar} paddingX={1} flexDirection="column">
+        <text height={1} fg={colors.muted}>{showArchived ? "Archived chats" : "Chats"}</text>
+        <scrollbox flexGrow={1} minHeight={0}>{options.map((option) => <box key={option.value} flexDirection="column" height={2} flexShrink={0}
           backgroundColor={option.value === selectedId ? colors.panel : colors.sidebar}
           onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); void perform(async () => { await chooseSession(option.value); setNavigationFocus(false); if (sidebarOnly) setSidebar(false); }); }}>
           <text height={1} wrapMode="none" truncate fg={option.value === selectedId ? colors.selection : colors.foreground}>{option.value === selectedId ? "> " : "  "}{option.name}</text>
-          <text height={1} wrapMode="none" truncate fg={colors.muted}>{safe(option.description)}</text>
+          <text height={1} wrapMode="none" truncate fg={option.value === selectedId ? colors.selection : colors.muted}>{safe(option.subtitle)}</text>
         </box>)}{!options.length && <text fg={colors.muted}>{"No sessions yet.\n/new global\n/open PATH\n/connect"}</text>}</scrollbox>
-        <text fg={colors.muted}>{"/new  /profiles\n/sidebar close\nTab: navigation\nLeft closes / Right opens"}</text>
+        <text fg={colors.muted} height={2}>{"/new  /sessions\n/profiles  /sidebar"}</text>
       </box>
       <box id={`tui-surface-${selectedId ?? "none"}-${mode}`} visible={!sidebarOnly} flexGrow={1} minWidth={0} minHeight={0} overflow="hidden" flexDirection="column" paddingX={compact ? 1 : 2} backgroundColor={colors.background}>
         {mode === "profiles" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
@@ -1201,16 +1245,13 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         </box> :
         mode === "trace" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Client request timings (transport, not server/model execution)</text><text fg={colors.muted}>{safe(JSON.stringify(client.getRequestTimings(), null, 2))}</text><text fg={colors.accent}>Recent events (last 200 received)</text>{events.filter((event) => !session || event.session_id === session.id).map((event) => <text key={event.id} fg={colors.muted}>{safe(`#${event.seq} ${event.event_type}\n${JSON.stringify(event.payload)}\n`)}</text>)}</scrollbox> :
         mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Held prompts do not run. /run ID releases one. /edit, /remove, /reorder and /copy ID manage prompts.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.held ? "held" : item.delivery}]\n${item.text}\n${item.attachments.map((attachment) => `${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`).join("\n")}\n`)}</text>)}</scrollbox> :
-          <scrollbox key={`conversation-${session?.id ?? "empty"}`} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom">
+          <scrollbox id="tui-transcript" ref={transcript} key={`conversation-${session?.id ?? "empty"}`} flexGrow={1} minHeight={0} stickyScroll={followTranscript} stickyStart="bottom">
             {!session?.messages.length && <box flexDirection="column" paddingY={1} gap={1}>
-              {height >= 44 && width >= 90 ? <text fg={colors.accent}>{MOGURI_ASCII}</text> : <text fg={colors.accent}><strong>{"<> M O G U R I"}</strong></text>}
-              <text fg={colors.accent}><strong>What are we working on?</strong></text><text fg={colors.muted}>{session ? "Choose /models, then write a prompt.\nYour tools still need their actual approval." : "/new global starts a chat. /open PATH adds a project.\n/connect starts Copilot login. /help shows commands."}</text></box>}
-            {session?.messages.slice(detailed ? 0 : -150).map((message) => <box key={message.id} flexDirection="column" paddingTop={1} paddingBottom={1}>
-              <text fg={message.role === "user" ? colors.accent : message.role === "notice" ? colors.attention : colors.muted}><strong>{message.role === "user" ? "You" : message.role === "assistant" ? "Moguri" : message.role === "tool" ? message.toolCalls?.[0]?.name ?? "Tool" : "Session"}</strong>{message.outcome ? ` / ${message.outcome}` : ""}</text>
-              <text fg={colors.foreground}>{safe((detailed ? message.text : message.text.slice(-4000)) || (message.toolCalls?.length ? "Requesting tool access." : "Working..."))}</text>
-              {detailed && message.reasoning && <text fg={colors.muted}>{safe(`Provider-exposed reasoning:\n${message.reasoning}`)}</text>}
-              {message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) => <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>)}
-            </box>)}
+              <text fg={colors.accent}><strong>What are we working on?</strong></text><text fg={colors.muted}>{session ? `${session.controls.modelId ? "Write a prompt to begin." : "Choose /models, then write a prompt."}\nTools follow this session's approval rules.` : "/new global starts a chat. /open PATH adds a project.\n/connect starts Copilot login. /help shows commands."}</text></box>}
+            {!detailed && (session?.messages.length ?? 0) > 150 && <text fg={colors.muted}>Showing the latest 150 messages. F2 or /details reads the full retained conversation.</text>}
+            {session?.messages.slice(detailed ? 0 : -150).map((message) => <TuiMessage key={`${message.id}:${detailed}`} message={message} detailed={detailed}
+              activeTurnId={session.turnId} settledToolCalls={settledToolCalls} syntaxStyle={markdownStyle} renderMarkdownNode={renderMarkdownNode}
+              inspect={() => setFollowTranscript(false)} />)}
             {editor && <TuiPendingInput editor={editor} />}
             {snapshot?.scheduledPrompts.filter((prompt) => prompt.sessionId === session?.id && ["scheduled", "blocked"].includes(prompt.status)).map((prompt) =>
               <box key={prompt.id} flexDirection="column" border borderColor={colors.border} padding={1} marginTop={1}>
@@ -1278,18 +1319,70 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {mode === "compose" && !session && <box border borderStyle="double" borderColor={colors.accent} paddingX={1} flexShrink={0} title="Commands">
           <ThemedInput id="tui-startup-command" focused value={startupCommand} placeholder="/new global  /open PATH  /connect  /help" onInput={setStartupCommand} onSubmit={(text) => void perform(() => submit(text))} />
         </box>}
-        <box height={compactDecision ? 3 : taskProgress.progress?.longRunning && taskProgress.progress.model ? 5 : 4} flexShrink={0} flexDirection="column" backgroundColor={colors.background}>
-          <text id="tui-status-env" height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${session.controls.modelId ?? "not set (/models)"}` : "Env Local | Model not set"}</text>
-          <text id="tui-status-budget" height={1} wrapMode="none" truncate fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
-          <text height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status} | ${session.queue.length} queued | ${session.usage.length} model calls${session.kind === "side" ? " | main context per question" : ""}` : "Factory defaults. /help commands."}</text>
-          {session && !compactDecision && <text height={1} wrapMode="none" truncate fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : taskProgress.progress?.checklist.total ? `${taskProgress.progress.checklist.completed}/${taskProgress.progress.checklist.total}` : "no checklist"} / estimate, 15s`)}</text>}
-          {!compactDecision && taskProgress.progress?.longRunning && taskProgress.progress.model && <text height={1} wrapMode="none" truncate fg={colors.attention}>{safe(`Model estimate ${progressBar(taskProgress.progress.model.percent, 8)}${taskProgress.progress.model.stale ? " (stale)" : ""}${taskProgress.progress.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
+        <box id="tui-status" flexShrink={0} flexDirection="column" backgroundColor={colors.background}>
+          <box height={inlineControls ? 1 : 2} flexDirection={inlineControls ? "row" : "column"} flexShrink={0}>
+            <text id="tui-status-env" width={inlineControls ? "50%" : "100%"} height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${safe(session.controls.modelId ?? "not set (/models)")}` : "Env Local | Model not set"}</text>
+            <text id="tui-status-budget" width={inlineControls ? "50%" : "100%"} height={1} wrapMode="none" truncate fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
+          </box>
+          {sessionStateVisible && <text height={1} wrapMode="none" truncate fg={["failed", "partial"].includes(session.status) ? colors.attention : colors.muted}>{`${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status}${session.queue.length ? ` | ${session.queue.length} queued` : ""}${session.kind === "side" ? " | main context per question" : ""}`}</text>}
+          {planVisible && <text height={1} wrapMode="none" truncate fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : `${taskProgress.progress?.checklist.completed}/${taskProgress.progress?.checklist.total}`} / estimate, 15s`)}</text>}
+          {estimateVisible && <text height={1} wrapMode="none" truncate fg={colors.attention}>{safe(`Model estimate ${progressBar(estimateVisible.percent, 8)}${estimateVisible.stale ? " (stale)" : ""}${taskProgress.progress?.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>
       </box>
     </box>
-    <box height={compact ? 2 : 3} paddingLeft={1} flexShrink={0} border={["top"]} borderColor={colors.border}><text fg={colors.muted}>{navigationFocus ? "Left/Right sidebar | Up/Down tabs | Enter choose | Tab/Esc back" :
-      compact ? "/help commands | F9 schedules | Esc prompt" : "/help commands | Tab navigation | F9 scheduled prompts | Enter send | Shift+Enter newline | Cmd/Ctrl+Enter hold/schedule"}</text></box>
+    <box id="tui-footer" height={navigationFocus && width < 80 ? 2 : 1} paddingLeft={1} flexShrink={0} flexDirection="row">
+      {!navigationFocus && !followTranscript && <box id="tui-follow-output" width={12} height={1} onMouseDown={(event) => {
+        if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); followLatest();
+      }}><text fg={colors.accent}>F3 latest |</text></box>}
+      <text fg={colors.muted}>{navigationFocus ? "Left/Right sidebar | Up/Down tabs | Enter choose | Tab/Esc back" :
+        !followTranscript ? "PgUp/PgDn | F2 details | /help commands" : compact ? "/help commands | F2 details | Tab navigate" :
+        "Enter send | Shift+Enter newline | Cmd/Ctrl+Enter hold | F2 details | Tab navigation | /help commands"}</text>
+    </box>
   </box></NavigationContext.Provider></ThemeContext.Provider>;
+}
+export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, syntaxStyle, renderMarkdownNode, inspect }: {
+  message: PublicMessage; detailed: boolean; activeTurnId: string | null; settledToolCalls: ReadonlySet<string>;
+  syntaxStyle: SyntaxStyle; renderMarkdownNode: NonNullable<MarkdownOptions["renderNode"]>; inspect: () => void;
+}) {
+  const colors = React.useContext(ThemeContext), [expanded, setExpanded] = useState(false);
+  const documents = message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) =>
+    <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>);
+  if (message.role === "tool") {
+    const call = message.toolCalls?.[0], important = message.outcome !== "completed", open = detailed || expanded || important;
+    const value = call && [call.arguments.path, call.arguments.query, call.arguments.pattern].find((value): value is string => typeof value === "string");
+    const summary = value ? safe(value.split("\n")[0]!) : call && typeof call.arguments.command === "string" ? commandFamily(call.arguments.command) ?? "command" : `${Buffer.byteLength(message.text, "utf8")} bytes`;
+    return <box flexDirection="column" marginTop={important ? 1 : 0} flexShrink={0}>
+      <box id={`tui-tool-${message.id}`} height={1} onMouseDown={(event) => {
+        if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); inspect(); setExpanded((value) => !value);
+      }}><text height={1} wrapMode="none" truncate fg={important ? colors.attention : colors.muted}>
+        {safe(`${open ? "v" : ">"} ${call?.name ?? "Tool"} / ${message.outcome ?? "result"}  ${summary}${open ? "" : "  F2 details"}`)}
+      </text></box>
+      {open && <text fg={important ? colors.attention : colors.muted}>{safe(message.text || "No text output.")}</text>}
+      {documents}
+    </box>;
+  }
+  const request = message.role === "assistant" && !message.text && Boolean(message.toolCalls?.length);
+  if (request && !detailed && (!message.outcome || ["stop", "toolUse"].includes(message.outcome))) {
+    const pending = message.toolCalls?.filter((call) => !settledToolCalls.has(call.id)) ?? [];
+    if (!pending.length && !documents?.length) return null;
+    return <box flexDirection="column" flexShrink={0}>
+      {pending.length > 0 && <text fg={colors.muted}>{safe(`${pending.map((call) => call.name).join(", ")} / requested`)}</text>}
+      {documents}
+    </box>;
+  }
+  const outcome = message.outcome && (message.role === "notice" || !["stop", "toolUse"].includes(message.outcome)) ? ` / ${message.outcome}` : "";
+  const frame: Pick<BoxOptions, "border" | "borderColor"> = message.role === "user" ? { border: ["left"], borderColor: colors.accent } : {};
+  return <box flexDirection="column" marginTop={1} paddingLeft={message.role === "user" ? 1 : 0} {...frame} flexShrink={0}>
+    <text height={1} fg={message.role === "user" ? colors.accent : message.role === "notice" ? colors.attention : colors.muted}>
+      <strong>{message.role === "user" ? "You" : message.role === "assistant" ? "Moguri" : "Session"}</strong>{safe(outcome)}
+    </text>
+    {message.role === "assistant" && message.text ? <markdown id={`tui-prose-${message.id}`} width="100%" internalBlockMode="top-level" content={safe(message.text)} syntaxStyle={syntaxStyle} fg={colors.foreground}
+      conceal streaming={!message.outcome && activeTurnId === message.turnId} renderNode={renderMarkdownNode}
+      tableOptions={{ style: "columns", borders: false, cellPaddingY: 0 }} /> : <text fg={message.role === "notice" ? colors.attention : colors.foreground}>{safe(message.text || "No text output.")}</text>}
+    {detailed && message.toolCalls?.length ? <text fg={colors.muted}>{safe(JSON.stringify(message.toolCalls, null, 2))}</text> : null}
+    {detailed && message.reasoning && <text fg={colors.muted}>{safe(`Provider-exposed reasoning:\n${message.reasoning}`)}</text>}
+    {documents}
+  </box>;
 }
 function TuiScheduleDialog({ sdk, editor, initial, lock, close }: { sdk: MoguriSdk; editor: DraftEditor; initial: "ask" | "schedule"; lock: (pending: boolean) => void; close: () => void }) {
   const colors = React.useContext(ThemeContext);
@@ -1392,11 +1485,11 @@ function TuiComposer({ editor, session, focused, compact, focus, submit, run }: 
       finally { mirror.current.setting = false; }
     }
   }, [draft.text]);
-  return <box flexDirection="column" border borderStyle="double" borderColor={focused ? colors.accent : colors.border} backgroundColor={colors.surface} paddingX={1} paddingY={compact ? 0 : 1} marginTop={compact ? 0 : 1} overflow="hidden" flexShrink={0} title={`Prompt / ${safe(session.title).slice(0, 40)}`} titleColor={colors.accent}>
+  return <box id="tui-composer-panel" flexDirection="column" border={["left"]} borderColor={focused ? colors.accent : colors.border} backgroundColor={colors.surface} paddingX={1} marginTop={1} overflow="hidden" flexShrink={0}>
     {/^\/budget\s+(?:set|profile|global)\b/.test(draft.text) && <text fg={colors.attention} height={3} flexShrink={0}>{BUDGET_WARNING} Input reservations use an explicit estimate-based policy, not a billing guarantee.</text>}
-    <textarea id="tui-composer" ref={ref} focused={focused} initialValue={draft.text} height={limitedSuggestions ? 1 : compact ? 2 : 4} maxHeight={8} textColor={colors.foreground} backgroundColor={colors.surface}
+    <textarea id="tui-composer" ref={ref} focused={focused} initialValue={draft.text} height="auto" minHeight={limitedSuggestions ? 1 : 2} maxHeight={limitedSuggestions ? 2 : 8} textColor={colors.foreground} backgroundColor={colors.surface}
       onMouseDown={focus}
-      placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt. Enter sends; Shift+Enter newline. /help for commands."}
+      placeholder={session.status === "archived" ? "Archived. /restore returns to this session." : "Write a prompt..."}
       keyBindings={[{ name: "return", action: "submit" }, { name: "return", shift: true, action: "newline" },
         { name: "kpenter", action: "submit" }, { name: "kpenter", shift: true, action: "newline" },
         { name: "j", ctrl: true, action: "newline" },
