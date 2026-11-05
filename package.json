@@ -93,7 +93,8 @@
     "docs/architecture/startup-responsiveness.md",
     "docs/architecture/lean-tooling.md",
     "docs/architecture/file-access.md",
-    "docs/architecture/content-review.md"
+    "docs/architecture/content-review.md",
+    "docs/architecture/repository-management.md"
   ],
   "engines": {
     "node": ">=26.4.0 <27"

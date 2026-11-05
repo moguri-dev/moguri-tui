@@ -48,6 +48,9 @@ session/settings search and compact settings controls share the
 The [Dashboard](docs/setup.md#workspace-experience-and-skill-gateway) follows
 active sessions and opens their exact conversations. Project settings select
 registered projects; project-group menus fold only their member folders.
+**Settings / Repositories** accepts reviewed URL/bullet lists for bulk import.
+Project settings also reviews [remote URL changes](docs/setup.md#importing-repositories-and-changing-a-remote)
+across the actual shared-worktree boundary, without fetching or rewriting old PR sources.
 Built-in work-item views remove hidden Markdown comments.
 [Repository-script review](docs/architecture/content-review.md) delivers the
 full exact source to the agent before execution approval; unsafe findings need
@@ -560,6 +563,8 @@ Install `moguri` command**, then follow the [PATH setup instructions](docs/setup
 That guide also documents removal, moved-app recovery and the manual workaround
 for older builds.
 CI runs only on pushes to `main`, not pull requests or feature branches.
+The explicit 30-minute cap is removed; GitHub-hosted jobs still have the
+[platform's six-hour limit](https://docs.github.com/en/actions/reference/limits).
 
 ## macOS launch troubleshooting
 

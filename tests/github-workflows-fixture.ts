@@ -75,16 +75,18 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       ssh_url: "git@github.com:generated-owner/fixture.git", clone_url: "https://github.com/generated-owner/fixture.git", license: { spdx_id: "MIT" } };
     let head = "", changedBody = false, issueWrites = 0, prWrites = 0, accountId = 42;
     const issue = (number: number, title = "Generated issue", body = "Generated **issue body**.") => ({ id: number + 100, number, title, body: changedBody ? "Generated changed source." : body, state: "open",
-      html_url: `https://github.com/generated-owner/fixture/issues/${number}`, updated_at: "2026-01-01T00:00:00Z", user: { login: "generated-owner" } });
+      html_url: `https://github.com/${repository.full_name}/issues/${number}`, updated_at: "2026-01-01T00:00:00Z", user: { login: "generated-owner" } });
     const pull = (number: number, title = "Generated pull request", body = "Generated **pull request body**.", draft = true) => ({ ...issue(number, title, body),
-      html_url: `https://github.com/generated-owner/fixture/pull/${number}`, draft, merged: false,
+      html_url: `https://github.com/${repository.full_name}/pull/${number}`, draft, merged: false,
       base: { ref: "main", sha: head, repo: repository }, head: { ref: "generated-feature", sha: head, repo: repository } });
     const issues = [issue(7)], pulls: ReturnType<typeof pull>[] = [];
     const fixture = await githubServiceFixture({ runProgram: async (executable, args, request) => {
       if (executable !== "gh") return runProgram(executable, args, { ...request, env: { ...request.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
-      const index = args.indexOf("--method"), method = args[index + 1]!, path = args[index + 2]!;
-      calls.push({ method, path });
-      if (method === "GET") await options.beforeRead?.(path);
+      const index = args.indexOf("--method"), method = args[index + 1]!, requested = args[index + 2]!;
+      calls.push({ method, path: requested });
+      if (method === "GET") await options.beforeRead?.(requested);
+      const path = repository.full_name !== "generated-owner/fixture" && requested.startsWith(`repos/${repository.full_name}`) ?
+        requested.replace(`repos/${repository.full_name}`, "repos/generated-owner/fixture") : requested;
       const fields: Record<string, string> = {};
       for (let index = 0; index < args.length - 1; index++) if (args[index] === "--raw-field" || args[index] === "--field") {
         const value = args[index + 1]!, split = value.indexOf("="); fields[value.slice(0, split)] = value.slice(split + 1);
@@ -160,6 +162,13 @@ process.exit(result.status ?? 67);
     const board = defaultBoard(fixture.projectId);
     await fixture.sdk.issues.configure(fixture.projectId, { ...board, autoRefreshPrs: false }, 0);
     return { ...fixture, calls, repository, addPull: (number: number) => { pulls.push(pull(number, `Generated PR ${number}`)); },
+      relocate: (fullName: string) => {
+        repository.full_name = fullName; repository.owner = { login: fullName.split("/")[0]!, type: "Organization" };
+        repository.html_url = `https://github.com/${fullName}`; repository.ssh_url = `git@github.com:${fullName}.git`;
+        repository.clone_url = `https://github.com/${fullName}.git`;
+        for (const value of issues) value.html_url = `${repository.html_url}/issues/${value.number}`;
+        for (const value of pulls) value.html_url = `${repository.html_url}/pull/${value.number}`;
+      },
       changeHead: (value: string) => { head = value; for (const item of pulls) item.head.sha = value; },
       changeSource: () => { changedBody = true; }, changeAccount: (id: number) => { accountId = id; }, writes: () => ({ issues: issueWrites, pulls: prWrites }) };
 }
