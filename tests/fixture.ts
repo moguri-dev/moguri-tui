@@ -280,8 +280,8 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     resources.push(async () => {
       try { await service.close(); } finally { restoreJournal(); restoreControlsJournal(); restoreSnapshot(); }
     });
-    // This opt-in models Node primitives, not Linux product supervision or release readiness.
-    if (options.nodePrimitives && process.platform === "linux") {
+    // Generated Node fixtures are not Linux product supervision or release qualification.
+    if (options.nodePrimitives !== false && process.platform === "linux") {
       const snapshot = service.controller.snapshot;
       service.controller.snapshot = () => {
         const value = snapshot.call(service.controller);

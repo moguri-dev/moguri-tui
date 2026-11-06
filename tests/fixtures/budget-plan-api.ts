@@ -3,7 +3,7 @@ import { MoguriSdk, projectEvents, type EventInput } from "../../packages/sdk/sr
 import { setupFixture } from "../fixture.ts";
 
 export async function budgetPlanFixture() {
-  const f = await setupFixture({ nodePrimitives: true }), sdk = new MoguriSdk(f.service.connection);
+  const f = await setupFixture(), sdk = new MoguriSdk(f.service.connection);
   try {
     await sdk.ready();
     await f.configure();

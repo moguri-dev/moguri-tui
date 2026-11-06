@@ -6,7 +6,6 @@ import { setupFixture } from "../fixture.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
 
 export async function candidateApiFixture(options: Parameters<typeof setupFixture>[0] = {}) {
-  options.nodePrimitives ??= true;
   const f = await setupFixture(options), sdk = new MoguriSdk(f.service.connection);
   try {
     await sdk.ready();
