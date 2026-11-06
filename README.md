@@ -336,10 +336,13 @@ This is not public compound scheduling, independent-family proof or acceptance.
 source, independently installed SDK and actual native qualification. The
 qualified 0.28 artifacts remain frozen.
 
-The first milestone remains incomplete. The
-[remaining-gap handoff](docs/remaining-milestone-gaps.md) records its open
-acceptance gates, model maximum/half-window choices, file-backed text pastes
-over 50 lines and the user-requested SendBox 0.2.3 integration. Version bumps
+The first milestone remains incomplete. Merged **#51 / protocol 92** includes
+runtime/hardware readiness, exact Kupo window/effort controls and reviewed
+SSH/native-private candidate transports. The
+[current acceptance and roadmap](docs/remaining-milestone-gaps.md) separates
+these implemented features from the remaining exact native qualification and
+GitHub CI billing gate; [#39](https://github.com/mbianchidev/moguri/issues/39)
+tracks later workflows and distribution. Historical handoffs and version bumps
 do not establish completion or justify an increased estimate.
 
 Current issue-17 source uses **protocol 37** for shared model windows, scoped
