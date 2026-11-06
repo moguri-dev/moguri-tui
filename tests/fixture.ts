@@ -1,5 +1,5 @@
 import { createServer, type ServerResponse } from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-copilot";
@@ -245,50 +245,79 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
     },
   };
 }
-export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean } = {}) {
+export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; nodePrimitives?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project"), home = join(directory, "home");
-  const { mkdir } = await import("node:fs/promises");
-  await Promise.all([mkdir(project), mkdir(home)]);
-  await writeFile(join(project, "fixture.txt"), "generated original\n");
-  const fixture = await fixtureProvider(options);
-  const terminalSecrets = new Map<string, string>();
-  const terminalSlot = (id: string) => { if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/.test(id)) throw new Error("Generated terminal credential must fit the explicit production secret-backend namespace."); return id; };
-  const terminalVault = { read: async (id: string) => terminalSecrets.get(terminalSlot(id)) ?? null, write: async (id: string, value: string) => { terminalSecrets.set(terminalSlot(id), value); }, remove: async (id: string) => { terminalSecrets.delete(terminalSlot(id)); } };
-  const program = options.platform?.terminal?.executable ? {} : { executable: process.execPath,
-    args: ["-e", "process.stdin.resume();process.stdout.write('GENERATED_TERMINAL_READY\\n');"] };
-  const platform: PlatformOptions = { ...options.platform, integrations: { ...options.platform?.integrations, program: options.platform?.integrations?.program ?? (async (executable, args, request) => {
-    if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture forbids personal GitHub authentication.");
-    return runProgram(executable, args, request);
-  }) }, github: { ...options.platform?.github, runProgram: options.platform?.github?.runProgram ?? (async (executable, args, request) => {
-    if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture has no GitHub account. Personal authentication is forbidden.");
-    return runProgram(executable, args, request);
-  }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
-  const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
-  const restoreControlsJournal = options.legacySessionControlsJournal ? legacySessionControlsJournal(service.store) : () => {};
-  const restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
-  const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
-  const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id!, title: "New session" }));
-  const sessionId = sessionResult.id!;
-  const session = () => {
-    const value = service.controller.snapshot().sessions.find((session) => session.id === sessionId)!;
-    if (!value?.projectId) throw new Error("The generated bound fixture session is missing.");
-    return { ...value, projectId: value.projectId };
-  };
-  const configure = async () => service.controller.dispatch(envelope({
-    type: "session.configure", sessionId, expectedRevision: session().revision, controls: { ...session().controls, modelId: fixture.modelId },
-  }));
-  const send = async (text: string, delivery: "queue" | "steer" | "interrupt" = "queue") => {
-    await service.controller.dispatch(envelope({ type: "draft.save", sessionId, expectedRevision: session().draft.revision, text, attachments: session().draft.attachments }));
-    return service.controller.dispatch(envelope({ type: "message.send", sessionId, expectedRevision: session().draft.revision, delivery }));
-  };
-  return {
-    ...fixture, directory, project, home: options.platform?.terminal?.defaultRoot ?? home, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: options.platform?.terminal?.vault ?? terminalVault,
-    approve: async (allow = true) => {
-      const approval = await waitFor(() => session().pendingApproval);
-      return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));
-    },
-    terminal: async () => waitFor<Session>(() => { const current = session(); return !current.turnId && ["completed", "stopped", "partial", "failed"].includes(current.status) ? current : false; }),
-    close: async () => { await service.close(); restoreJournal(); restoreControlsJournal(); await fixture.close(); await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); },
-  };
+  const resources: Array<() => void | Promise<void>> = [];
+  let closing: Promise<void> | undefined;
+  const close = () => closing ??= (async () => {
+    const failures: unknown[] = [];
+    for (const release of [...resources].reverse()) {
+      try { await release(); } catch (error) { failures.push(error); }
+    }
+    if (failures.length) throw new AggregateError(failures, `Generated fixture cleanup is unconfirmed; retained ${directory}.`);
+    await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  })();
+  try {
+    await Promise.all([mkdir(project), mkdir(home)]);
+    await writeFile(join(project, "fixture.txt"), "generated original\n");
+    const fixture = await fixtureProvider(options);
+    resources.push(fixture.close);
+    const terminalSecrets = new Map<string, string>();
+    const terminalSlot = (id: string) => { if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/.test(id)) throw new Error("Generated terminal credential must fit the explicit production secret-backend namespace."); return id; };
+    const terminalVault = { read: async (id: string) => terminalSecrets.get(terminalSlot(id)) ?? null, write: async (id: string, value: string) => { terminalSecrets.set(terminalSlot(id), value); }, remove: async (id: string) => { terminalSecrets.delete(terminalSlot(id)); } };
+    const program = options.platform?.terminal?.executable ? {} : { executable: process.execPath,
+      args: ["-e", "process.stdin.resume();process.stdout.write('GENERATED_TERMINAL_READY\\n');"] };
+    const platform: PlatformOptions = { ...options.platform, integrations: { ...options.platform?.integrations, program: options.platform?.integrations?.program ?? (async (executable, args, request) => {
+      if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture forbids personal GitHub authentication.");
+      return runProgram(executable, args, request);
+    }) }, github: { ...options.platform?.github, runProgram: options.platform?.github?.runProgram ?? (async (executable, args, request) => {
+      if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture has no GitHub account. Personal authentication is forbidden.");
+      return runProgram(executable, args, request);
+    }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
+    const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
+    let restoreControlsJournal = () => {}, restoreJournal = () => {}, restoreSnapshot = () => {};
+    resources.push(async () => {
+      try { await service.close(); } finally { restoreJournal(); restoreControlsJournal(); restoreSnapshot(); }
+    });
+    // This opt-in models Node primitives, not Linux product supervision or release readiness.
+    if (options.nodePrimitives && process.platform === "linux") {
+      const snapshot = service.controller.snapshot;
+      service.controller.snapshot = () => {
+        const value = snapshot.call(service.controller);
+        return { ...value, capabilities: value.capabilities.map((capability) => capability.env === "Local" ?
+          { ...capability, ready: true, reason: "Generated Node-primitives fixture, not Linux release qualification." } : capability) };
+      };
+      restoreSnapshot = () => { service.controller.snapshot = snapshot; };
+    }
+    restoreControlsJournal = options.legacySessionControlsJournal ? legacySessionControlsJournal(service.store) : () => {};
+    restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
+    const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
+    const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id!, title: "New session" }));
+    const sessionId = sessionResult.id!;
+    const session = () => {
+      const value = service.controller.snapshot().sessions.find((session) => session.id === sessionId)!;
+      if (!value?.projectId) throw new Error("The generated bound fixture session is missing.");
+      return { ...value, projectId: value.projectId };
+    };
+    const configure = async () => service.controller.dispatch(envelope({
+      type: "session.configure", sessionId, expectedRevision: session().revision, controls: { ...session().controls, modelId: fixture.modelId },
+    }));
+    const send = async (text: string, delivery: "queue" | "steer" | "interrupt" = "queue") => {
+      await service.controller.dispatch(envelope({ type: "draft.save", sessionId, expectedRevision: session().draft.revision, text, attachments: session().draft.attachments }));
+      return service.controller.dispatch(envelope({ type: "message.send", sessionId, expectedRevision: session().draft.revision, delivery }));
+    };
+    return {
+      ...fixture, directory, project, home: options.platform?.terminal?.defaultRoot ?? home, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: options.platform?.terminal?.vault ?? terminalVault,
+      approve: async (allow = true) => {
+        const approval = await waitFor(() => session().pendingApproval);
+        return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));
+      },
+      terminal: async () => waitFor<Session>(() => { const current = session(); return !current.turnId && ["completed", "stopped", "partial", "failed"].includes(current.status) ? current : false; }),
+      close,
+    };
+  } catch (error) {
+    try { await close(); } catch (cleanup) { throw new AggregateError([error, cleanup], "Generated fixture setup and owned cleanup both failed."); }
+    throw error;
+  }
 }
