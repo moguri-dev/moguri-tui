@@ -11,6 +11,7 @@ import type { ProviderAdapter } from "../apps/service/src/provider.ts";
 import type { IntegrationOptions } from "../apps/service/src/project-integrations.ts";
 import type { GithubScope } from "../packages/protocol/src/github-workflows.ts";
 import { defaultBoard, MoguriError } from "../packages/protocol/src/index.ts";
+import { generatedNodeSupervision } from "./fixture.ts";
 
 export async function connectGithubSdk(sdk: MoguriSdk): Promise<void> {
   await sdk.connect();
@@ -55,6 +56,7 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
       if (executable !== "git") throw new Error("Generated fixture forbids real GitHub requests.");
       return runProgram(executable, args, { ...request, env: { ...request.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
     }) } } });
+    generatedNodeSupervision(service);
     sdk = new MoguriSdk(service.connection); await connectGithubSdk(sdk);
     const projectId = (await sdk.command({ type: "project.add", path: root })).id!;
     const sessionId = (await sdk.sessions.create(projectId, "Generated GitHub workflow")).id!;

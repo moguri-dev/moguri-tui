@@ -16,6 +16,27 @@ import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
 import { legacySessionControlsJournal } from "./fixtures/legacy-session-controls-journal.ts";
 import type { MoguriSdk } from "../packages/sdk/src/index.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
+export function generatedNodeSupervision(service: Awaited<ReturnType<typeof startService>>): () => void {
+  if (process.platform !== "linux") return () => {};
+  const snapshots = new Map<typeof service.controller, typeof service.controller.snapshot>();
+  const qualify = (controller: typeof service.controller) => {
+    if (snapshots.has(controller)) return controller;
+    const snapshot = controller.snapshot; snapshots.set(controller, snapshot);
+    controller.snapshot = () => {
+      const value = snapshot.call(controller);
+      return { ...value, capabilities: value.capabilities.map((capability) => capability.env === "Local" ?
+        { ...capability, ready: true, reason: "Generated Node-primitives fixture, not Linux release qualification." } : capability) };
+    };
+    return controller;
+  };
+  qualify(service.controller);
+  const control = service.profiles.control;
+  service.profiles.control = async (...args) => qualify(await control.apply(service.profiles, args));
+  return () => {
+    service.profiles.control = control;
+    for (const [controller, snapshot] of snapshots) controller.snapshot = snapshot;
+  };
+}
 export async function reviewNativeTools(fixture: { service: Awaited<ReturnType<typeof startService>> } | MoguriSdk, names = ["read_file", "write_file"]) {
   const current = "service" in fixture ? fixture.service.controller.snapshot().settings : fixture.settings.get();
   if (!current) throw new Error("Connect the generated profile before configuring its explicit strict review rules.");
@@ -281,15 +302,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
       try { await service.close(); } finally { restoreJournal(); restoreControlsJournal(); restoreSnapshot(); }
     });
     // Generated Node fixtures are not Linux product supervision or release qualification.
-    if (options.nodePrimitives !== false && process.platform === "linux") {
-      const snapshot = service.controller.snapshot;
-      service.controller.snapshot = () => {
-        const value = snapshot.call(service.controller);
-        return { ...value, capabilities: value.capabilities.map((capability) => capability.env === "Local" ?
-          { ...capability, ready: true, reason: "Generated Node-primitives fixture, not Linux release qualification." } : capability) };
-      };
-      restoreSnapshot = () => { service.controller.snapshot = snapshot; };
-    }
+    if (options.nodePrimitives !== false) restoreSnapshot = generatedNodeSupervision(service);
     restoreControlsJournal = options.legacySessionControlsJournal ? legacySessionControlsJournal(service.store) : () => {};
     restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
     const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
