@@ -84,6 +84,12 @@ Go; mutable installs remain private and executable builds are not implied.
 Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
+Current **protocol93 source** adds [retained PR CI watches](docs/setup.md#retained-pull-request-ci-watches):
+exact account/root/head ownership, cross-view deduplication, historical
+observations, startup-failure diagnostics and source-bound notifications.
+Reopening a pane never restarts polling; uncertain cleanup remains partial.
+This source update does not relabel the separately delivered protocol92 DMG.
+
 Whole-descendant containment can be required explicitly through **Guardrails /
 Require qualified SendBox** or `moguri containment require-sandbox
 --confirm-review`. Ordinary Local/SSH still owns known groups only. Missing
