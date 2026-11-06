@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
-import { SyntaxStyle, TextRenderable, type BoxOptions, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
+import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
@@ -10,7 +10,7 @@ import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem
 import { continueWorkInput, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
-import { kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
+import { configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 function terminalColors(appearance: Appearance, mode: ThemeMode) {
@@ -36,26 +36,34 @@ function TerminalAlert({ text, error, keyboard }: { text: string; error: boolean
     }}><text fg={colors.muted}>[x]</text></box>
   </box>;
 }
-async function waitForCommandFrame(renderer: ReturnType<typeof useRenderer>, signal: AbortSignal, applied: () => boolean): Promise<void> {
+export async function waitForCommandFrame(renderer: ReturnType<typeof useRenderer>, signal: AbortSignal, applied: () => boolean): Promise<void> {
   const deadline = AbortSignal.timeout(10_000), owner = AbortSignal.any([signal, deadline]), originalFrame = renderer.frameId;
-  for (;;) {
-    owner.throwIfAborted();
-    if (renderer.isDestroyed) throw new Error("The original terminal closed before acknowledging its queued view.");
-    await delay(0, undefined, { signal: owner });
-    renderer.requestRender();
-    await new Promise<void>((resolve, reject) => {
-      const abort = () => reject(owner.reason);
-      owner.addEventListener("abort", abort, { once: true });
-      if (owner.aborted) { owner.removeEventListener("abort", abort); abort(); return; }
-      void renderer.idle().then(() => { owner.removeEventListener("abort", abort); resolve(); },
-        (error: unknown) => { owner.removeEventListener("abort", abort); reject(error); });
-    });
-    if (renderer.frameId > originalFrame && applied()) return;
-    await delay(15, undefined, { signal: owner });
-  }
+  let presented = false;
+  const observed = (frame: CliRendererFrameEvent) => {
+    if (!owner.aborted && !renderer.isDestroyed && frame.frameId > originalFrame && applied()) presented = true;
+  };
+  renderer.on(CliRenderEvents.FRAME, observed);
+  try {
+    for (;;) {
+      owner.throwIfAborted();
+      if (renderer.isDestroyed) throw new Error("The original terminal closed before acknowledging its queued view.");
+      await delay(0, undefined, { signal: owner });
+      renderer.requestRender();
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => reject(owner.reason);
+        owner.addEventListener("abort", abort, { once: true });
+        if (owner.aborted) { owner.removeEventListener("abort", abort); abort(); return; }
+        void renderer.idle().then(() => { owner.removeEventListener("abort", abort); resolve(); },
+          (error: unknown) => { owner.removeEventListener("abort", abort); reject(error); });
+      });
+      owner.throwIfAborted();
+      if (presented || renderer.frameId > originalFrame && applied()) return;
+      await delay(15, undefined, { signal: owner });
+    }
+  } finally { renderer.off(CliRenderEvents.FRAME, observed); }
 }
 const label = (session: Session) => sessionTitle(session, 44);
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "runtime-review" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 type ArchiveReview = {
   session: Pick<Session, "id" | "title" | "revision">;
@@ -136,6 +144,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [settingsText, setSettingsText] = useState("");
   const settingsRevision = useRef(0);
   const [capabilityOutput, setCapabilityOutput] = useState("");
+  const [runtimePreview, setRuntimePreview] = useState<ModelRuntimePreview | null>(null), [runtimeBusy, setRuntimeBusy] = useState(false);
+  const [runtimeActionsFocused, setRuntimeActionsFocused] = useState(false);
+  const runtimePending = useRef(false), runtimeAbort = useRef<AbortController | null>(null), runtimeOwner = useRef("");
   const [githubRepositories, setGithubRepositories] = useState<Extract<GithubResponse, { type: "github.repositories" }> | null>(null);
   const [githubRepository, setGithubRepository] = useState<GithubRepository | null>(null), [githubCloneJob, setGithubCloneJob] = useState<string | null>(null);
   const [githubItems, setGithubItems] = useState<{ scope: GithubScope; context: Extract<GithubResponse, { type: "github.project" }>; kind: "issue" | "pull"; items: GithubItem[]; nextPage: number | null } | null>(null);
@@ -157,6 +168,10 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const editors = useRef(new Map<string, DraftEditor>());
   useEffect(() => () => { for (const editor of editors.current.values()) editor.dispose(); for (const client of clients.current) client.disconnect(); }, []);
   const session = snapshot?.sessions.find((session) => session.id === selectedId);
+  runtimeOwner.current = JSON.stringify([client.profileId, session?.id, session?.workspaceId, session?.sandboxWorkspaceId,
+    session?.controls.env, session?.turnId, snapshot?.settings.revision, snapshot?.policy.revision]);
+  const runtimeScope = runtimeOwner.current;
+  useEffect(() => () => { runtimeAbort.current?.abort(); }, [client, runtimeScope, mode]);
   const retry = session && snapshot ? retryFailure(session, snapshot.modelFailures) : undefined, retryPending = useRef(false);
   githubOwner.current = JSON.stringify([client.profileId, session?.id, session?.projectId, session?.workspaceId, session?.controls.env]);
   const taskProgress = useTaskProgress(client, session, status === "connected");
@@ -176,6 +191,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const questionDetails = pendingQuestion ? `${pendingQuestion.question}${recommendation ? `\n\nModel recommends: ${recommendation.choice}\n${recommendation.reason}\nFrom ${recommendation.modelId}. Untrusted advice; you still decide.` : ""}` : "";
   const approvalAdvice = session?.pendingApproval?.recommendationSource?.stepId === session?.pendingApproval?.stepId && session?.pendingApproval?.recommendationSource?.callId === session?.pendingApproval?.call.id ? session?.pendingApproval?.recommendation : undefined;
   const availableModels = snapshot?.provider.models.filter((model) => model.synthetic || !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
+  const readinessModels = configuredReadinessModels(snapshot?.provider.catalogue, session?.controls.env ?? "Local");
   const board = project ? snapshot?.boards.find((board) => board.projectId === project.id) ?? defaultBoard(project.id) : null;
   const localIssues = snapshot?.issues.filter((issue) => issue.projectId === project?.id && !issue.archived) ?? [];
   const continuedWork = snapshot?.projectWorkRuns.findLast((work) => work.originSessionId === session?.id);
@@ -324,6 +340,37 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     setMode("session-action");
   };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
+  const showReadiness = (result: ModelReadinessResponse) => show(`Read-only execution-machine observations, not inference or a permission grant.\nEnv: ${result.readiness.target.env}\nModel: ${result.readiness.target.modelId}\nRuntime version: ${result.readiness.observations.runtime?.version.value ?? "Unknown / not observed"}\n\n${JSON.stringify(result, null, 2)}`);
+  const previewRuntime = (modelId: string) => {
+    if (!session || runtimePending.current) return;
+    const owner = runtimeOwner.current, abort = new AbortController();
+    runtimeAbort.current?.abort(); runtimeAbort.current = abort; runtimePending.current = true; setRuntimeBusy(true);
+    void perform(async () => {
+      try {
+        const { preview } = await client.models.runtimePreview(session.id, modelId, abort.signal);
+        if (abort.signal.aborted || runtimeOwner.current !== owner || modeRef.current !== "models") return;
+        setRuntimePreview(preview); setRuntimeActionsFocused(false); setMode("runtime-review");
+      } finally { runtimePending.current = false; setRuntimeBusy(false); }
+    });
+  };
+  const approveRuntime = () => {
+    if (runtimePending.current) return;
+    const preview = runtimePreview;
+    if (!session || !preview || preview.target.profileId !== client.profileId || preview.target.sessionId !== session.id ||
+      preview.target.env !== session.controls.env) { setNotice("The original runtime review owner changed. No another-session or machine approval was sent.", true); return; }
+    const owner = runtimeOwner.current, abort = new AbortController();
+    runtimeAbort.current?.abort(); runtimeAbort.current = abort; runtimePending.current = true; setRuntimeBusy(true);
+    const current = () => !abort.signal.aborted && runtimeOwner.current === owner && modeRef.current === "runtime-review";
+    void perform(async () => {
+      try {
+        const reviewed = await client.models.reviewRuntime(session.id, preview.target.modelId, preview.digest);
+        if (!current()) return;
+        if (!reviewed.id) throw new Error("The runtime review has no canonical retained receipt. No attempt or automatic retry was sent.");
+        const result = await client.models.readinessWithRuntimeReview(session.id, preview.target.modelId, reviewed.id, "informational", abort.signal);
+        if (current()) { setRuntimePreview(null); showReadiness(result); }
+      } finally { runtimePending.current = false; setRuntimeBusy(false); }
+    });
+  };
   const openSettingsEditor = (prompt: boolean) => {
     if (!snapshot) { setNotice("Connect before editing settings."); return; }
     settingsRevision.current = snapshot.settings.revision;
@@ -691,6 +738,12 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "cache") await client.cache.registries.setToken(tokenServer, tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
+    }
+    if (mode === "runtime-review" && (key.name === "escape" || key.ctrl && key.name === "c")) {
+      key.preventDefault(); key.stopPropagation(); runtimeAbort.current?.abort(); setRuntimePreview(null); setMode("models"); return;
+    }
+    if (mode === "runtime-review" && key.name === "tab") {
+      key.preventDefault(); key.stopPropagation(); setRuntimeActionsFocused((value) => !value); return;
     }
     if (navigationFocusRef.current && (!key.ctrl && !key.meta && !key.super || ["return", "kpenter"].includes(key.name))) {
       if (["left", "right", "up", "down", "return", "kpenter", "tab", "escape"].includes(key.name)) {
@@ -1067,6 +1120,22 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
             name: `#${issue.number} ${safe(issue.title)}`, description: `${issue.kind} / ${safe(board?.columns.find((column) => column.id === issue.phaseId)?.name ?? issue.phaseId)}${issue.pullRequest ? ` / PR ${issue.pullRequest.state}` : ""}`, value: issue.id,
           }))]} onSelect={(_, option) => { if (option) void perform(async () => openIssueEditor(String(option.value) || undefined)); }} />
           <text fg={colors.muted} height={4}>Enter edits JSON. /continue-work [CARD_ID] asks Kanban or model each time. /work-item picks a card. /kanban source selects open GitHub work. /board edit configures phases/sync/Linear. Esc opens this board's chat.</text></box> :
+        mode === "runtime-review" ? <box flexGrow={1} flexDirection="column">
+          <text fg={colors.accent} height={2}>Exact runtime version review / {runtimeActionsFocused ? "choices focused" : "preview focused"}</text>
+          {runtimePreview && runtimePreview.target.profileId === client.profileId && runtimePreview.target.sessionId === session?.id &&
+            runtimePreview.target.env === session.controls.env ? <>
+            <scrollbox flexGrow={1} minHeight={0} focused={!runtimeActionsFocused}><text fg={colors.foreground}>{safe(JSON.stringify(runtimePreview, null, 2))}</text></scrollbox>
+            {runtimeBusy ? <text fg={colors.muted} height={3}>Reading the exact reviewed version. Esc or Ctrl+C cancels only this probe, never the owning model/guest.</text> :
+              <ThemedSelect focused={runtimeActionsFocused} height={5} flexShrink={0} options={[
+                { name: "Cancel without a runtime attempt", value: "cancel", description: "Preserve the model and unsent prompt." },
+                { name: "Approve once and read version", value: "approve", description: "Exact fixed --version only; no model, server, download or tool grant." },
+              ]} onSelect={(_, option) => {
+                if (option?.value === "approve") approveRuntime();
+                else if (option?.value === "cancel") { setRuntimePreview(null); setMode("models"); }
+              }} />}
+          </> : <text fg={colors.error}>The original runtime review owner changed. No substitute is available; Esc returns.</text>}
+          <text fg={colors.muted} height={2}>Tab switches the scrollable exact preview and choices. Review all fields. Esc exits without stopping the agent.</text>
+        </box> :
         mode === "capability-output" ? <scrollbox key="command-output" flexGrow={1} minHeight={0} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
         mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
@@ -1086,21 +1155,40 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               void perform(async () => { try { await client.sessions.kupoMode(session.id, mode.id, session.revision); setMode("compose"); }
                 finally { kupoPending.current = false; setKupoSaving(false); } });
             }} />}
-          <text fg={colors.muted} height={3}>Automatic text compaction is opt-in. Finite roles require a qualified selected-Env finishing hold. Jev/System One stays unavailable. /kupo inspects exact policy; Esc returns without changing it.</text>
+          <text fg={colors.muted} height={3}>Automatic text compaction is opt-in. Finite roles require a qualified selected-Env finishing hold. Real Jev remains unqualified; configured bounded alternatives need their actual readiness. /kupo inspects exact policy; Esc returns without changing it.</text>
         </box> :
         mode === "models" ? <box flexGrow={1} flexDirection="column" paddingTop={1}><text fg={colors.accent}>Select an available model</text>
-          {availableModels.length ? <ThemedSelect focused flexGrow={1} options={availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
+          {availableModels.length || readinessModels.length ? <ThemedSelect focused flexGrow={1} options={[...availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
             model.environments && !model.environments.includes(session?.controls.env ?? "Local") ? `Unavailable: ${snapshot?.routingDiagnostics?.join(" ") ?? "No eligible model in this environment."}` :
               snapshot?.settings.values.kupo.workflow === "auto" ? "Automatic Single / Cascade / eligible Critique; every actual role is metered" :
-                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id }))}
+                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id })),
+              ...readinessModels.map((model) => ({
+                name: `Inspect runtime and hardware / ${model.name}`, description: "Read-only on the selected execution machine; no model selection, inference or installation.",
+                value: `readiness:${model.id}`,
+              })),
+              ...readinessModels.map((model) => ({
+                name: `Review exact runtime version / ${model.name}`, description: "Separate actual-user review of a configured compatible immutable llama.cpp command; no model selection.",
+                value: `runtime-review:${model.id}`,
+              }))]}
             onSelect={(_, option) => {
               if (!session) { setNotice("Create a chat with Ctrl+N before choosing its model."); return; }
+              if (typeof option?.value === "string" && option.value.startsWith("readiness:")) {
+                const model = readinessModels.find((model) => `readiness:${model.id}` === option.value);
+                if (!model) { setNotice("The original configured model is unavailable. No provider or root was substituted.", true); return; }
+                void perform(async () => showReadiness(await client.models.readiness(session.id, model.id)));
+                return;
+              }
+              if (typeof option?.value === "string" && option.value.startsWith("runtime-review:")) {
+                const model = readinessModels.find((model) => `runtime-review:${model.id}` === option.value);
+                if (!model) { setNotice("The configured runtime owner is no longer available. No source was substituted.", true); return; }
+                previewRuntime(model.id); return;
+              }
               const model = availableModels.find((model) => model.id === option?.value);
               if (model?.environments && !model.environments.includes(session.controls.env)) { setNotice(`Kupo is unavailable in ${session.controls.env}. ${snapshot?.routingDiagnostics?.join(" ") ?? ""}`); return; }
               if (option?.value) void perform(async () => { await client.sessions.selectModel(session.id, String(option.value), session.revision); setMode("compose"); });
             }} /> :
             <text fg={colors.muted}>{session?.controls.env === "Remote" ? "No model approved on this SSH host. Use /remote probe; explicitly allow scoped Copilot access or configure remote endpoints." : "No available models. Ctrl+L connects Copilot; /local-models explains explicit local endpoint setup."}</text>}
-          <text fg={colors.muted} height={4} flexShrink={0}>Kupo uses configured models. F11 selects Balanced, Savings or Performance instead of user thinking effort. One eligible model runs directly; eligible bounded workflows share normal approvals. /kupo status shows policy. /compound keeps separate worktree/test review.</text></box> :
+          <text fg={colors.muted} height={4} flexShrink={0}>Kupo uses configured models. F11 selects its routing mode; /thinking and /context-window keep exact pooled controls. Runtime inspection is read-only and can observe an original active SSH/native owner without changing its model. /compound keeps separate worktree/test review.</text></box> :
         mode === "sessions" ? <box flexDirection="column" flexGrow={1} paddingTop={1}><text fg={colors.accent} height={2}>Choose a session</text>
           <ThemedSelect focused={!navigationFocus} flexGrow={1} options={options}
             onSelect={(_, option) => { if (option?.value) void perform(() => chooseSession(String(option.value))); }} />

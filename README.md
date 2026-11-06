@@ -105,9 +105,14 @@ worker, permissions and accounting as Copilot. Endpoint discovery never scans
 hosts or downloads weights. New sessions resolve snapshotted global,
 current-profile and project controls, with explicit session overrides and
 visible provenance; existing sessions are not rewritten.
+[Runtime and hardware inspection](docs/architecture/model-readiness.md) keeps
+actual execution-machine observations separate from endpoint availability and
+capacity estimates. Exact offline version execution needs a separate one-use
+user review; it never starts a model or installs weights.
 
-Automatic **Kupo** exposes Balanced, Savings and Performance instead of user
-thinking effort. It selects actual supported effort and maximum context within
+Automatic **Kupo** exposes Balanced, Savings and Performance as routing modes,
+separate from exact shared role-effort and working-window controls. It selects
+only compatible actual roles within
 the selected boundary; Savings/Performance require reviewed evaluation and
 reference-price profiles, never guessed frontier classes. Bounded Cascade and
 Critique retain original role results, and explicit opt-in text compaction
@@ -121,6 +126,12 @@ add explicit opt-in original-snapshot restaging, separately accepted peer Git
 and disclosed native-model/Local-Git publication. Jev/System One still needs a
 real bounded output/accounting contract; generated fixtures are not live-model
 quality or billing evidence.
+
+[Reviewed candidate resources](docs/architecture/candidate-transports.md) add
+pinned-SSH worktrees and native private-snapshot staging, exact project tests
+and separately accepted source application. Native implementation remains
+behind current released-runtime qualification, not a Local fallback. Private
+native acceptance does not publish to Local Git or replace that separate review.
 
 **Settings / Models / Providers** can disable providers or unwanted models per
 profile. Matching upstream model IDs share one explicit provider choice, without

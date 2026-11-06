@@ -41,6 +41,11 @@ export async function main(argv: string[]): Promise<void> {
 moguri [tui] [--project PATH]       Terminal client
 moguri desktop                    Desktop client, same SDK
 moguri status                     Project/session IDs and current work state
+moguri models readiness MODEL_ID [required] --session ID  Exact runtime/hardware evidence, no inference
+moguri models readiness-target MODEL_ID --session ID     Current authenticated execution binding
+moguri models runtime-preview MODEL_ID --session ID      Exact fixed version command and binary identity, no execution
+moguri models runtime-review MODEL_ID DIGEST --session ID --confirm-review  Retain one exact user review
+moguri models runtime-probe MODEL_ID REVIEW_ID [required] --session ID  Consume the original review once
 moguri project import-preview LIST_FILE --root PARENT  Review all URL/bullet destinations
 moguri project import LIST_FILE --root PARENT --digest SHA --confirm-review
 moguri project imports             Retained batches, no replay
@@ -115,6 +120,14 @@ moguri candidate stage PATCH.json --session SOURCE --workspace STAGE --digest PR
 moguri candidate role-proposal SEQUENCE_ID  Read final canonical role bytes; no model or write
 moguri roles contract SEQUENCE_ID ROLE_INDEX  Read bound output/context checks, never code approval
 moguri candidate eligibility --session ID  Verify the exact explicit Git-backed project
+moguri candidate source PATH... --session ID  Read exact original files on the selected Env
+moguri candidate workspaces --session ID
+moguri candidate workspace-preview NAME --session ID
+moguri candidate workspace-create NAME --session ID --digest SHA --confirm-write
+moguri candidate workspace-read|workspace-stop ID  Inspect/stop one original resource; never delete Git
+moguri candidate transports [--session ID]
+moguri candidate transport-read ID
+moguri candidate transport-reconcile ID --revision N  Read original receipts only; no replay/stop/cleanup assertion
 moguri candidate generate-preview INPUT.json --session SOURCE --workspace STAGE
 moguri candidate generate INPUT.json --session SOURCE --workspace STAGE --digest REVIEW_SHA --confirm-cost
 moguri candidate generated|generation-wait|generation-stop ID
@@ -547,6 +560,22 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       }
     } else if (group === "candidate") {
       if (action === "list") output(snapshot.candidates);
+      else if (action === "transports" && !args.length) output(await sdk.candidates.transports(values.session ? { sessionId: values.session } : {}));
+      else if (action === "transport-read" && args.length === 1) output(await sdk.candidates.transport(args[0]!));
+      else if (action === "transport-reconcile" && args.length === 1) {
+        await sdk.candidates.reconcileTransport(args[0]!, expectedRevision());
+        output(await sdk.candidates.transport(args[0]!));
+      }
+      else if (action === "source" && values.session && args.length && !values.project) output(await sdk.candidates.source(values.session, args));
+      else if (action === "workspaces" && values.session && !args.length && !values.project) output(await sdk.candidates.workspaces(values.session));
+      else if (action === "workspace-read" && args.length === 1) output(await sdk.candidates.workspace(args[0]!));
+      else if (action === "workspace-stop" && args.length === 1) output(await sdk.candidates.stopWorkspace(args[0]!));
+      else if (action === "workspace-preview" && values.session && args.length === 1 && !values.project) output(await sdk.candidates.workspacePreview(values.session, args[0]!));
+      else if (action === "workspace-create" && values.session && args.length === 1 && !values.project) {
+        if (!values.digest || !values["confirm-write"]) throw new Error("Owned Env workspace creation needs its exact --digest review and --confirm-write. No resource was created.");
+        const created = await sdk.candidates.createWorkspace(values.session, args[0]!, values.digest, true);
+        output(await sdk.candidates.waitWorkspace(created.id!));
+      }
       else if (action === "eligibility" && values.session && !args.length && !values.project) output(await sdk.candidates.eligibility(values.session));
       else if (action === "read" && args[0]) output(await sdk.candidates.read(args[0]));
       else if (action === "role-proposal" && args.length === 1) output(await sdk.candidates.roleProposal(args[0]!));
@@ -676,6 +705,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else throw new Error("Use remote status/probe/reconcile RUN_ID, acknowledge RUN_ID --confirm-review only after process inspection, or token/clear-token ENDPOINT.");
     } else if (group === "models") {
       if (action === "list") output({ models: snapshot.provider.models, connections: snapshot.provider.connections });
+      else if (action === "readiness" && values.session && args[0] && args.length <= 2 && (!args[1] || args[1] === "required")) output(await sdk.models.readiness(values.session, args[0], args[1] === "required" ? "required" : "informational"));
+      else if (action === "readiness-target" && values.session && args.length === 1) output(await sdk.models.readinessTarget(values.session, args[0]!));
+      else if (action === "runtime-preview" && values.session && args.length === 1) output(await sdk.models.runtimePreview(values.session, args[0]!));
+      else if (action === "runtime-review" && values.session && args.length === 2 && values["confirm-review"]) output(await sdk.models.reviewRuntime(values.session, args[0]!, args[1]!));
+      else if (action === "runtime-probe" && values.session && args[0] && args[1] && args.length <= 3 && (!args[2] || args[2] === "required")) output(await sdk.models.readinessWithRuntimeReview(values.session, args[0], args[1], args[2] === "required" ? "required" : "informational"));
       else if (action === "catalogue" && !args.length) output(sdk.models.catalogue());
       else if ((action === "enable" || action === "disable") && args.length === 1) output(await sdk.models.setEnabled(args[0]!, action === "enable", values.revision === undefined ? undefined : expectedRevision()));
       else if (action === "provider" && args.length === 2 && (args[1] === "enable" || args[1] === "disable")) output(await sdk.models.setProviderEnabled(args[0]!, args[1] === "enable", values.revision === undefined ? undefined : expectedRevision()));
@@ -684,7 +718,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "refresh") { await sdk.models.refresh(); output(sdk.getState().snapshot!.provider); }
       else if (action === "token" && args[0]) output(await sdk.models.setToken(args[0], await credential()));
       else if (action === "clear-token" && args[0]) output(await sdk.models.clearToken(args[0]));
-      else throw new Error("Use models list, catalogue, refresh, enable|disable API_ID, provider ID enable|disable, source API_ID MODEL_ID, evidence MODEL_ID, token ENDPOINT or clear-token ENDPOINT. Preference writes accept an observed --revision N. No sign-in, inference or source fallback is implied.");
+      else throw new Error("Use models list, catalogue, refresh, enable|disable API_ID, provider ID enable|disable, source API_ID MODEL_ID, evidence MODEL_ID, token ENDPOINT or clear-token ENDPOINT. Readiness uses models readiness MODEL_ID [required], readiness-target MODEL_ID, runtime-preview MODEL_ID, runtime-review MODEL_ID DIGEST --confirm-review or runtime-probe MODEL_ID REVIEW_ID [required], each with --session ID. Preference writes accept an observed --revision N. No sign-in, inference or source fallback is implied.");
     } else if (group === "commands") {
       if (action === "list") output(sdk.getState().snapshot?.commandExecutions.filter((entry) => !values.session || entry.sessionId === values.session));
       else if (action === "read" && args[0]) output(await sdk.commands.read(args[0]));

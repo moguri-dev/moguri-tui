@@ -5,6 +5,7 @@ import { hasChatTitleHistory, hasLiveDeliveryHistory, hasCombinedWorkspaceHistor
 import { randomUUID } from "node:crypto";
 import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
+import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "../../packages/protocol/src/milestone-models.ts";
 
 export async function appendLegacyProjectFreeSession(client: MoguriSdk, control: ControlPlane, title: string): Promise<{ id: string }> {
   const snapshot = control.snapshot(), settings = snapshot.settings;
@@ -130,11 +131,18 @@ export function removeChatTitleFixtureMarkers(db: DatabaseSync, events: readonly
   db.exec("DELETE FROM retention_metadata WHERE id IN ('chat_titles_schema','live_delivery_schema')");
 }
 export function removeRepositoryManagementFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeMilestoneCapabilityFixtureMarkers(db, events);
   if (events.some((event) => event.event_type === "repository.import_recorded" ||
     event.event_type === "github.operation_recorded" && event.payload.operation.kind === "git.remote.set")) {
     throw new Error("Generate genuine pre-91 history; actual reviewed repository import/remote ownership cannot become older state.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('repository_import_batches_schema','repository_remote_changes_schema')");
+}
+export function removeMilestoneCapabilityFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasMilestoneModelHistory(events) || hasMilestoneCandidateHistory(events)) {
+    throw new Error("Generate genuine pre-92 history; runtime requirements, pooled controls and transport candidates cannot become older state.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('model_runtime_readiness_schema','kupo_options_schema','candidate_transports_schema')");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);

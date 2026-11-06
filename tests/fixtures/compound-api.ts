@@ -6,10 +6,12 @@ import type { CompoundSettings } from "../../packages/protocol/src/compound.ts";
 import { digest } from "../../apps/service/src/store.ts";
 import { fixtureProvider, waitFor, type GeneratedProviderOptions } from "../fixture.ts";
 import { candidateApiFixture } from "./candidate-api.ts";
+import type { PlatformOptions } from "../../apps/service/src/platform.ts";
 
-export async function compoundApiFixture(configuration: { legacyNotifications?: boolean; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean } = {}) {
-  const routerOptions: GeneratedProviderOptions & { workerPath: string; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean } = { responseMode: "text", maxOutputTokens: 8192, contextWindow: 262144,
-    exposeModels: true, replyText: "Generated pending compound classifier.", workerPath: fileURLToPath(new URL("../../apps/service/src/worker.ts", import.meta.url)),
+export async function compoundApiFixture(configuration: { legacyNotifications?: boolean; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; platform?: PlatformOptions; reasoning?: boolean; hostedRoles?: boolean } = {}) {
+  const routerOptions: GeneratedProviderOptions & { workerPath: string; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; platform?: PlatformOptions } = { responseMode: "text", maxOutputTokens: 8192, contextWindow: 262144,
+    exposeModels: true, reasoning: configuration.reasoning, replyText: "Generated pending compound classifier.", workerPath: fileURLToPath(new URL("../../apps/service/src/worker.ts", import.meta.url)),
+    ...(configuration.platform ? { platform: configuration.platform } : {}),
     legacySessionControlsJournal: configuration.legacySessionControlsJournal,
     ...(configuration.legacyCandidateJournal ? { legacyCandidateJournal: true } : {}) };
   const f = await candidateApiFixture(routerOptions);
@@ -20,11 +22,20 @@ export async function compoundApiFixture(configuration: { legacyNotifications?: 
     const settings = structuredClone(f.sdk.settings.get()!.values);
     if (configuration.legacyNotifications) settings.notifications = { inApp: settings.notifications.inApp, os: settings.notifications.os, previewContent: settings.notifications.previewContent };
     for (const role of ["first", "selected", "escalation", "critic"]) {
-      const value: GeneratedProviderOptions = { modelId: `generated-compound-${role}-api`, responseMode: "text", replyText: JSON.stringify(proposal), exposeModels: true, maxOutputTokens: 8192, contextWindow: 262144 };
+      const value: GeneratedProviderOptions = { modelId: `generated-compound-${role}-api`, responseMode: "text", replyText: JSON.stringify(proposal), exposeModels: true, reasoning: configuration.reasoning, maxOutputTokens: 8192, contextWindow: 262144 };
       options.push(value);
       const provider = await fixtureProvider(value); providers.push(provider);
-      settings.localModels.push({ id: `generated-compound-${role}`, name: `Generated compound ${role}`, enabled: true, baseUrl: `${provider.baseUrl}/v1`, auth: "none",
+      if (!configuration.hostedRoles) settings.localModels.push({ id: `generated-compound-${role}`, name: `Generated compound ${role}`, enabled: true, baseUrl: `${provider.baseUrl}/v1`, auth: "none",
         models: [{ id: provider.modelId, name: `Generated compound ${role}`, contextWindow: 262144, maxTokens: 8192, imageInput: false }] });
+    }
+    if (configuration.hostedRoles) {
+      const originalPrepare = f.provider.prepare.bind(f.provider);
+      f.provider.state = { ...f.provider.state, models: [...f.provider.state.models, ...providers.flatMap((provider, index) =>
+        provider.provider.state.models.map((model) => ({ ...model, name: `Generated compound ${["first", "selected", "escalation", "critic"][index]}` })))] };
+      f.provider.prepare = (id, signal) => {
+        const provider = providers.find((provider) => provider.modelId === id);
+        return provider ? provider.provider.prepare(id, signal) : originalPrepare(id, signal);
+      };
     }
     await f.sdk.settings.update(settings, f.sdk.settings.get()!.revision); await f.sdk.models.refresh();
     const ids = ["first", "selected", "escalation", "critic"].map((role) => {

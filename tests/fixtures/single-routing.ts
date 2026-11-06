@@ -9,14 +9,16 @@ import { appendLegacyKupoSelection } from "./legacy-state.ts";
 import type { RemoteTarget } from "../../packages/sdk/src/index.ts";
 
 export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean; platform?: PlatformOptions; legacy?: boolean;
-  remoteTarget?: { target: RemoteTarget; workspace: string }; legacySessionControlsJournal?: boolean } = {}) {
+  remoteTarget?: { target: RemoteTarget; workspace: string }; legacySessionControlsJournal?: boolean; imageInput?: boolean; toolInput?: boolean } = {}) {
   const remote = configuration.env === "Remote";
   const secrets = new Map<string, string>(), generatedVault = { read: async (id: string) => secrets.get(id) ?? null, write: async (id: string, value: string) => { secrets.set(id, value); }, remove: async (id: string) => { secrets.delete(id); } };
   const vault = configuration.platform?.remote?.vault ?? generatedVault;
   const options: GeneratedProviderOptions & { platform?: PlatformOptions; workerPath?: string; legacySessionControlsJournal?: boolean } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text",
+    ...(configuration.imageInput !== undefined ? { imageInput: configuration.imageInput } : {}), ...(configuration.toolInput !== undefined ? { toolInput: configuration.toolInput } : {}),
     legacySessionControlsJournal: configuration.legacySessionControlsJournal,
     platform: { ...configuration.platform, remote: { ...configuration.platform?.remote, vault, modelsVault: configuration.platform?.remote?.modelsVault ?? vault } } };
-  const solverOptions: GeneratedProviderOptions = { modelId: "generated-routed-solver-api", maxOutputTokens: 128, exposeModels: true, replyText: "Generated routed solver answer." };
+  const solverOptions: GeneratedProviderOptions = { modelId: "generated-routed-solver-api", maxOutputTokens: 128, exposeModels: true, replyText: "Generated routed solver answer.",
+    ...(configuration.imageInput !== undefined ? { imageInput: configuration.imageInput } : {}), ...(configuration.toolInput !== undefined ? { toolInput: configuration.toolInput } : {}) };
   if (!remote && configuration.legacy !== false) options.workerPath = fileURLToPath(new URL("./legacy-worker-83.ts", import.meta.url));
   const fixture = await setupFixture(options), solver = await fixtureProvider(solverOptions);
   const sdk = await new MoguriSdk(fixture.service.connection).ready();
@@ -37,7 +39,8 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
     // Shared routing fixtures also generate genuine pre-sound recovery histories.
     settings.notifications = { inApp: settings.notifications.inApp, os: settings.notifications.os, previewContent: settings.notifications.previewContent };
     const endpoint = { id: "generated-routed-solver", name: "Generated routed solver", enabled: true, baseUrl: `${solver.baseUrl}/v1`, auth: "none" as const,
-      models: [{ id: solver.modelId, name: "Generated routed solver", contextWindow: 16384, maxTokens: 128, imageInput: false }] };
+      models: [{ id: solver.modelId, name: "Generated routed solver", contextWindow: 16384, maxTokens: 128, imageInput: configuration.imageInput ?? false,
+        ...(configuration.toolInput !== undefined ? { toolInput: configuration.toolInput } : {}) }] };
     if (remote) {
       if (configuration.remoteTarget) { workspace = configuration.remoteTarget.workspace; settings.remote = { ...configuration.remoteTarget.target, models: [endpoint] }; }
       else {

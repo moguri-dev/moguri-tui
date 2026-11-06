@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { MoguriSdk } from "../../packages/sdk/src/index.ts";
 import { startService } from "../../apps/service/src/server.ts";
 import type { PlatformOptions } from "../../apps/service/src/platform.ts";
-import { fixtureProvider } from "../fixture.ts";
+import { fixtureProvider, generatedNodeSupervision } from "../fixture.ts";
 import { legacySessionControlsJournal } from "./legacy-session-controls-journal.ts";
 
 export async function profileFixture(extra?: (profileId: string, directory: string) => PlatformOptions, workerPath?: string, holdAfterTool = false, legacySessionControls = false) {
@@ -25,7 +25,8 @@ export async function profileFixture(extra?: (profileId: string, directory: stri
       return { ...overrides, terminal: { defaultRoot: home, ...overrides?.terminal }, vault: { read: async (key: string) => scoped.get(key) ?? null, write: async (key: string, value: string) => { scoped.set(key, value); }, remove: async (key: string) => { scoped.delete(key); } } };
     },
   } };
-  const service = await startService(options), sdk = await new MoguriSdk(service.connection).ready(), clients: MoguriSdk[] = [sdk];
+  const service = await startService(options); generatedNodeSupervision(service);
+  const sdk = await new MoguriSdk(service.connection).ready(), clients: MoguriSdk[] = [sdk];
   const restoreJournal = legacySessionControls ? legacySessionControlsJournal(service.store, true) : () => {};
   const create = async (name: string) => {
     const command = await sdk.profiles.create(name, "#557799");

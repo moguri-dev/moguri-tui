@@ -6,8 +6,9 @@ import { setupFixture } from "../fixture.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
 
 export async function candidateApiFixture(options: Parameters<typeof setupFixture>[0] = {}) {
-  const f = await setupFixture(options), sdk = await new MoguriSdk(f.service.connection).ready();
+  const f = await setupFixture(options), sdk = new MoguriSdk(f.service.connection);
   try {
+    await sdk.ready();
     await writeFile(join(f.project, "second.txt"), "Generated second base.\n");
     const git = initializeGeneratedRepository(f.project, ["fixture.txt", "second.txt"]);
     const created = await sdk.workspaces.create(f.session().projectId, "moguri/generated-candidate-api"), workspace = await sdk.workspaces.wait(created.id!);
