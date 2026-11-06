@@ -4,6 +4,7 @@ release/
 coverage/
 test-results/
 playwright-report/
+.test-output/
 .moguri/
 .DS_Store
 *.tsbuildinfo
