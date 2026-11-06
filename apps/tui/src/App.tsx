@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
-import { SyntaxStyle, TextRenderable, type BoxOptions, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
+import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
@@ -36,23 +36,31 @@ function TerminalAlert({ text, error, keyboard }: { text: string; error: boolean
     }}><text fg={colors.muted}>[x]</text></box>
   </box>;
 }
-async function waitForCommandFrame(renderer: ReturnType<typeof useRenderer>, signal: AbortSignal, applied: () => boolean): Promise<void> {
+export async function waitForCommandFrame(renderer: ReturnType<typeof useRenderer>, signal: AbortSignal, applied: () => boolean): Promise<void> {
   const deadline = AbortSignal.timeout(10_000), owner = AbortSignal.any([signal, deadline]), originalFrame = renderer.frameId;
-  for (;;) {
-    owner.throwIfAborted();
-    if (renderer.isDestroyed) throw new Error("The original terminal closed before acknowledging its queued view.");
-    await delay(0, undefined, { signal: owner });
-    renderer.requestRender();
-    await new Promise<void>((resolve, reject) => {
-      const abort = () => reject(owner.reason);
-      owner.addEventListener("abort", abort, { once: true });
-      if (owner.aborted) { owner.removeEventListener("abort", abort); abort(); return; }
-      void renderer.idle().then(() => { owner.removeEventListener("abort", abort); resolve(); },
-        (error: unknown) => { owner.removeEventListener("abort", abort); reject(error); });
-    });
-    if (renderer.frameId > originalFrame && applied()) return;
-    await delay(15, undefined, { signal: owner });
-  }
+  let presented = false;
+  const observed = (frame: CliRendererFrameEvent) => {
+    if (!owner.aborted && !renderer.isDestroyed && frame.frameId > originalFrame && applied()) presented = true;
+  };
+  renderer.on(CliRenderEvents.FRAME, observed);
+  try {
+    for (;;) {
+      owner.throwIfAborted();
+      if (renderer.isDestroyed) throw new Error("The original terminal closed before acknowledging its queued view.");
+      await delay(0, undefined, { signal: owner });
+      renderer.requestRender();
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => reject(owner.reason);
+        owner.addEventListener("abort", abort, { once: true });
+        if (owner.aborted) { owner.removeEventListener("abort", abort); abort(); return; }
+        void renderer.idle().then(() => { owner.removeEventListener("abort", abort); resolve(); },
+          (error: unknown) => { owner.removeEventListener("abort", abort); reject(error); });
+      });
+      owner.throwIfAborted();
+      if (presented || renderer.frameId > originalFrame && applied()) return;
+      await delay(15, undefined, { signal: owner });
+    }
+  } finally { renderer.off(CliRenderEvents.FRAME, observed); }
 }
 const label = (session: Session) => sessionTitle(session, 44);
 type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "runtime-review" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode";

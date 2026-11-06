@@ -3,10 +3,10 @@ import test from "node:test";
 import { createElement } from "react";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Renderable } from "@opentui/core";
+import { CliRenderEvents, Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
-import { TuiApp } from "../apps/tui/src/App.tsx";
+import { TuiApp, waitForCommandFrame } from "../apps/tui/src/App.tsx";
 import { appearanceColors, colorContrast, MoguriSdk, themePalettes, type PlatformQuery, type PlatformResponse } from "../packages/sdk/src/index.ts";
 import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
@@ -29,6 +29,46 @@ async function click(setup: Terminal, id: string) {
   await setup.mockMouse.click(target.x + Math.floor(target.width / 2), target.y + Math.floor(target.height / 2));
   await setup.flush();
 }
+
+test("an actually presented command frame remains acknowledged when navigation changes before the idle waiter resumes", { skip: process.platform !== "darwin", timeout: 5000 }, async () => {
+  const setup = await createTestRenderer({ width: 60, height: 12, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  let visible = true, presented = false;
+  try {
+    flushSync(() => root.render(createElement("text", { id: "generated-command-frame" }, "Generated actual command view")));
+    const waiting = waitForCommandFrame(setup.renderer, AbortSignal.timeout(750), () => visible &&
+      setup.renderer.root.findDescendantById("generated-command-frame")?.visible === true);
+    setup.renderer.once(CliRenderEvents.FRAME, () => {
+      presented = true; visible = false;
+      flushSync(() => root.render(createElement("text", null, "Generated actual user navigation")));
+    });
+    await waiting;
+    assert.equal(presented, true); assert.equal(visible, false);
+    await setup.flush(); assert.ok(setup.captureCharFrame().includes("Generated actual user navigation"));
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); }
+});
+
+test("an unrelated native frame cannot acknowledge an unseen command and removes its original listener on cancellation", { skip: process.platform !== "darwin", timeout: 5000 }, async () => {
+  const setup = await createTestRenderer({ width: 60, height: 12, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const listeners = setup.renderer.listenerCount(CliRenderEvents.FRAME);
+  try {
+    flushSync(() => root.render(createElement("text", null, "Generated unrelated visible frame")));
+    await assert.rejects(() => waitForCommandFrame(setup.renderer, AbortSignal.timeout(100), () => false), /aborted|timed out/i);
+    assert.equal(setup.renderer.listenerCount(CliRenderEvents.FRAME), listeners);
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); }
+});
+
+test("cancellation after a matching native frame still refuses success when its original owner ended before acknowledgement", { skip: process.platform !== "darwin", timeout: 5000 }, async () => {
+  const setup = await createTestRenderer({ width: 60, height: 12, exitOnCtrlC: false }), root = createRoot(setup.renderer), abort = new AbortController();
+  try {
+    flushSync(() => root.render(createElement("text", null, "Generated presented view before owned stop")));
+    const waiting = waitForCommandFrame(setup.renderer, abort.signal, () => true);
+    setup.renderer.once(CliRenderEvents.FRAME, () => abort.abort(new Error("Generated original command owner stopped.")));
+    await assert.rejects(() => waiting, (error: unknown) => {
+      assert.ok(error === abort.signal.reason || error instanceof Error && "cause" in error && error.cause === abort.signal.reason);
+      return true;
+    });
+  } finally { flushSync(() => root.unmount()); await setup.dispose(); }
+});
 
 test("native terminal mouse tabs navigate real screens and preserve the exact unsent draft without inference", { skip: process.platform !== "darwin" }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
