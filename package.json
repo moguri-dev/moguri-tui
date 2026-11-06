@@ -63,6 +63,7 @@
     "docs/architecture/model-controls.md",
     "docs/architecture/candidate-transports.md",
     "docs/architecture/milestone-completion.md",
+    "docs/architecture/milestone-combination-matrix.md",
     "docs/architecture/owned-role-contracts.md",
     "docs/architecture/candidate-primitives.md",
     "docs/architecture/candidate-workflows.md",

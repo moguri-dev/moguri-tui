@@ -89,6 +89,9 @@ exact account/root/head ownership, cross-view deduplication, historical
 observations, startup-failure diagnostics and source-bound notifications.
 Reopening a pane never restarts polling; uncertain cleanup remains partial.
 This source update does not relabel the separately delivered protocol92 DMG.
+The [required combination and native-gate map](docs/architecture/milestone-combination-matrix.md)
+keeps complete Local/SSH generated coverage separate from missing current
+physical SendBox and account-blocked hosted-CI acceptance.
 
 Whole-descendant containment can be required explicitly through **Guardrails /
 Require qualified SendBox** or `moguri containment require-sandbox
