@@ -19,6 +19,22 @@ async function frameUntil(setup: Awaited<ReturnType<typeof createTestRenderer>>,
   throw new Error(`Native workflow did not render ${text}:\n${setup.captureCharFrame()}`);
 }
 
+test("native TUI previews the exact uniquely linked PR CI watch without starting inference or polling", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+  const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 160, height: 75, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    const project = await fixture.sdk.github.project(fixture.scope);
+    const source = await fixture.sdk.github.source(fixture.scope, { kind: "pull", number: 11, repository: project.repository, account: project.account, accountId: project.accountId });
+    await fixture.sdk.sessions.associatePr(fixture.sessionId, { ...source.source, expectedDigest: source.digest });
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk })));
+    await frameUntil(setup, "Write a prompt"); await setup.mockInput.typeText("/github ci-preview"); setup.mockInput.pressEnter();
+    await frameUntil(setup, "github.ci.watch");
+    const snapshot = fixture.service.controller.snapshot();
+    assert.equal(snapshot.githubOperations.filter((operation) => operation.ci).length, 0);
+    assert.equal(snapshot.sessions.find((session) => session.id === fixture.sessionId)?.turnId, null);
+    assert.deepEqual(fixture.writes(), { issues: 0, pulls: 0 });
+  } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
+});
+
 test("native TUI pickers discover repositories and review complete project issues before starting an idle source-bound session", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
   const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 140, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frame = (text: string) => frameUntil(setup, text);

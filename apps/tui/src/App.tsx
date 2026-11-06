@@ -269,7 +269,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     try {
       await editor?.flush(); setSelectedId(id); setArchiveReview(null); setMode("compose");
       if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false });
-      const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged).map((entry) => entry.id) ?? [];
+      const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged && entry.reason !== "ci").map((entry) => entry.id) ?? [];
       if (ids.length) await client.attention.acknowledge(ids.slice(-100));
     } finally { setNavigationFocus(false); }
   };

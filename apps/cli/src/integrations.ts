@@ -3,6 +3,7 @@ import {
   ClientError, GithubActionSchema, GithubBrowseSchema, GithubCommandSchema, LinearCatalogResourceSchema, LinearWorkflowInputSchema,
   isRecord, parse, type GithubScope, type MoguriSdk,
 } from "../../../packages/sdk/src/index.ts";
+import { gitSessionScope } from "../../../packages/sdk/src/git.ts";
 
 interface Flags { project?: string; workspace?: string; session?: string; digest?: string; confirmations?: string; revision?: string; "confirm-review"?: boolean }
 async function json(path: string | undefined): Promise<unknown> {
@@ -17,6 +18,17 @@ export async function integrationCommand(sdk: MoguriSdk, group: "github" | "line
     return true as const;
   };
   if (group === "github") {
+    if (action === "ci" || action === "ci-preview") {
+      if (!flags.session || args.length > 1 || args[0] && (!/^[1-9]\d*$/.test(args[0]) || !Number.isSafeInteger(Number(args[0])))) {
+        throw new ClientError("github_ci_selection", "Use github ci|ci-preview [PR_NUMBER] --session ID. Omit the number only for a unique linked PR.");
+      }
+      const scope = gitSessionScope(sdk, flags.session);
+      if (flags.project && flags.project !== scope.projectId || flags.workspace && flags.workspace !== scope.workspaceId) {
+        throw new ClientError("github_ci_scope", "Explicit project/workspace flags do not match the selected session. No other root was used.");
+      }
+      return action === "ci" ? sdk.github.ciForSession(flags.session, args[0] ? Number(args[0]) : undefined) :
+        sdk.github.previewCiForSession(flags.session, args[0] ? Number(args[0]) : undefined);
+    }
     if (!action || action === "history") return sdk.github.history({ ...(flags.project ? { projectId: flags.project } : {}) });
     if (action === "read" && args[0]) return sdk.github.read(args[0]);
     if (action === "wait" && args[0]) return sdk.github.wait(args[0], { timeoutMs: 30 * 60 * 1000 });

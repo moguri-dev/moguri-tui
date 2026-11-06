@@ -84,6 +84,12 @@ Go; mutable installs remain private and executable builds are not implied.
 Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
+Current **protocol93 source** adds [retained PR CI watches](docs/setup.md#retained-pull-request-ci-watches):
+exact account/root/head ownership, cross-view deduplication, historical
+observations, startup-failure diagnostics and source-bound notifications.
+Reopening a pane never restarts polling; uncertain cleanup remains partial.
+This source update does not relabel the separately delivered protocol92 DMG.
+
 Whole-descendant containment can be required explicitly through **Guardrails /
 Require qualified SendBox** or `moguri containment require-sandbox
 --confirm-review`. Ordinary Local/SSH still owns known groups only. Missing
@@ -239,7 +245,8 @@ text files, not whole-paste prompt expansions. Desktop, TUI and the SDK preserve
 failed/conflicting unsent pastes; approved bounded file reads work through Local
 and pinned SSH workers without modifying a source checkout. See
 [usage](docs/setup.md) and the [context boundary](docs/architecture/context-inputs.md).
-This does not complete the remaining compound, wind-down, Max or Sandbox gates.
+These context features are implemented. Final native and integrated acceptance
+remain separate in the [current roadmap](docs/remaining-milestone-gaps.md).
 
 Core **Remote SSH** execution uses an explicitly pinned host and approved
 remote workspace. The existing worker runs inference and file/command tools
@@ -336,13 +343,16 @@ This is not public compound scheduling, independent-family proof or acceptance.
 source, independently installed SDK and actual native qualification. The
 qualified 0.28 artifacts remain frozen.
 
-The first milestone remains incomplete. The
-[remaining-gap handoff](docs/remaining-milestone-gaps.md) records its open
-acceptance gates, model maximum/half-window choices, file-backed text pastes
-over 50 lines and the user-requested SendBox 0.2.3 integration. Version bumps
+The first milestone remains incomplete. Merged **#51 / protocol 92** includes
+runtime/hardware readiness, exact Kupo window/effort controls and reviewed
+SSH/native-private candidate transports. The
+[current acceptance and roadmap](docs/remaining-milestone-gaps.md) separates
+these implemented features from the remaining exact native qualification and
+GitHub CI billing gate; [#39](https://github.com/mbianchidev/moguri/issues/39)
+tracks later workflows and distribution. Historical handoffs and version bumps
 do not establish completion or justify an increased estimate.
 
-Current issue-17 source uses **protocol 37** for shared model windows, scoped
+The earlier issue-17 checkpoint used **protocol 37** for shared model windows, scoped
 long-paste files and reviewed SendBox **0.2.3** execution. SDK, CLI/TUI and hidden
 desktop run the same qualified private-stage worker, Manual decisions, budget
 ledger, exact-owner stop/recovery and separate actual-user source publication.

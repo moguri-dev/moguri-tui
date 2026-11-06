@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
 import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "../../packages/protocol/src/milestone-models.ts";
+import { hasGithubPrCiHistory } from "../../packages/protocol/src/github-workflows.ts";
 
 export async function appendLegacyProjectFreeSession(client: MoguriSdk, control: ControlPlane, title: string): Promise<{ id: string }> {
   const snapshot = control.snapshot(), settings = snapshot.settings;
@@ -139,10 +140,15 @@ export function removeRepositoryManagementFixtureMarkers(db: DatabaseSync, event
   db.exec("DELETE FROM retention_metadata WHERE id IN ('repository_import_batches_schema','repository_remote_changes_schema')");
 }
 export function removeMilestoneCapabilityFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeGithubPrCiFixtureMarker(db, events);
   if (hasMilestoneModelHistory(events) || hasMilestoneCandidateHistory(events)) {
     throw new Error("Generate genuine pre-92 history; runtime requirements, pooled controls and transport candidates cannot become older state.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('model_runtime_readiness_schema','kupo_options_schema','candidate_transports_schema')");
+}
+export function removeGithubPrCiFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasGithubPrCiHistory(events)) throw new Error("Generate genuine pre-93 history; retained PR CI-watch ownership cannot become older state.");
+  db.exec("DELETE FROM retention_metadata WHERE id='github_pr_ci_watch_schema'");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);

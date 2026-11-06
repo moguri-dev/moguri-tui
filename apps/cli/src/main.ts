@@ -296,6 +296,7 @@ moguri cache token ID|clear-token ID   Credentials only through piped stdin
 moguri github browse REQUEST.json|preview ACTION.json --project ID [--workspace ID --session ID]
 moguri github execute ACTION.json --project ID --digest SHA --confirm-review [--confirmations PHRASES.json]
 moguri github history|read ID|wait ID|stop ID   Actual original operations, no retry
+moguri github ci|ci-preview [PR] --session ID  Exact PR state/review; no SHA re-entry
 moguri github acknowledge ID --revision N --digest ORIGINAL_INPUT_SHA --confirm-review
 moguri linear status|import PROJECT_ID [CURSOR]
 moguri linear token|clear-token    Read a personal API key from piped stdin

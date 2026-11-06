@@ -69,31 +69,34 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
   }
 }
 export async function githubApplicationFixture(options: { provider?: ProviderAdapter; ownedNetwork?: boolean; retentionKey?: Buffer; integrations?: IntegrationOptions;
-  beforeRead?: (path: string) => Promise<void> } = {}) {
+  github?: Omit<GitHubWorkflowOptions, "runProgram">; beforeRead?: (path: string, signal: AbortSignal) => Promise<void> } = {}) {
     const calls: { method: string; path: string }[] = [];
     const repository = { id: 41, name: "fixture", full_name: "generated-owner/fixture",
       owner: { login: "generated-owner", type: "User" }, description: "Generated application repository",
       html_url: "https://github.com/generated-owner/fixture", visibility: "private", private: true, default_branch: "main",
       ssh_url: "git@github.com:generated-owner/fixture.git", clone_url: "https://github.com/generated-owner/fixture.git", license: { spdx_id: "MIT" } };
     let head = "", changedBody = false, issueWrites = 0, prWrites = 0, accountId = 42;
+    const ci: { checks?: unknown[]; statuses?: unknown[]; runs?: unknown[]; annotations?: unknown[];
+      checkPages?: unknown[][]; runPages?: unknown[][]; checkCount?: unknown; statusCount?: unknown; runCount?: unknown } = {};
     const issue = (number: number, title = "Generated issue", body = "Generated **issue body**.") => ({ id: number + 100, number, title, body: changedBody ? "Generated changed source." : body, state: "open",
       html_url: `https://github.com/${repository.full_name}/issues/${number}`, updated_at: "2026-01-01T00:00:00Z", user: { login: "generated-owner" } });
     const pull = (number: number, title = "Generated pull request", body = "Generated **pull request body**.", draft = true) => ({ ...issue(number, title, body),
       html_url: `https://github.com/${repository.full_name}/pull/${number}`, draft, merged: false,
       base: { ref: "main", sha: head, repo: repository }, head: { ref: "generated-feature", sha: head, repo: repository } });
     const issues = [issue(7)], pulls: ReturnType<typeof pull>[] = [];
-    const fixture = await githubServiceFixture({ runProgram: async (executable, args, request) => {
+    const fixture = await githubServiceFixture({ ...options.github, runProgram: async (executable, args, request) => {
       if (executable !== "gh") return runProgram(executable, args, { ...request, env: { ...request.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
       const index = args.indexOf("--method"), method = args[index + 1]!, requested = args[index + 2]!;
       calls.push({ method, path: requested });
-      if (method === "GET") await options.beforeRead?.(requested);
+      if (method === "GET") await options.beforeRead?.(requested, request.signal);
       const path = repository.full_name !== "generated-owner/fixture" && requested.startsWith(`repos/${repository.full_name}`) ?
         requested.replace(`repos/${repository.full_name}`, "repos/generated-owner/fixture") : requested;
       const fields: Record<string, string> = {};
       for (let index = 0; index < args.length - 1; index++) if (args[index] === "--raw-field" || args[index] === "--field") {
         const value = args[index + 1]!, split = value.indexOf("="); fields[value.slice(0, split)] = value.slice(split + 1);
       }
-      let data: unknown;
+      let data: unknown, nextPage = false;
+      const requestedPage = Number(path.match(/[?&]page=(\d+)/)?.[1] ?? 1);
       if (path === "user") data = { login: "generated-owner", id: accountId };
       else if (path.startsWith("user/repos?")) data = [repository];
       else if (path === "repos/generated-owner/fixture") data = repository;
@@ -116,13 +119,32 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       else if (path.startsWith("repos/generated-owner/fixture/pulls?")) data = pulls;
       else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/files\?/.test(path)) data = [{ filename: "generated.ts", status: "modified", additions: 1, deletions: 1,
         patch: "@@ -1 +1 @@\n-old generated line\n+new generated line", blob_url: "https://github.com/generated-owner/fixture/blob/generated-feature/generated.ts" }];
-      else if (path.startsWith("repos/generated-owner/fixture/actions/runs?")) data = { workflow_runs: [{ id: 80, name: "Generated CI", status: "completed", conclusion: "success",
-        head_sha: head, html_url: "https://github.com/generated-owner/fixture/actions/runs/80" }] };
+      else if (path.startsWith("repos/generated-owner/fixture/actions/runs?")) {
+        const all = ci.runPages?.flat() ?? ci.runs ?? [{ id: 80, name: "Generated CI", status: "completed", conclusion: "success",
+          head_sha: head, html_url: "https://github.com/generated-owner/fixture/actions/runs/80" }];
+        const runs = ci.runPages ? ci.runPages[requestedPage - 1] ?? [] : requestedPage === 1 ? all : [];
+        nextPage = Boolean(ci.runPages && requestedPage < ci.runPages.length);
+        data = { workflow_runs: runs, total_count: ci.runCount !== undefined ? ci.runCount : all.length };
+      }
       else if (path === "repos/generated-owner/fixture/actions/runs/80") data = { id: 80, name: "Generated CI", status: "completed", conclusion: "success", head_sha: head };
       else if (path.startsWith("repos/generated-owner/fixture/actions/runs/80/jobs?")) data = { jobs: [{ id: 81, name: "Generated build", status: "completed", conclusion: "success",
         head_sha: head, steps: [{ name: "Generated install", status: "completed", conclusion: "success" }, { name: "Generated test", status: "completed", conclusion: "success" }] }] };
-      else if (/\/commits\/[a-f0-9]+\/check-runs\?/.test(path)) data = { check_runs: [{ id: 82, name: "Generated checks", status: "completed", conclusion: "success", head_sha: head }] };
-      else if (/\/commits\/[a-f0-9]+\/status\?/.test(path)) data = { sha: head, statuses: [] };
+      else if (/\/check-runs\/\d+\/annotations\?/.test(path)) {
+        data = (ci.annotations ?? []).slice((requestedPage - 1) * 100, requestedPage * 100);
+        nextPage = requestedPage * 100 < (ci.annotations?.length ?? 0);
+      }
+      else if (/\/check-runs\/\d+$/.test(path)) {
+        const id = Number(path.split("/").at(-1));
+        const selected = ci.checks?.find((value) => typeof value === "object" && value !== null && "id" in value && value.id === id);
+        data = { id, head_sha: head, output: { annotations_count: ci.annotations?.length ?? 0 }, ...(typeof selected === "object" && selected !== null ? selected : {}) };
+      }
+      else if (/\/commits\/[a-f0-9]+\/check-runs\?/.test(path)) {
+        const all = ci.checkPages?.flat() ?? ci.checks ?? [{ id: 82, name: "Generated checks", status: "completed", conclusion: "success", head_sha: head }];
+        const checks = ci.checkPages ? ci.checkPages[requestedPage - 1] ?? [] : requestedPage === 1 ? all : [];
+        nextPage = Boolean(ci.checkPages && requestedPage < ci.checkPages.length);
+        data = { check_runs: checks, total_count: ci.checkCount !== undefined ? ci.checkCount : all.length };
+      }
+      else if (/\/commits\/[a-f0-9]+\/status\?/.test(path)) data = { sha: head, statuses: requestedPage === 1 ? ci.statuses ?? [] : [], total_count: ci.statusCount !== undefined ? ci.statusCount : ci.statuses?.length ?? 0 };
       else if (/^repos\/generated-owner\/fixture\/commits\/[a-f0-9]+$/.test(path)) data = { sha: head };
       else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/comments\?/.test(path)) data = [{ id: 83, body: "Generated inline review comment.", path: "generated.ts", line: 1,
         state: "COMMENTED", user: { login: "generated-reviewer" }, html_url: "https://github.com/generated-owner/fixture/pull/11#discussion_r83" }];
@@ -140,7 +162,7 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
         data = selected;
       }
       else throw new Error(`Unexpected generated GitHub request: ${method} ${path}`);
-      return `HTTP/2.0 200 OK\r\n\r\n${JSON.stringify(data)}`;
+      return `HTTP/2.0 200 OK\r\n${nextPage ? 'Link: <https://api.github.com/generated?page=2>; rel="next"\r\n' : ""}\r\n${JSON.stringify(data)}`;
     } }, options.provider, options.retentionKey, options.integrations);
     head = fixture.git(["rev-parse", "HEAD"]); pulls.push(pull(11));
     fixture.git(["remote", "set-url", "origin", repository.ssh_url]);
@@ -172,5 +194,7 @@ process.exit(result.status ?? 67);
         for (const value of pulls) value.html_url = `${repository.html_url}/pull/${value.number}`;
       },
       changeHead: (value: string) => { head = value; for (const item of pulls) item.head.sha = value; },
+      setCi: (value: typeof ci) => { Object.assign(ci, value); },
+      closePull: (number: number) => { const selected = pulls.find((pull) => pull.number === number); if (!selected) throw new Error("Generated PR is absent."); selected.state = "closed"; },
       changeSource: () => { changedBody = true; }, changeAccount: (id: number) => { accountId = id; }, writes: () => ({ issues: issueWrites, pulls: prWrites }) };
 }
