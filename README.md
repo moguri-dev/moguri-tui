@@ -239,7 +239,8 @@ text files, not whole-paste prompt expansions. Desktop, TUI and the SDK preserve
 failed/conflicting unsent pastes; approved bounded file reads work through Local
 and pinned SSH workers without modifying a source checkout. See
 [usage](docs/setup.md) and the [context boundary](docs/architecture/context-inputs.md).
-This does not complete the remaining compound, wind-down, Max or Sandbox gates.
+These context features are implemented. Final native and integrated acceptance
+remain separate in the [current roadmap](docs/remaining-milestone-gaps.md).
 
 Core **Remote SSH** execution uses an explicitly pinned host and approved
 remote workspace. The existing worker runs inference and file/command tools
@@ -345,7 +346,7 @@ GitHub CI billing gate; [#39](https://github.com/mbianchidev/moguri/issues/39)
 tracks later workflows and distribution. Historical handoffs and version bumps
 do not establish completion or justify an increased estimate.
 
-Current issue-17 source uses **protocol 37** for shared model windows, scoped
+The earlier issue-17 checkpoint used **protocol 37** for shared model windows, scoped
 long-paste files and reviewed SendBox **0.2.3** execution. SDK, CLI/TUI and hidden
 desktop run the same qualified private-stage worker, Manual decisions, budget
 ledger, exact-owner stop/recovery and separate actual-user source publication.
