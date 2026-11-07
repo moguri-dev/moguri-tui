@@ -74,8 +74,9 @@ export interface GeneratedProviderOptions {
   stateSqlStatements?: { sql: string; parameters?: (string | number | boolean | null)[] }[];
   coordinationChildId?: string;
   reasoning?: boolean; exposeModels?: boolean; imageInput?: boolean; omitUsage?: boolean; maxOutputTokens?: number;
+  modelMetadata?: Record<string, unknown>; incompleteStream?: boolean;
   thinkingLevelMap?: PreparedModel["model"]["thinkingLevelMap"];
-  reasoningText?: string;
+  reasoningText?: string; reasoningOnToolCalls?: boolean; splitToolArguments?: boolean;
   toolCall?: { name: string; args: Record<string, unknown> };
   toolCallId?: string;
   toolCalls?: { name: string; args: Record<string, unknown> }[];
@@ -86,7 +87,7 @@ export interface GeneratedProviderOptions {
   documentTool?: { name: "read_document" | "search_document"; arguments: Record<string, unknown> };
   toolInput?: boolean;
   taskProgress?: TaskProgressInput; progressDelayMs?: number;
-  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } };
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number; cache_write_tokens?: number } };
   questionRecommendation?: { choiceIndex: number; reason: string }; questionChoices?: string[]; toolAdvice?: string; replyText?: string; holdAfterTool?: boolean; responseMode?: "text" | "auto"; redirectTo?: string;
   finishReason?: "stop" | "length";
   stream?: { chunks: string[]; delayMs: number };
@@ -100,7 +101,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
   const headers: (string | undefined)[] = [];
   const server = createServer((request, response) => {
     void (async () => {
-      if (request.method === "GET" && options.exposeModels && request.url?.endsWith("/models")) { response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ id: apiModelId }] })); return; }
+      if (request.method === "GET" && options.exposeModels && request.url?.endsWith("/models")) { response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ data: [{ ...options.modelMetadata, id: apiModelId }] })); return; }
       const chunks = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -125,13 +126,15 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         choices: [{ index: 0, delta, finish_reason }],
       })}\n\n`);
       const finish = (tool?: { name: string; args: Record<string, unknown> } | { name: string; args: Record<string, unknown> }[], text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
+        if (options.reasoningText && (!tool || options.reasoningOnToolCalls)) chunk({ role: "assistant", reasoning_content: options.reasoningText });
         if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); const tools = Array.isArray(tool) ? tool : [tool];
-          chunk({ role: "assistant", tool_calls: tools.map((item, index) => ({ index, id: options.toolCallId ?? `generated-call-${requests.length}${tools.length > 1 ? `-${index}` : ""}`, type: "function", function: { name: item.name, arguments: JSON.stringify(item.args) } })) }); }
+          const argumentsText = tools.map((item) => JSON.stringify(item.args));
+          chunk({ role: "assistant", tool_calls: tools.map((item, index) => ({ index, id: options.toolCallId ?? `generated-call-${requests.length}${tools.length > 1 ? `-${index}` : ""}`, type: "function", function: { name: item.name, arguments: options.splitToolArguments ? argumentsText[index]!.slice(0, Math.floor(argumentsText[index]!.length / 2)) : argumentsText[index] } })) });
+          if (options.splitToolArguments) chunk({ tool_calls: tools.map((_item, index) => ({ index, function: { arguments: argumentsText[index]!.slice(Math.floor(argumentsText[index]!.length / 2)) } })) }); }
         else {
-          if (options.reasoningText) chunk({ role: "assistant", reasoning_content: options.reasoningText });
           chunk({ role: "assistant", content: text });
         }
-        chunk({}, options.finishReason ?? (tool ? "tool_calls" : "stop"));
+        if (!options.incompleteStream) chunk({}, options.finishReason ?? (tool ? "tool_calls" : "stop"));
         if (!options.omitUsage) response.write(`data: ${JSON.stringify({ choices: [], usage: options.usage ?? { prompt_tokens: 30, completion_tokens: 12, total_tokens: 42 } })}\n\n`);
         response.end("data: [DONE]\n\n");
       };
