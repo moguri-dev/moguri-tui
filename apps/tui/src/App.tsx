@@ -11,6 +11,7 @@ import { continueWorkInput, DraftEditor, pendingInputStatus, parse, pasteLineCou
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
 import { configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
+import { MyWorkFiltersSchema, type MyWorkEntry, type MyWorkFilters, type MyWorkResponse, type Snapshot } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
 function terminalColors(appearance: Appearance, mode: ThemeMode) {
@@ -19,6 +20,125 @@ function terminalColors(appearance: Appearance, mode: ThemeMode) {
     foreground: value.text, muted: value.muted, accent: value.accent, border: value.controlLine, error: value.danger, attention: value.warningText };
 }
 const ThemeContext = React.createContext(terminalColors({ theme: "dark" }, "dark"));
+function MyWorkTui({ sdk, snapshot, filters, changeFilters, openSession, openExternal }: {
+  sdk: MoguriSdk; snapshot: Snapshot; filters: MyWorkFilters; changeFilters: (filters: MyWorkFilters) => void;
+  openSession: (id: string) => Promise<void>; openExternal: (url: string) => Promise<void>;
+}) {
+  const colors = React.useContext(ThemeContext), [offset, setOffset] = useState(0), [reload, setReload] = useState(0);
+  const [data, setData] = useState<{ sdk: MoguriSdk; key: string; value?: Extract<MyWorkResponse, { type: "my_work.query" }>; error?: string } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const [original, setOriginal] = useState<string | null>(null), [review, setReview] = useState<{ sourceId: string; value: Extract<MyWorkResponse, { type: "my_work.followup" }> } | null>(null);
+  const key = JSON.stringify([filters, offset, reload, snapshot.myWorkSources, snapshot.myWorkRefreshes.map((record) => [record.id, record.revision]),
+    snapshot.githubOperations.map((record) => [record.id, record.revision])]);
+  const current = data?.sdk === sdk && data.key === key ? data : null, inbox = current?.value;
+  const selected = inbox?.entries.find((entry) => entry.id === selectedId);
+  useEffect(() => {
+    const abort = new AbortController();
+    void sdk.myWork.query(filters, { offset, signal: abort.signal })
+      .then((value) => { if (!abort.signal.aborted) setData({ sdk, key, value }); })
+      .catch((error: unknown) => { if (!abort.signal.aborted) setData({ sdk, key, error: error instanceof Error ? error.message : "The retained inbox is unavailable; no clean result was invented." }); });
+    return () => abort.abort();
+  }, [sdk, key]);
+  const act = async (execute: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true); setError(""); setNotice("");
+    try { await execute(); } catch (error) { setError(error instanceof Error ? error.message : "The exact inbox action failed without success or fallback."); }
+    finally { setBusy(false); }
+  };
+  const filter = (value: MyWorkFilters) => { changeFilters(value); setOffset(0); setSelectedId(null); setOriginal(null); setReview(null); };
+  const itemText = (entry: MyWorkEntry) => safe([
+    entry.url, `${entry.pull.item.state} / ${entry.freshness} / PR head ${entry.pull.item.headSha} / ${entry.pull.observedAt}`,
+    `Reasons: ${entry.categories.join(", ")}; review ${entry.pull.reviewDecision ?? "unobserved"}`,
+    entry.conflicting ? "Source heads/state conflict. Original observations are not combined." : "",
+    `CI ${entry.pull.ci?.state ?? "unobserved"} / ${entry.pull.ci?.at ?? "not observed"}. No checks or unknown conclusions are not successful CI.`,
+    entry.pull.diagnostic ?? "", entry.pull.item.body,
+    `Requests: ${entry.pull.requests?.map((request) => `${request.kind}:${request.login}`).join(", ") ?? "unobserved; no team membership guessed"}`,
+    ...(entry.pull.threads?.map((thread) => `${thread.resolved ? "resolved" : "unresolved"}${thread.outdated ? " / outdated" : ""}: ${thread.body}\n${thread.url}`) ?? ["Threads unobserved. Comments do not prove resolution."]),
+    ...(entry.pull.ci?.items.map((item) => `${item.title}: ${item.state}/${item.conclusion ?? "unknown"}\n${item.body}\n${item.url ?? ""}`) ?? []),
+    ...entry.associations.map((source) => `${source.source.accountId} / ${source.source.binding.root.root} / original ${source.pull.item.headSha} / ${source.freshness}\n${source.diagnostic ?? ""}\n${source.watch ? `Retained watch ${source.watch.operationId}: ${source.watch.status}/${source.watch.observation?.state ?? "unobserved"}${source.watch.currentHead ? " / same observed head" : " / different original head; not current CI"}${source.watch.cleanupUnconfirmed ? " / cleanup unconfirmed" : ""}. Never restarted by opening this view.` : ""}`),
+    ...entry.associations.flatMap((source) => source.previous ? [`Previous complete report ${source.previous.refreshId}: head ${source.previous.pull.item.headSha} / CI ${source.previous.pull.ci?.state ?? "unobserved"} / ${source.previous.pull.observedAt}. Historical evidence, not a newer or passing head.`] : []),
+  ].filter(Boolean).join("\n\n"));
+  const options = review ? [
+    { name: "Cancel follow-up review", description: "No session, prompt or permission is changed.", value: "review-cancel" },
+    { name: "Confirm idle follow-up session", description: "Exact reviewed account/root; saved draft only, normal permissions.", value: "review-start" },
+  ] : original ? [{ name: "Return to retained inbox", description: "No refresh or replay.", value: "original-back" }] : selected ? [
+    { name: "Back to inbox", description: "Read-only navigation.", value: "back" },
+    { name: "Open canonical GitHub PR", description: selected.url, value: "external" },
+    { name: "Mark inbox item read", description: "Not resolved, answered or approved.", value: "read" },
+    ...selected.associations.flatMap((source) => [
+      ...source.sessionIds.map((id) => ({ name: `Open session ${snapshot.sessions.find((session) => session.id === id)?.title ?? id}`, description: source.source.accountId, value: `session:${source.source.id}:${id}` })),
+      { name: `Review scoped follow-up / ${source.source.accountId}`, description: source.source.binding.root.root, value: `followup:${source.source.id}` },
+      { name: `Read original source report / ${source.source.accountId}`, description: source.refreshId ?? "No observation", value: `original:${source.source.id}` },
+    ]),
+  ] : [
+    ...(inbox?.entries ?? []).map((entry) => ({ name: safe(`${entry.repository}#${entry.number} ${entry.pull.item.title}`),
+      description: `${entry.categories.join(", ")} / CI ${entry.pull.ci?.state ?? "unobserved"} / ${entry.freshness}`, value: `item:${entry.id}` })),
+    { name: "Reload retained view", description: "No GitHub HTTP read.", value: "reload" },
+    { name: "Refresh configured repositories", description: "Explicit read-only refresh; no scheduler or new CI watch.", value: "refresh" },
+    { name: "Refresh status and source ownership", description: "Original retained records, no replay.", value: "status" },
+    ...snapshot.myWorkRefreshes.filter((record) => record.cleanupUnconfirmed && !record.inspection).map((record) =>
+      ({ name: `I inspected original partial refresh ${record.id}`, description: "Read the original report first. Inspection is not cleanup proof or permission.", value: `inspect:${record.id}` })),
+    ...(inbox?.refreshing ? [{ name: "Stop original inbox refresh", description: `${inbox.refreshing.id}; CI watches/GitHub jobs are not stopped.`, value: "stop" }] : []),
+    { name: "Clear inbox filters", description: "All configured sources; open PRs.", value: "clear" },
+    ...(["open-pr", "pending-review", "failed-ci", "unresolved-thread"] as const).map((category) => ({ name: `Filter ${category}`, description: "Actual provider state, not model guesses.", value: `category:${category}` })),
+    ...[...new Set(snapshot.myWorkSources.filter((source) => source.enabled).map((source) => source.repository))].map((repository) =>
+      ({ name: `Repository ${repository}`, description: "Configured sources only.", value: `repository:${repository}` })),
+    ...[...new Set(snapshot.myWorkSources.filter((source) => source.enabled).map((source) => source.accountId))].map((account) =>
+      ({ name: `Account ${account}`, description: "No account/root substitution.", value: `account:${account}` })),
+    ...(offset > 0 ? [{ name: "Previous work page", description: "Retained pagination.", value: "previous" }] : []),
+    ...(inbox && offset + 30 < inbox.total ? [{ name: "Next work page", description: "Retained pagination.", value: "next" }] : []),
+  ];
+  return <box id={current ? `tui-my-work-${sdk.profileId}` : undefined} flexDirection="column" flexGrow={1} paddingTop={1} gap={1}>
+    <text fg={colors.accent} height={2}>{safe(`My Work / ${sdk.profileId} / controller GitHub account, not SSH`)}</text>
+    <text fg={colors.muted} height={3}>{safe(`${inbox ? `${inbox.total} matching PRs; ${inbox.refreshing ? "refresh running" : "retained view only"}` : "Reading retained observations..."}\n/my-work source reviews a Local source; /my-work configure SHA confirm-read-only saves it. Esc returns without cancelling work.`)}</text>
+    {current?.error && <text fg={colors.error}>{safe(current.error)}</text>}{error && <text fg={colors.error}>{safe(error)}</text>}{notice && <text fg={colors.attention}>{safe(notice)}</text>}
+    {!selected && !review && !original && <text fg={colors.attention} height={Math.min(8, Math.max(2, (inbox?.sources.length ?? 0) * 2))}>{safe(inbox?.sources.length ?
+      inbox.sources.map((source) => `${source.source.repository} / ${source.source.accountId} / ${source.freshness}\n${source.diagnostic ?? source.observedAt ?? "Unobserved; cannot confirm a clean inbox."}`).join("\n") :
+      "No explicit sources or observations. An empty/unavailable source is not a clean inbox. Inspect Refresh status for every original source.")}</text>}
+    {(selected || review || original) && <scrollbox flexGrow={1}><text fg={colors.foreground}>{original ?? (review ?
+      safe(`${review.value.item.title}\n\n${review.value.item.body}\n\n${review.value.warning}`) : itemText(selected!))}</text></scrollbox>}
+    <ThemedSelect key={review ? "review" : original ? "original" : selected?.id ?? "inbox"} id="tui-my-work-actions" focused={!busy} flexGrow={selected || review || original ? 0 : 1} height={selected || review || original ? 9 : undefined} options={options} onSelect={(_, option) => {
+      if (!option) return; const value = String(option.value);
+      void act(async () => {
+        if (value === "back") { setSelectedId(null); return; }
+        if (value === "review-cancel") { setReview(null); return; }
+        if (value === "original-back") { setOriginal(null); return; }
+        if (value === "reload") { setReload((value) => value + 1); return; }
+        if (value === "clear") { filter({}); return; }
+        if (value === "previous" || value === "next") { setOffset((offset) => Math.max(0, offset + (value === "next" ? 30 : -30))); return; }
+        if (value === "refresh") { const result = await sdk.myWork.refresh(); setNotice(`Original refresh admitted: ${result.id}. Not CI success.`); return; }
+        if (value === "status") { setOriginal(safe(JSON.stringify(await sdk.myWork.status(), null, 2))); return; }
+        if (value.startsWith("inspect:")) {
+          const record = snapshot.myWorkRefreshes.find((record) => record.id === value.slice(8));
+          if (!record) throw new Error("The exact original reader is unavailable.");
+          await sdk.myWork.inspect(record.id, record.revision, record.inputDigest, true); setNotice("Original partial reader inspected; cleanup remains unconfirmed. Refresh separately."); return;
+        }
+        if (value === "stop" && inbox?.refreshing) { await sdk.myWork.cancel(inbox.refreshing.id); setNotice("Original inbox refresh stopped; retained partial work stays visible. No CI watch was cancelled."); return; }
+        if (value.startsWith("item:")) { setSelectedId(value.slice(5)); return; }
+        if (value.startsWith("category:")) { filter({ ...filters, category: parse(MyWorkFiltersSchema, { category: value.slice(9) }).category }); return; }
+        if (value.startsWith("repository:")) { filter({ ...filters, repository: value.slice(11) }); return; }
+        if (value.startsWith("account:")) { filter({ ...filters, accountId: value.slice(8) }); return; }
+        if (value === "review-start" && review) { const result = await sdk.myWork.start(review.value, review.sourceId, true); setReview(null); await openSession(result.id!); return; }
+        if (!selected) throw new Error("The exact retained item changed; no replacement selection was used.");
+        if (value === "external") { await openExternal(selected.url); return; }
+        if (value === "read") { await sdk.myWork.markRead(selected.id); setNotice("Marked read, not resolved or approved."); return; }
+        if (value.startsWith("followup:")) { const sourceId = value.slice(9); setReview({ sourceId, value: await sdk.myWork.previewFollowup(selected.id, sourceId) }); return; }
+        if (value.startsWith("original:")) {
+          const association = selected.associations.find((source) => source.source.id === value.slice(9));
+          if (!association?.refreshId) throw new Error("The original source report is unobserved.");
+          setOriginal(safe(JSON.stringify(await sdk.myWork.read(association.refreshId, { sourceId: association.source.id }), null, 2))); return;
+        }
+        if (value.startsWith("session:")) {
+          const [, sourceId, sessionId] = value.split(":"); if (!sourceId || !sessionId) throw new Error("Choose the exact session association.");
+          const target = await sdk.myWork.navigate(selected.id, sourceId);
+          if (!target.navigation.sessionIds.includes(sessionId)) throw new Error("The exact related session changed; no replacement was chosen.");
+          await openSession(sessionId); return;
+        }
+        throw new Error("The exact inbox action is unavailable; no success was inferred.");
+      });
+    }} />
+  </box>;
+}
 const NavigationContext = React.createContext(false);
 const safe = (text: string) => stripVTControlCharacters(text).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 function TerminalAlert({ text, error, keyboard }: { text: string; error: boolean; keyboard: boolean }) {
@@ -63,7 +183,7 @@ export async function waitForCommandFrame(renderer: ReturnType<typeof useRendere
   } finally { renderer.off(CliRenderEvents.FRAME, observed); }
 }
 const label = (session: Session) => sessionTitle(session, 44);
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "runtime-review" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "my-work" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "runtime-review" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 type ArchiveReview = {
   session: Pick<Session, "id" | "title" | "revision">;
@@ -114,7 +234,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const setNavigationIndex = (value: number) => { navigationIndexRef.current = value; renderNavigationIndex(value); };
   const sidebarVisible = sidebar ?? width >= 100, sidebarOnly = sidebarVisible && width < 80;
   const compact = width < 80 || height < 30;
-  const activeTab: TuiTab = mode === "sessions" ? "sessions" : mode === "work-items" || mode === "issues" ? "work-items" : mode === "code-requests" ? "code-requests" : mode === "automations" ? "automations" : "session";
+  const activeTab: TuiTab = mode === "sessions" ? "sessions" : mode === "work-items" || mode === "issues" ? "work-items" : mode === "code-requests" ? "code-requests" : mode === "my-work" ? "my-work" : mode === "automations" ? "automations" : "session";
   const [notice, storeNotice] = useState<{ id: number; text: string; error: boolean } | null>(null), noticeSequence = useRef(0);
   const setNotice = React.useCallback((text: string, error = false) => storeNotice(text ? { id: ++noticeSequence.current, text, error } : null), []);
   const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
@@ -150,6 +270,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const [githubRepositories, setGithubRepositories] = useState<Extract<GithubResponse, { type: "github.repositories" }> | null>(null);
   const [githubRepository, setGithubRepository] = useState<GithubRepository | null>(null), [githubCloneJob, setGithubCloneJob] = useState<string | null>(null);
   const [githubItems, setGithubItems] = useState<{ scope: GithubScope; context: Extract<GithubResponse, { type: "github.project" }>; kind: "issue" | "pull"; items: GithubItem[]; nextPage: number | null } | null>(null);
+  const [myWorkFilters, setMyWorkFilters] = useState<MyWorkFilters>({});
   const [githubSelection, setGithubSelection] = useState<(Extract<GithubResponse, { type: "github.source" }> & { scope: GithubScope }) | null>(null);
   const [githubBusy, setGithubBusy] = useState(false), githubPending = useRef(false);
   const githubSearch = useRef({ source: "account" as "account" | "public", query: "" });
@@ -486,6 +607,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     }
     if (result.kind === "client-view") {
       switch (result.name) {
+        case "my-work": setMyWorkFilters(parse(MyWorkFiltersSchema, JSON.parse(result.argument))); setMode("my-work"); return;
         case "help": setSkillHelp({ profileId: client.profileId, text: result.text ?? "" }); setMode("help"); return;
         case "commands": setMode("command-results"); return;
         case "issues": setMode("issues"); return;
@@ -649,6 +771,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (!renderer.root.findDescendantById(`tui-profile-${expectedProfile}`)) return false;
         if (result.kind === "profile") return true;
         if (expectedSidebar !== null) return renderer.root.findDescendantById("tui-sidebar")?.visible === expectedSidebar;
+        if (result.kind === "client-view" && result.name === "my-work" && !renderer.root.findDescendantById(`tui-my-work-${client.profileId}`)?.visible) return false;
         return renderer.root.findDescendantById(`tui-surface-${expectedSession}-${expectedMode}`)?.visible === true;
       });
       return { outcome: "completed" };
@@ -662,7 +785,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       return commandUi.current.apply(context);
     };
     const views = ["session", "sessions", "work-items", "code-requests", "sidebar", "quit", "issues", "issue", "board", "settings",
-      "project-settings", "prompt", "trace", "details", "reload-draft", "keep-draft", "cache", "linear", "mcp", "model-token", "remote-model-token", "help", "archive", "commands"];
+      "project-settings", "prompt", "trace", "details", "reload-draft", "keep-draft", "cache", "linear", "mcp", "model-token", "remote-model-token", "help", "archive", "commands", "my-work"];
     const handlers = Object.fromEntries(views.map((name) => [`client-view:${name}`, apply]));
     void client.commands.attach("tui", { ...handlers, panel: apply, session: apply, profile: apply, profiles: apply, copy: apply, export: apply, "artifact-editor": apply, "continue-work": apply, "github-view": apply },
       { canApply: (execution) => !closed && (commandUi.current?.canApply(execution) ?? false), onError: (error) => {
@@ -967,6 +1090,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               setGithubSelection({ ...value, scope: githubItems.scope }); setMode("github-detail");
             }));
           }} /><text fg={colors.muted} height={2}>No item is executed or attached by listing it. Esc returns.</text></box> :
+        mode === "my-work" && snapshot ? <MyWorkTui sdk={client} snapshot={snapshot} filters={myWorkFilters} changeFilters={setMyWorkFilters} openSession={chooseSession}
+          openExternal={async (url) => { if (!native) throw new Error("No native browser binding is available. Use the displayed canonical link; nothing was opened."); await native.browser(url); }} /> :
         mode === "github-detail" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>{safe(`${githubSelection?.source.repository}#${githubSelection?.item.number} ${githubSelection?.item.title}`)}</text>
           <scrollbox focused={!githubBusy} flexGrow={1}><text fg={colors.foreground}>{safe(`${githubSelection?.item.state}\n\n${githubSelection?.item.body ?? ""}\n\nController source workspace: ${githubSelection?.binding.root.root}\nSource SHA-256: ${githubSelection?.digest}`)}</text></scrollbox>

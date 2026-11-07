@@ -84,7 +84,15 @@ Go; mutable installs remain private and executable builds are not implied.
 Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
-Current **protocol94 source** adds [authenticated GitHub search and composer fixes](docs/setup.md#github-requests-and-composer-controls):
+Current **protocol95 source** adds the [unified My Work inbox](docs/setup.md#unified-my-work):
+explicitly configured repositories/accounts, deduplicated PR/review/failed-CI/
+unresolved-thread attention, source freshness and retained read-only refresh.
+CLI, TUI and desktop share the same SDK, original CI watches and exact scoped
+follow-up review. Opening an item never starts polling or grants permission.
+The existing active-session and usage/cost/velocity dashboard remains available.
+See the [ownership and qualification contract](docs/architecture/my-work.md).
+
+Protocol94 added [authenticated GitHub search and composer fixes](docs/setup.md#github-requests-and-composer-controls):
 private-repository reads use the actual configured account, provider tool IDs
 are assigned before ownership is retained, and one Enter sends one ordinary
 message even during autosave. Autonomy settings are beside their choices;
@@ -234,6 +242,8 @@ profile-private **skill gateway** for local folders and refreshed remote
 archives. Settings use compact information/copy controls and contain Artifacts,
 Candidates and unified Sandbox management. Suggestions offers global local
 usage-gap checks; `/suggestions` defaults to the current project's scope.
+My work also has the [configured GitHub attention inbox](docs/architecture/my-work.md),
+with explicit refresh rather than a recurring scheduler.
 Model generation still requires exact source review.
 Alerts have a dismissible X without clearing the underlying work or draft.
 Read-only Kanban sync retains its exact source across presentation updates;
