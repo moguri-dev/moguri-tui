@@ -117,7 +117,9 @@ the remaining milestone gates.
 
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
-hosts or downloads weights. New sessions resolve snapshotted global,
+hosts or downloads weights. [DS4 with DeepSeek V4.1 Flash Q2](docs/architecture/ds4-compatibility.md)
+has a real installed-runtime qualification and an explicit, generated-context
+compatibility probe. New sessions resolve snapshotted global,
 current-profile and project controls, with explicit session overrides and
 visible provenance; existing sessions are not rewritten.
 [Runtime and hardware inspection](docs/architecture/model-readiness.md) keeps
