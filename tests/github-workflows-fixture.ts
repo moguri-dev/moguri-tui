@@ -26,8 +26,8 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const directory = join(parent, `generated-github-service-${randomUUID()}`);
   await mkdir(directory, { mode: 0o700 });
-  const root = join(directory, "checkout"), remote = join(directory, "remote.git"), hooks = join(directory, "hooks"), stateDir = join(directory, "state");
-  await mkdir(root); await mkdir(hooks);
+  const root = join(directory, "checkout"), remote = join(directory, "remote.git"), hooks = join(directory, "hooks"), stateDir = join(directory, "state"), home = join(directory, "home");
+  await mkdir(root); await mkdir(hooks); await mkdir(home);
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
   const invoke = (cwd: string, args: string[]) => execFileSync("git", ["--no-pager", ...args], { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   const git = (args: string[]) => invoke(root, args), bare = (args: string[]) => invoke(remote, args);
@@ -44,6 +44,7 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
   let service: Awaited<ReturnType<typeof startService>> | undefined, sdk: MoguriSdk | undefined;
   try {
     service = await startService({ stateDir, retentionKey, provider, platform: {
+      terminal: { executable: process.execPath, args: ["-e", "process.stdin.resume()"], defaultRoot: home },
       integrations: { ...integrations, githubCliRead: async (endpoint, root, signal) => {
         if (!options.runProgram) throw new MoguriError("github_cli_unavailable", "Generated fixture has no authenticated GitHub CLI account.", 403);
         const response = await options.runProgram("gh", ["api", "--hostname", "github.com", "--include", "--method", "GET", endpoint], {
@@ -78,6 +79,7 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
     let head = "", changedBody = false, issueWrites = 0, prWrites = 0, accountId = 42;
     const ci: { checks?: unknown[]; statuses?: unknown[]; runs?: unknown[]; annotations?: unknown[];
       checkPages?: unknown[][]; runPages?: unknown[][]; checkCount?: unknown; statusCount?: unknown; runCount?: unknown } = {};
+    const search: { items?: unknown[]; total?: unknown; incomplete?: boolean; omitTotal?: boolean; next?: boolean } = {};
     const issue = (number: number, title = "Generated issue", body = "Generated **issue body**.") => ({ id: number + 100, number, title, body: changedBody ? "Generated changed source." : body, state: "open",
       html_url: `https://github.com/${repository.full_name}/issues/${number}`, updated_at: "2026-01-01T00:00:00Z", user: { login: "generated-owner" } });
     const pull = (number: number, title = "Generated pull request", body = "Generated **pull request body**.", draft = true) => ({ ...issue(number, title, body),
@@ -98,6 +100,13 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       let data: unknown, nextPage = false;
       const requestedPage = Number(path.match(/[?&]page=(\d+)/)?.[1] ?? 1);
       if (path === "user") data = { login: "generated-owner", id: accountId };
+      else if (path.startsWith("search/issues?")) {
+        const perPage = Number(path.match(/[?&]per_page=(\d+)/)?.[1] ?? 30);
+        const all = search.items ?? issues.map((item) => ({ ...item, repository_url: `https://api.github.com/repos/${repository.full_name}` }));
+        data = { ...(search.omitTotal ? {} : { total_count: search.total !== undefined ? search.total : all.length }),
+          incomplete_results: search.incomplete ?? false, items: all.slice((requestedPage - 1) * perPage, requestedPage * perPage) };
+        nextPage = search.next ?? requestedPage * perPage < all.length;
+      }
       else if (path.startsWith("user/repos?")) data = [repository];
       else if (path === "repos/generated-owner/fixture") data = repository;
       else if (path.startsWith("repos/generated-owner/fixture/branches/")) {
@@ -195,6 +204,7 @@ process.exit(result.status ?? 67);
       },
       changeHead: (value: string) => { head = value; for (const item of pulls) item.head.sha = value; },
       setCi: (value: typeof ci) => { Object.assign(ci, value); },
+      setSearch: (value: typeof search) => { Object.assign(search, value); },
       closePull: (number: number) => { const selected = pulls.find((pull) => pull.number === number); if (!selected) throw new Error("Generated PR is absent."); selected.state = "closed"; },
       changeSource: () => { changedBody = true; }, changeAccount: (id: number) => { accountId = id; }, writes: () => ({ issues: issueWrites, pulls: prWrites }) };
 }

@@ -38,6 +38,11 @@ export async function integrationCommand(sdk: MoguriSdk, group: "github" | "line
     }
     if (!flags.project) throw new ClientError("github_scope", "Pass the exact Local --project ID and optional --workspace ID/--session ID. There is no checkout or account fallback.");
     const scope: GithubScope = { env: "Local", projectId: flags.project, ...(flags.workspace ? { workspaceId: flags.workspace } : {}), ...(flags.session ? { sessionId: flags.session } : {}) };
+    if (action === "search" && args.length) {
+      const project = await sdk.github.project(scope), result = await sdk.github.search(scope, project.repository, project.account, args.join(" "));
+      if (result.accountId !== project.accountId) throw new ClientError("github_account", "The selected search account changed. No replacement result was adopted.");
+      return result;
+    }
     if (action === "preview") return sdk.github.preview(scope, parse(GithubActionSchema, await json(args[0])));
     if (action === "browse") {
       const value = await json(args[0]);
@@ -50,7 +55,7 @@ export async function integrationCommand(sdk: MoguriSdk, group: "github" | "line
       return sdk.command(parse(GithubCommandSchema, { type: "github.execute", scope, action: parse(GithubActionSchema, await json(args[0])),
         expectedDigest: flags.digest, confirmations, confirm: true }));
     }
-    throw new ClientError("github_command", "Use github browse REQUEST.json, preview ACTION.json, execute ACTION.json --digest SHA --confirm-review [--confirmations PHRASES.json], history, read/wait ID, or stop ID. Main/force-push, rebase, tags, releases and PR merge retain their own exact confirmations.");
+    throw new ClientError("github_command", "Use github search TERMS, browse REQUEST.json, preview ACTION.json, execute ACTION.json --digest SHA --confirm-review [--confirmations PHRASES.json], history, read/wait ID, or stop ID. Main/force-push, rebase, tags, releases and PR merge retain their own exact confirmations.");
   }
   if (action === "read" && args[0]) return sdk.linear.read(args[0]);
   if (action === "wait" && args[0]) return sdk.linear.wait(args[0]);
