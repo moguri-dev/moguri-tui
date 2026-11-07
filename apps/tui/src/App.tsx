@@ -25,18 +25,20 @@ function MyWorkTui({ sdk, snapshot, filters, changeFilters, openSession, openExt
   openSession: (id: string) => Promise<void>; openExternal: (url: string) => Promise<void>;
 }) {
   const colors = React.useContext(ThemeContext), [offset, setOffset] = useState(0), [reload, setReload] = useState(0);
-  const [data, setData] = useState<{ sdk: MoguriSdk; key: string; value?: Extract<MyWorkResponse, { type: "my_work.query" }>; error?: string } | null>(null);
+  const [data, setData] = useState<{ sdk: MoguriSdk; selectionKey: string; key: string; value?: Extract<MyWorkResponse, { type: "my_work.query" }>; error?: string } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [original, setOriginal] = useState<string | null>(null), [review, setReview] = useState<{ sourceId: string; value: Extract<MyWorkResponse, { type: "my_work.followup" }> } | null>(null);
-  const key = JSON.stringify([filters, offset, reload, snapshot.myWorkSources, snapshot.myWorkRefreshes.map((record) => [record.id, record.revision]),
+  const selectionKey = JSON.stringify([filters, offset, snapshot.myWorkSources, snapshot.policy.revision, snapshot.settings.permissionRevision,
+    snapshot.projectConfigurations.map((value) => [value.projectId, value.revision])]);
+  const key = JSON.stringify([selectionKey, reload, snapshot.myWorkRefreshes.map((record) => [record.id, record.revision]),
     snapshot.githubOperations.map((record) => [record.id, record.revision])]);
-  const current = data?.sdk === sdk && data.key === key ? data : null, inbox = current?.value;
+  const current = data?.sdk === sdk && data.selectionKey === selectionKey ? data : null, inbox = current?.value;
   const selected = inbox?.entries.find((entry) => entry.id === selectedId);
   useEffect(() => {
     const abort = new AbortController();
     void sdk.myWork.query(filters, { offset, signal: abort.signal })
-      .then((value) => { if (!abort.signal.aborted) setData({ sdk, key, value }); })
-      .catch((error: unknown) => { if (!abort.signal.aborted) setData({ sdk, key, error: error instanceof Error ? error.message : "The retained inbox is unavailable; no clean result was invented." }); });
+      .then((value) => { if (!abort.signal.aborted) setData({ sdk, selectionKey, key, value }); })
+      .catch((error: unknown) => { if (!abort.signal.aborted) setData({ sdk, selectionKey, key, error: error instanceof Error ? error.message : "The retained inbox is unavailable; no clean result was invented." }); });
     return () => abort.abort();
   }, [sdk, key]);
   const act = async (execute: () => Promise<void>) => {
@@ -88,10 +90,11 @@ function MyWorkTui({ sdk, snapshot, filters, changeFilters, openSession, openExt
     ...(offset > 0 ? [{ name: "Previous work page", description: "Retained pagination.", value: "previous" }] : []),
     ...(inbox && offset + 30 < inbox.total ? [{ name: "Next work page", description: "Retained pagination.", value: "next" }] : []),
   ];
-  return <box id={current ? `tui-my-work-${sdk.profileId}` : undefined} flexDirection="column" flexGrow={1} paddingTop={1} gap={1}>
+  return <box id={current?.key === key ? `tui-my-work-${sdk.profileId}` : undefined} flexDirection="column" flexGrow={1} paddingTop={1} gap={1}>
     <text fg={colors.accent} height={2}>{safe(`My Work / ${sdk.profileId} / controller GitHub account, not SSH`)}</text>
     <text fg={colors.muted} height={3}>{safe(`${inbox ? `${inbox.total} matching PRs; ${inbox.refreshing ? "refresh running" : "retained view only"}` : "Reading retained observations..."}\n/my-work source reviews a Local source; /my-work configure SHA confirm-read-only saves it. Esc returns without cancelling work.`)}</text>
     {current?.error && <text fg={colors.error}>{safe(current.error)}</text>}{error && <text fg={colors.error}>{safe(error)}</text>}{notice && <text fg={colors.attention}>{safe(notice)}</text>}
+    {inbox && current?.key !== key && <text fg={colors.attention}>Updating retained view; previous observations are not current CI proof.</text>}
     {!selected && !review && !original && <text fg={colors.attention} height={Math.min(8, Math.max(2, (inbox?.sources.length ?? 0) * 2))}>{safe(inbox?.sources.length ?
       inbox.sources.map((source) => `${source.source.repository} / ${source.source.accountId} / ${source.freshness}\n${source.diagnostic ?? source.observedAt ?? "Unobserved; cannot confirm a clean inbox."}`).join("\n") :
       "No explicit sources or observations. An empty/unavailable source is not a clean inbox. Inspect Refresh status for every original source.")}</text>}
