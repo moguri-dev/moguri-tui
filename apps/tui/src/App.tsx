@@ -1382,7 +1382,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             ...((session.pendingApproval.call.name === "run_command" || session.pendingApproval.call.name === "command_job" && session.pendingApproval.call.arguments.action === "start") &&
               typeof session.pendingApproval.call.arguments.command === "string" && commandFamily(session.pendingApproval.call.arguments.command) ? [
                 ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} for this project`, description: "Any simple command arguments in this repository; compound expressions still ask.", value: "project:family" }] : []),
-                { name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} globally`, description: "Current profile and environment. Hard denials still win.", value: "global:family" },
+                { name: `This family of commands: ${commandFamily(session.pendingApproval.call.arguments.command)}`, description: "Across this profile in the current environment. Compound expressions still ask; hard denials still win.", value: "global:family" },
               ] : []),
           ]} onSelect={(_, option) => {
             if (!option || !session.pendingApproval) return;
@@ -1581,7 +1581,12 @@ function TuiComposer({ editor, session, focused, compact, focus, submit, run }: 
       keyBindings={[{ name: "return", action: "submit" }, { name: "return", shift: true, action: "newline" },
         { name: "kpenter", action: "submit" }, { name: "kpenter", shift: true, action: "newline" },
         { name: "j", ctrl: true, action: "newline" },
-        { name: "return", ctrl: true, shift: true, action: "submit" }]} onSubmit={submit}
+        { name: "return", ctrl: true, shift: true, action: "submit" }]} onSubmit={() => {
+          const text = ref.current?.plainText;
+          if (text === undefined) throw new Error("The original composer is no longer mounted. No input was sent.");
+          if (text !== editor.getState().text) editor.edit(text);
+          submit();
+        }}
       onPaste={(event) => {
         let text: string;
         try { text = new TextDecoder("utf-8", { fatal: true }).decode(event.bytes); }

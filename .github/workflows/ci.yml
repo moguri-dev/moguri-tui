@@ -25,6 +25,8 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npm run typecheck
       - run: npm run build
+      - if: runner.os == 'macOS'
+        run: npm exec -- playwright install chromium
       - run: npm test
         env:
           NODE_OPTIONS: --test-reporter=tap

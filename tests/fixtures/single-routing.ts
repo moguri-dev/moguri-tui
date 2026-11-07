@@ -9,15 +9,18 @@ import { appendLegacyKupoSelection } from "./legacy-state.ts";
 import type { RemoteTarget } from "../../packages/sdk/src/index.ts";
 
 export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean; platform?: PlatformOptions; legacy?: boolean;
-  remoteTarget?: { target: RemoteTarget; workspace: string }; legacySessionControlsJournal?: boolean; imageInput?: boolean; toolInput?: boolean } = {}) {
+  remoteTarget?: { target: RemoteTarget; workspace: string }; legacySessionControlsJournal?: boolean; imageInput?: boolean; toolInput?: boolean;
+  reasoningRoles?: boolean } = {}) {
   const remote = configuration.env === "Remote";
   const secrets = new Map<string, string>(), generatedVault = { read: async (id: string) => secrets.get(id) ?? null, write: async (id: string, value: string) => { secrets.set(id, value); }, remove: async (id: string) => { secrets.delete(id); } };
   const vault = configuration.platform?.remote?.vault ?? generatedVault;
   const options: GeneratedProviderOptions & { platform?: PlatformOptions; workerPath?: string; legacySessionControlsJournal?: boolean } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text",
+    ...(configuration.reasoningRoles ? { reasoning: true, contextWindow: 32768, thinkingLevelMap: { xhigh: "xhigh", max: "max" } } : {}),
     ...(configuration.imageInput !== undefined ? { imageInput: configuration.imageInput } : {}), ...(configuration.toolInput !== undefined ? { toolInput: configuration.toolInput } : {}),
     legacySessionControlsJournal: configuration.legacySessionControlsJournal,
     platform: { ...configuration.platform, remote: { ...configuration.platform?.remote, vault, modelsVault: configuration.platform?.remote?.modelsVault ?? vault } } };
   const solverOptions: GeneratedProviderOptions = { modelId: "generated-routed-solver-api", maxOutputTokens: 128, exposeModels: true, replyText: "Generated routed solver answer.",
+    ...(configuration.reasoningRoles ? { reasoning: true, contextWindow: 32768, thinkingLevelMap: { xhigh: "xhigh", max: "max" } } : {}),
     ...(configuration.imageInput !== undefined ? { imageInput: configuration.imageInput } : {}), ...(configuration.toolInput !== undefined ? { toolInput: configuration.toolInput } : {}) };
   if (!remote && configuration.legacy !== false) options.workerPath = fileURLToPath(new URL("./legacy-worker-83.ts", import.meta.url));
   const fixture = await setupFixture(options), solver = await fixtureProvider(solverOptions);
@@ -36,19 +39,24 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
   };
   try {
     const settings = structuredClone(sdk.settings.get()!.values);
+    if (configuration.reasoningRoles) {
+      const prepare = fixture.provider.prepare.bind(fixture.provider);
+      fixture.provider.state = { ...fixture.provider.state, models: [...fixture.provider.state.models, ...solver.provider.state.models] };
+      fixture.provider.prepare = (id, signal) => id === solver.modelId ? solver.provider.prepare(id, signal) : prepare(id, signal);
+    }
     // Shared routing fixtures also generate genuine pre-sound recovery histories.
     settings.notifications = { inApp: settings.notifications.inApp, os: settings.notifications.os, previewContent: settings.notifications.previewContent };
     const endpoint = { id: "generated-routed-solver", name: "Generated routed solver", enabled: true, baseUrl: `${solver.baseUrl}/v1`, auth: "none" as const,
       models: [{ id: solver.modelId, name: "Generated routed solver", contextWindow: 16384, maxTokens: 128, imageInput: configuration.imageInput ?? false,
         ...(configuration.toolInput !== undefined ? { toolInput: configuration.toolInput } : {}) }] };
     if (remote) {
-      if (configuration.remoteTarget) { workspace = configuration.remoteTarget.workspace; settings.remote = { ...configuration.remoteTarget.target, models: [endpoint] }; }
+      if (configuration.remoteTarget) { workspace = configuration.remoteTarget.workspace; settings.remote = { ...configuration.remoteTarget.target, models: configuration.reasoningRoles ? [] : [endpoint] }; }
       else {
         const root = await realpath(fixture.directory), targetRoot = join(root, "generated-routing-ssh"); workspace = join(root, "generated-routing-remote");
         await mkdir(targetRoot); await mkdir(workspace); await writeFile(join(workspace, "fixture.txt"), "Generated actual routed SSH source.\n");
-        ssh = await createSshTarget(targetRoot); settings.remote = { ...ssh.target, models: [endpoint] };
+        ssh = await createSshTarget(targetRoot); settings.remote = { ...ssh.target, models: configuration.reasoningRoles ? [] : [endpoint] };
       }
-    } else settings.localModels = [endpoint];
+    } else settings.localModels = configuration.reasoningRoles ? [] : [endpoint];
     await sdk.settings.update(settings, sdk.settings.get()!.revision);
     if (remote) {
       await sdk.remote.probe();
@@ -56,7 +64,8 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
       await sdk.projects.configure(project.projectId, { ...project.values, remotePath: workspace }, project.revision);
     }
     await sdk.models.refresh();
-    const model = sdk.getState().snapshot!.provider.models.find((model) => model.source === "local" && Boolean(model.id.startsWith("remote.")) === remote);
+    const model = sdk.getState().snapshot!.provider.models.find((model) => configuration.reasoningRoles ? model.id === solver.modelId :
+      model.source === "local" && Boolean(model.id.startsWith("remote.")) === remote);
     if (!model) throw new Error("The generated routed solver was not discovered in its explicit environment.");
     const configured = structuredClone(sdk.settings.get()!.values);
     configured.notifications = settings.notifications;

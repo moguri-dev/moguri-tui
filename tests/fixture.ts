@@ -77,6 +77,7 @@ export interface GeneratedProviderOptions {
   thinkingLevelMap?: PreparedModel["model"]["thinkingLevelMap"];
   reasoningText?: string;
   toolCall?: { name: string; args: Record<string, unknown> };
+  toolCallId?: string;
   toolCalls?: { name: string; args: Record<string, unknown> }[];
   toolBatches?: { name: string; args: Record<string, unknown> }[][];
   agentTerminalRead?: boolean;
@@ -125,7 +126,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
       })}\n\n`);
       const finish = (tool?: { name: string; args: Record<string, unknown> } | { name: string; args: Record<string, unknown> }[], text = options.replyText ?? "Generated Copilot response. The requested fixture operation is complete.") => {
         if (tool) { if (options.toolAdvice) chunk({ role: "assistant", content: options.toolAdvice }); const tools = Array.isArray(tool) ? tool : [tool];
-          chunk({ role: "assistant", tool_calls: tools.map((item, index) => ({ index, id: `generated-call-${requests.length}${tools.length > 1 ? `-${index}` : ""}`, type: "function", function: { name: item.name, arguments: JSON.stringify(item.args) } })) }); }
+          chunk({ role: "assistant", tool_calls: tools.map((item, index) => ({ index, id: options.toolCallId ?? `generated-call-${requests.length}${tools.length > 1 ? `-${index}` : ""}`, type: "function", function: { name: item.name, arguments: JSON.stringify(item.args) } })) }); }
         else {
           if (options.reasoningText) chunk({ role: "assistant", reasoning_content: options.reasoningText });
           chunk({ role: "assistant", content: text });

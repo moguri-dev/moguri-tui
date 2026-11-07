@@ -19,6 +19,18 @@ async function frameUntil(setup: Awaited<ReturnType<typeof createTestRenderer>>,
   throw new Error(`Native workflow did not render ${text}:\n${setup.captureCharFrame()}`);
 }
 
+test("native TUI searches the exact private repository without model work or an inferred account", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk })));
+    await frameUntil(setup, "Write a prompt"); await setup.mockInput.typeText("/github search is:issue is:open (UI OR UX OR redesign OR polish)"); setup.mockInput.pressEnter();
+    await frameUntil(setup, "Generated issue");
+    assert.equal(fixture.calls.filter((call) => call.path.startsWith("search/issues?")).length, 1);
+    assert.equal(fixture.service.controller.snapshot().sessions.find((session) => session.id === fixture.sessionId)?.turnId, null);
+    assert.deepEqual(fixture.writes(), { issues: 0, pulls: 0 });
+  } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
+});
+
 test("native TUI previews the exact uniquely linked PR CI watch without starting inference or polling", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
   const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 160, height: 75, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
