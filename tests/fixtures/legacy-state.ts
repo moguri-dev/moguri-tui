@@ -8,6 +8,7 @@ import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
 import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "../../packages/protocol/src/milestone-models.ts";
 import { hasGithubPrCiHistory } from "../../packages/protocol/src/github-workflows.ts";
 import { hasMyWorkHistory } from "../../packages/protocol/src/my-work.ts";
+import { hasBackgroundServiceHistory } from "../../packages/protocol/src/application.ts";
 
 export async function appendLegacyProjectFreeSession(client: MoguriSdk, control: ControlPlane, title: string): Promise<{ id: string }> {
   const snapshot = control.snapshot(), settings = snapshot.settings;
@@ -153,8 +154,13 @@ export function removeGithubPrCiFixtureMarker(db: DatabaseSync, events: readonly
   db.exec("DELETE FROM retention_metadata WHERE id='github_pr_ci_watch_schema'");
 }
 export function removeMyWorkFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeBackgroundServiceFixtureMarker(db, events);
   if (hasMyWorkHistory(events)) throw new Error("Generate genuine pre-95 history; actual configured inbox sources/refreshes cannot become an older lineage.");
   db.exec("DELETE FROM retention_metadata WHERE id='my_work_inbox_schema'");
+}
+export function removeBackgroundServiceFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasBackgroundServiceHistory(events)) throw new Error("Generate genuine pre-96 history; an explicit background-service preference cannot become an older lineage.");
+  db.exec("DELETE FROM retention_metadata WHERE id='background_service_schema'");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);

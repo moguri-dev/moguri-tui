@@ -84,7 +84,13 @@ Go; mutable installs remain private and executable builds are not implied.
 Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
-Current **protocol95 source** adds the [unified My Work inbox](docs/setup.md#unified-my-work):
+Current **protocol96 source** adds [original-owner startup reconnect](docs/setup.md#opening-and-last-view-restoration)
+and a default-on option to keep agents working when the last window closes.
+Explicit Quit still stops the service and known user terminals. Startup
+confirmation, private ownership and unsent drafts remain protected; the
+original unreproduced 90-second initialization delay is not claimed resolved.
+
+Protocol95 added the [unified My Work inbox](docs/setup.md#unified-my-work):
 explicitly configured repositories/accounts, deduplicated PR/review/failed-CI/
 unresolved-thread attention, source freshness and retained read-only refresh.
 CLI, TUI and desktop share the same SDK, original CI watches and exact scoped
