@@ -17,6 +17,7 @@ export interface GeneratedWorkRepository {
   pulls: GeneratedWorkPull[]; checks: Record<string, unknown>[]; statuses: Record<string, unknown>[]; runs: Record<string, unknown>[];
   annotations: Record<string, unknown>[]; revoked: boolean; outage: boolean;
   malformedThreads: boolean; repeatedCursor: boolean; countOverride?: number;
+  pullPages?: number[][];
 }
 export async function myWorkFixture(options: {
   beforeRead?: (repository: GeneratedWorkRepository, path: string, signal: AbortSignal) => Promise<void>;
@@ -55,8 +56,16 @@ export async function myWorkFixture(options: {
     const selected = repo.pulls.find((pull) => pull.number === Number(path.match(/\/pulls\/(\d+)/)?.[1] ?? fields.number ?? 11));
     if (path === "user") data = { login: repo.account, id: repo.accountId };
     else if (path === `repos/${repo.repository}`) data = metadata;
-    else if (path.startsWith(`repos/${repo.repository}/pulls?`)) data = paginate(repo.pulls.filter((pull) =>
-      path.includes("state=open") ? pull.state === "open" : true).map(pull));
+    else if (path.startsWith(`repos/${repo.repository}/pulls?`)) {
+      if (repo.pullPages) {
+        next = page < repo.pullPages.length;
+        data = (repo.pullPages[page - 1] ?? []).map((number) => {
+          const selected = repo.pulls.find((pull) => pull.number === number);
+          if (!selected) throw new Error("Generated PR page references an absent item.");
+          return pull(selected);
+        });
+      } else data = paginate(repo.pulls.filter((pull) => path.includes("state=open") ? pull.state === "open" : true).map(pull));
+    }
     else if (path === `repos/${repo.repository}/pulls/${selected?.number}`) data = pull(selected!);
     else if (path === "graphql") {
       if (!selected) return "HTTP/2.0 404 Not Found\r\n\r\n{}";
