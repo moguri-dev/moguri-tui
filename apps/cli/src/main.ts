@@ -17,6 +17,7 @@ import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOpt
 import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
 import { queuedSlash } from "./queued-commands.ts";
 import { KupoModeSchema, ScheduledTimingSchema } from "../../../packages/sdk/src/index.ts";
+import { MyWorkFiltersSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -299,6 +300,15 @@ moguri github execute ACTION.json --project ID --digest SHA --confirm-review [--
 moguri github history|read ID|wait ID|stop ID   Actual original operations, no retry
 moguri github ci|ci-preview [PR] --session ID  Exact PR state/review; no SHA re-entry
 moguri github acknowledge ID --revision N --digest ORIGINAL_INPUT_SHA --confirm-review
+moguri my-work query [OFFSET LIMIT] [--filters JSON]  Retained cross-repository inbox, no implicit GitHub reads
+moguri my-work source PROJECT_ID [--workspace ID]    Review one explicit controller-account source
+moguri my-work configure PROJECT_ID --digest SHA --confirm-review [--workspace ID]
+moguri my-work status|refresh [SOURCE_IDS]|read REFRESH_ID [SOURCE_ID]|wait REFRESH_ID|stop REFRESH_ID
+moguri my-work navigate|followup ITEM_ID SOURCE_ID   Exact retained navigation or fresh idle-session review
+moguri my-work start ITEM_ID SOURCE_ID --digest SHA --confirm-review
+moguri my-work disable|enable SOURCE_ID --revision N  No recurring work starts
+moguri my-work mark-read ITEM_ID                    Read only, not resolution or approval
+moguri my-work inspect REFRESH_ID --revision N --digest INPUT_SHA --confirm-review  Inspection, not cleanup proof
 moguri linear status|import PROJECT_ID [CURSOR]
 moguri linear token|clear-token    Read a personal API key from piped stdin
 moguri linear catalog RESOURCE [CURSOR|-] [ISSUE_UUID] --project ID
@@ -894,6 +904,33 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "move" && args[1]) output(await sdk.issues.move(args[0], args[1], expectedRevision()));
       else if (action === "archive" || action === "restore") output(await sdk.issues.archive(args[0], action === "archive", expectedRevision()));
       else throw new Error("Use issues list/create/update/move/archive/restore/configure/refresh; inspect --help for arguments.");
+    } else if (group === "my-work") {
+      if (!action || action === "query") output(await sdk.myWork.query(parse(MyWorkFiltersSchema, values.filters ? JSON.parse(values.filters) : {}),
+        { offset: Number(args[0] ?? 0), limit: Number(args[1] ?? 30) }));
+      else if (action === "status") output(await sdk.myWork.status());
+      else if (action === "refresh") output(await sdk.myWork.refresh(args.length ? args : undefined));
+      else if (action === "read" && args[0]) output(await sdk.myWork.read(args[0], { ...(args[1] ? { sourceId: args[1] } : {}) }));
+      else if (action === "wait" && args[0]) output(await sdk.myWork.wait(args[0]));
+      else if (action === "stop" && args[0]) output(await sdk.myWork.cancel(args[0]));
+      else if (action === "inspect" && args[0] && values.digest && values["confirm-review"]) output(await sdk.myWork.inspect(args[0], expectedRevision(), values.digest, true));
+      else if (["source", "configure"].includes(action) && args[0]) {
+        const { preview } = await sdk.myWork.previewSource({ env: "Local", projectId: args[0], ...(values.workspace ? { workspaceId: values.workspace } : {}) });
+        if (action === "source") output({ preview });
+        else {
+          if (!values["confirm-review"] || preview.digest !== values.digest) throw new Error("Review this exact source first, then pass its digest and --confirm-review. No repository/account was configured.");
+          output(await sdk.myWork.configure(preview, true));
+        }
+      } else if (["disable", "enable"].includes(action) && args[0]) output(await sdk.myWork.toggle(args[0], expectedRevision(), action === "enable"));
+      else if (action === "navigate" && args[0] && args[1]) output(await sdk.myWork.navigate(args[0], args[1]));
+      else if (["followup", "start"].includes(action) && args[0] && args[1]) {
+        const preview = await sdk.myWork.previewFollowup(args[0], args[1]);
+        if (action === "followup") output(preview);
+        else {
+          if (!values["confirm-review"] || preview.digest !== values.digest) throw new Error("Review the exact PR/account/root again and pass its unchanged digest with --confirm-review. No follow-up session was created.");
+          output(await sdk.myWork.start(preview, args[1], true));
+        }
+      } else if (action === "mark-read" && args[0]) output(await sdk.myWork.markRead(args[0]));
+      else throw new Error("Use my-work query/source/configure/status/refresh/read/wait/stop/navigate/followup/start/disable/enable/mark-read. Inspect --help for exact arguments.");
     } else if (group === "github" || group === "linear" && action !== undefined && ["catalog", "issue", "preview", "execute", "history", "read", "wait", "stop"].includes(action)) {
       output(await integrationCommand(sdk, group, action, args, values));
     } else if (group === "cache" && action === "registries") {

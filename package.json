@@ -81,6 +81,7 @@
     "docs/architecture/remote-plan-saves.md",
     "docs/architecture/platform-workflows.md",
     "docs/architecture/github-workflows.md",
+    "docs/architecture/my-work.md",
     "docs/architecture/session-github-workflows.md",
     "docs/architecture/project-kanban.md",
     "docs/architecture/session-reliability.md",

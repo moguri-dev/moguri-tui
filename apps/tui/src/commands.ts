@@ -5,6 +5,7 @@ export const tuiTabs = [
   { id: "sessions", label: "Sessions", compact: "Chats", command: "/sessions" },
   { id: "work-items", label: "Work items", compact: "Work", command: "/work-items" },
   { id: "code-requests", label: "Code requests", compact: "Code", command: "/code-requests" },
+  { id: "my-work", label: "My Work", compact: "Inbox", command: "/my-work" },
   { id: "automations", label: "Automations", compact: "Auto", command: "F9" },
 ] as const;
 export type TuiTab = typeof tuiTabs[number]["id"];
