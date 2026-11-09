@@ -164,8 +164,18 @@ export function removeBackgroundServiceFixtureMarker(db: DatabaseSync, events: r
   db.exec("DELETE FROM retention_metadata WHERE id='background_service_schema'");
 }
 export function removeOtlpExportFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeSkillsRewindFixtureMarkers(db, events);
   if (events.some((event) => event.event_type === "telemetry.export_configured")) throw new Error("Generate genuine pre-97 history; reviewed export intent cannot become an older lineage.");
   db.exec("DELETE FROM retention_metadata WHERE id='otlp_export_schema'");
+}
+export function removeSkillsRewindFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type.startsWith("checkpoint.") || event.event_type.startsWith("rewind.") ||
+    ["skill.admission_recorded", "skill.consumed", "session.rewound"].includes(event.event_type) ||
+    event.event_type === "sandbox.workspace_recorded" && [4, 5].includes(event.payload.workspace.preparation?.version ?? 0)) ||
+    db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type') LIKE 'checkpoint.%' OR json_extract(data,'$.event_type') LIKE 'rewind.%' OR json_extract(data,'$.event_type') IN ('skill.admission_recorded','skill.consumed','session.rewound') LIMIT 1").get()) {
+    throw new Error("Generate genuine pre-98 history using its original journal before the first turn. Actual captured/admitted/rewound history cannot be relabelled or removed.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('local_skill_admission_schema','turn_checkpoints_schema')");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);

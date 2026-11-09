@@ -102,6 +102,7 @@
     "docs/architecture/lean-tooling.md",
     "docs/architecture/file-access.md",
     "docs/architecture/content-review.md",
+    "docs/architecture/skills-and-rewind.md",
     "docs/architecture/repository-management.md"
   ],
   "engines": {
