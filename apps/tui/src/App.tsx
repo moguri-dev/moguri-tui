@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
+import { executeOtlpCommand } from "../../../packages/sdk/src/index.ts";
 import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
@@ -362,12 +363,18 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       if (sidebarOnly) setSidebar(false);
     } finally { setNavigationFocus(false); }
   };
+  const quitting = useRef(false);
   const quit = async (queued = false) => {
-    for (const editor of editors.current.values()) await editor.flush();
-    for (const editor of editors.current.values()) editor.dispose();
-    if (!queued) await client.commands.detachAll();
-    client.disconnect();
-    if (onQuit) onQuit(); else renderer.destroy();
+    if (quitting.current) return;
+    requireNavigation();
+    quitting.current = true;
+    try {
+      for (const editor of editors.current.values()) await editor.flush();
+      if (!queued) await client.commands.detachAll();
+      for (const editor of editors.current.values()) editor.dispose();
+      client.disconnect();
+      if (onQuit) onQuit(); else renderer.destroy();
+    } catch (error) { quitting.current = false; throw error; }
   };
   const githubAction = async (action: () => Promise<void>) => {
     if (githubPending.current) return;
@@ -672,9 +679,21 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     else throw new Error("This panel is available only in the desktop app.");
   };
   const submit = async (text: string, held = false) => {
+    if (text.trim() === "exit" || text.trim() === "/exit") {
+      if (held) throw new Error("Exit is a local TUI action. Use Enter or Ctrl+C; held input was not executed or sent.");
+      requireNavigation();
+      await quit(); return;
+    }
     const firstSpace = text.indexOf(" ");
     const name = (firstSpace < 0 ? text : text.slice(0, firstSpace)).trim();
     const argument = firstSpace < 0 ? "" : text.slice(firstSpace + 1).trim();
+    if (name === "/otlp") {
+      if (held) throw new Error("OTLP settings require an explicit unheld user review. Held input was not executed or exported.");
+      requireNavigation();
+      show(await executeOtlpCommand(client, argument));
+      if (!session) setStartupCommand("");
+      return;
+    }
     if (!session || !editor) {
       if (name === "/new" && (!argument || argument === "global")) await newSession(true);
       else if (name === "/open" && argument) await openProject(argument);
@@ -835,10 +854,14 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   }, [client, selectedId, snapshot?.commandExecutions, responsePulse]);
   useKeyboard((key) => {
     if (key.defaultPrevented) return;
+    if (quitting.current) { key.preventDefault(); key.stopPropagation(); return; }
     if (["return", "kpenter"].includes(key.name) && modeRef.current !== mode) { key.preventDefault(); key.stopPropagation(); return; }
     if (switchingProfile.current) { key.preventDefault(); key.stopPropagation(); return; }
     if (kupoPending.current) { key.preventDefault(); key.stopPropagation(); setNotice("The original Kupo mode selection is still awaiting acknowledgement. Your draft is preserved."); return; }
     if (mode === "schedule") {
+      if (key.ctrl && key.name === "c") {
+        key.preventDefault(); key.stopPropagation(); setNotice("Save or cancel this scheduled input before leaving the TUI. Your draft is preserved."); return;
+      }
       if (key.name === "escape") {
         key.preventDefault(); key.stopPropagation();
         if (schedulePending.current) setNotice("The original scheduled input is still awaiting acknowledgement. No replacement was sent.");
@@ -882,6 +905,12 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       }
       return;
     }
+    if (key.ctrl && key.name === "c" && (queuedContinue.current?.pending || queuedArchive.current?.pending)) {
+      key.preventDefault(); key.stopPropagation();
+      if (session) void command({ type: "session.stop", sessionId: session.id });
+      else setNotice("The original command is still settling; no other session was stopped.");
+      return;
+    }
     if (key.name === "escape") {
       if (queuedContinue.current?.pending) { setNotice("The original choice is still settling. Ctrl+C requests its owned stop; no replacement route will be sent."); return; }
       if (queuedArchive.current?.pending) { setNotice("The original archive is still settling. Ctrl+C stops owned work; it cannot promise to undo an admitted archive."); return; }
@@ -913,7 +942,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       }
       if (tuiCommandSuggestions(editor.getState().text).length) return;
     }
-    if (key.ctrl && key.name === "q" && editorModes.includes(mode)) { key.preventDefault(); setNotice("Save with Ctrl+Enter or cancel with Esc before leaving this editor."); return; }
+    if (key.ctrl && ["q", "c"].includes(key.name) && editorModes.includes(mode)) { key.preventDefault(); setNotice("Save with Ctrl+Enter or cancel with Esc before leaving this editor."); return; }
     if (editorModes.includes(mode)) {
       if (key.ctrl && key.name === "r" && ["prompt-editor", "settings-editor"].includes(mode)) { key.preventDefault(); void perform(async () => { await client.settings.reset(mode === "prompt-editor" ? "systemPrompt" : "all", settingsRevision.current); setMode("settings"); }); }
       return;
@@ -958,8 +987,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (["q", "c", "o", "n", "l", "m", "p", "k", "b", "y", "d", "a", "r", "s", "v", "g", "space"].includes(key.name)) key.preventDefault();
     if (key.name === "g") { setMode("settings"); return; }
     if (key.name === "space") { void dictate(); return; }
-    if (key.name === "q") void perform(quit);
-    else if (key.name === "c" && session && (session.turnId || snapshot?.commandExecutions.some((entry) => entry.sessionId === session.id && ["running", "waiting-client", "claimed"].includes(entry.status)))) void command({ type: "session.stop", sessionId: session.id });
+    if (key.name === "q" || key.name === "c") void perform(quit);
     else if (key.name === "o") setMode("project");
     else if (key.name === "n") void perform(newSession);
     else if (key.name === "l") void command({ type: "provider.login" });
@@ -1350,6 +1378,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
 /session  /sessions  /work-items  /code-requests
 /sidebar open|close  /theme list  /theme crystal dark
 /new [global]  /open PATH  /models  /profiles  /settings
+/otlp status | review INPUT_JSON | apply REVIEW_JSON confirm-reviewed
 /approve once  /question  /queue  /stop  /quit
 
 Click any navigation tab. Tab focuses navigation; Up/Down chooses a tab,
@@ -1361,7 +1390,7 @@ Held/ordered new view/theme commands stay unsent until shared intake integration
 Esc returns to the current saved prompt.
 
 Enter sends; Shift+Enter is newline; Cmd/Ctrl+Enter holds without running.
-Shift+Cmd/Ctrl+Enter sends now. Ctrl+C remains the emergency stop.
+Shift+Cmd/Ctrl+Enter sends now. Ctrl+C saves and leaves this TUI; /stop stops the turn.
 Existing shortcut aliases remain available for compatibility.
 
 /connect | /cancel-login | /disconnect | /models | /model ID

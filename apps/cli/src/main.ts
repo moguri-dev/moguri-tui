@@ -176,6 +176,7 @@ moguri budget dashboard|calls|plans [--project ID --folder ID --session ID --pro
 moguri budget dashboard --filters '{"range":{"kind":"days","days":30},"bucket":"week"}'
 moguri telemetry operations [--project ID --session ID --filters JSON]
 moguri telemetry storage           Current profile key-backed ciphertext, not disk usage
+moguri telemetry otlp status|review INPUT_JSON|apply REVIEW_JSON confirm-reviewed
 moguri repository preview|state --session ID
 moguri repository refresh --session ID --digest BINDING --revision N --confirm-review
 moguri repository clear --session ID --revision N --confirm-review
@@ -522,7 +523,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         output(await sdk.jobs.cancel(job.id));
       } else throw new Error("Use repository preview/state, refresh --digest BINDING --revision N --confirm-review, clear --revision N --confirm-review, or stop JOB_ID, with an explicit --session.");
     } else if (group === "telemetry") {
-      if (action === "storage") {
+      if (action === "otlp") {
+        if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("OTLP configuration belongs to the exact selected profile, not a session or usage filter.");
+        const { executeOtlpCommand } = await import("../../../packages/sdk/src/index.ts");
+        output(await executeOtlpCommand(sdk, args.join(" ")));
+      } else if (action === "storage") {
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("Storage is a current profile measurement, not a dated/project/model view. Select --profile ID instead.");
         output(await sdk.telemetry.storage());
       } else if (action === "operations") {
@@ -531,7 +536,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (!isRecord(filters) || Object.hasOwn(filters, "type")) throw new Error("Use an object of operation filter fields, not a query type.");
         const query = parse(TelemetryQuerySchema, { ...filters, ...(values.project ? { projectId: values.project } : {}), ...(values.folder ? { folderId: values.folder } : {}), ...(values.session ? { sessionId: values.session } : {}), ...(values.model ? { modelId: values.model } : {}), ...(values.provider ? { providerId: values.provider } : {}), ...(values.role ? { role: parse(ModelRoleSchema, values.role) } : {}), type: "telemetry.operations" });
         output(await sdk.query(query));
-      } else throw new Error("Use telemetry operations or storage. Operation results and storage are not model usage or physical disk totals.");
+      } else throw new Error("Use telemetry operations, storage or otlp status/review/apply. Export requires exact reviewed opt-in; diagnostics never become accounting authority.");
     } else if (group === "budget") {
       if (action === "status" && args[0]) output(await sdk.budgets.status(args[0]));
       else if (action === "dashboard" || action === "calls" || action === "plans") {

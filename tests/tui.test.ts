@@ -817,7 +817,7 @@ test("the actual OpenTUI client selects Copilot, streams, stops and receives a s
     setup.mockInput.pressEnter({ ctrl: true, shift: true });
     await waitFor(() => fixture.requests.length === 1);
     await frameUntil((frame) => frame.includes("Generated work in progress."));
-    setup.mockInput.pressCtrlC();
+    await setup.mockInput.typeText("/stop"); setup.mockInput.pressEnter();
     assert.equal((await fixture.terminal()).status, "stopped");
     await frameUntil((frame) => frame.includes("stopped"));
     await fixture.service.controller.dispatch(envelope({

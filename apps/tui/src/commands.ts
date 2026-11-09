@@ -35,6 +35,8 @@ const localCommands: readonly TuiCommand[] = [
   { name: "reload-draft", description: "Explicitly replace local draft edits with the saved version" },
   { name: "keep-draft", description: "Explicitly keep your draft after a conflict" },
   { name: "quit", description: "Save drafts and leave this TUI" },
+  { name: "exit", description: "Save drafts and leave this TUI; the shared service keeps running" },
+  { name: "otlp", description: "Review profile-owned metadata export; never sends model data", argument: "status|review INPUT_JSON|apply REVIEW_JSON confirm-reviewed" },
 ];
 export const tuiCommands: readonly TuiCommand[] = [
   ...localCommands,
