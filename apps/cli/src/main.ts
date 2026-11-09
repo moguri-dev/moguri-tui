@@ -66,6 +66,9 @@ moguri home acknowledge WRITER REV confirm-inspected --session ID  Actual-user r
 moguri tool NAME SCHEMA_SHA ARGUMENTS_JSON --session ID  Exact approved Local job
 moguri script-review list|read ID --session ID  Original complete script source and agent advice
 moguri script-review force ID REVIEW_REV SHA SESSION_REV confirm-unsafe --session ID  User force; normal execution approval still applies
+moguri rewind list|read ID|preview ID conversation|workspace --session ID
+moguri rewind apply ID MODE SHA confirm-rewind [FILE_DECISIONS_JSON] --session ID
+moguri rewind settle confirm-stop|inspect ID|stop ID confirm-stop --session ID
 moguri tool-result STEP CALL [OFFSET] --session ID  Original retained source
 moguri state SELECT_SQL --session ID  Canonical todo/memory views
 moguri watch read JOB [OFFSET] --session ID  Real logs, outcome and observed statistics
@@ -503,6 +506,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "script-review") {
       if (!values.session) throw new Error("Choose --session ID for the exact original script owner.");
       const result = await sdk.slash(values.session, `/script-review ${[action ?? "list", ...args].join(" ")}`, "cli");
+      output(result.kind === "text" ? JSON.parse(result.text) : result);
+    } else if (group === "rewind") {
+      if (!values.session) throw new Error("Choose --session ID for the exact checkpoint/rewind owner.");
+      const result = await sdk.slash(values.session, `/rewind ${[action ?? "list", ...args].join(" ")}`, "cli");
       output(result.kind === "text" ? JSON.parse(result.text) : result);
     } else if (group === "question") {
       if (action === "list") output(snapshot.questions.filter((question) => !values.session || question.sessionId === values.session));
@@ -996,7 +1003,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else throw new Error("Use memory index/search/graph PROJECT_ID for Local data, or --session SESSION_ID.");
       }
     } else if (group === "skills" || group === "plugins") {
-      if (group === "skills" && action === "sources") output(sdk.settings.get()?.values.skillSources ?? []);
+      if (group === "skills" && ["inspect", "admit", "audit", "revoke"].includes(action ?? "")) {
+        if (!values.session) throw new Error("Choose --session ID for this actual source review/admission.");
+        const result = await sdk.slash(values.session, `/skills ${[action, ...args].join(" ")}`, "cli");
+        output(result.kind === "text" ? JSON.parse(result.text) : result);
+      } else if (group === "skills" && action === "sources") output(sdk.settings.get()?.values.skillSources ?? []);
       else if (group === "skills" && action === "find") output(await sdk.skills.find(args.join(" "), { ...(values.session ? { sessionId: values.session } : {}) }));
       else if (group === "skills" && action === "read" && args[0] && values.digest) output(await sdk.skills.read(args[0], values.digest, values.session));
       else {
