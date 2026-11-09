@@ -159,8 +159,13 @@ export function removeMyWorkFixtureMarker(db: DatabaseSync, events: readonly Sto
   db.exec("DELETE FROM retention_metadata WHERE id='my_work_inbox_schema'");
 }
 export function removeBackgroundServiceFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeOtlpExportFixtureMarker(db, events);
   if (hasBackgroundServiceHistory(events)) throw new Error("Generate genuine pre-96 history; an explicit background-service preference cannot become an older lineage.");
   db.exec("DELETE FROM retention_metadata WHERE id='background_service_schema'");
+}
+export function removeOtlpExportFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "telemetry.export_configured")) throw new Error("Generate genuine pre-97 history; reviewed export intent cannot become an older lineage.");
+  db.exec("DELETE FROM retention_metadata WHERE id='otlp_export_schema'");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);
