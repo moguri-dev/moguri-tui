@@ -69,6 +69,7 @@ moguri script-review force ID REVIEW_REV SHA SESSION_REV confirm-unsafe --sessio
 moguri rewind list|read ID|preview ID conversation|workspace --session ID
 moguri rewind apply ID MODE SHA confirm-rewind [FILE_DECISIONS_JSON] --session ID
 moguri rewind settle confirm-stop|inspect ID|stop ID confirm-stop --session ID
+moguri rewind prune|prune-capture ID REV confirm-delete --session ID
 moguri tool-result STEP CALL [OFFSET] --session ID  Original retained source
 moguri state SELECT_SQL --session ID  Canonical todo/memory views
 moguri watch read JOB [OFFSET] --session ID  Real logs, outcome and observed statistics

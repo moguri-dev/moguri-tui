@@ -17,6 +17,12 @@ import { legacySessionControlsJournal } from "./fixtures/legacy-session-controls
 import { legacyCheckpointJournal } from "./fixtures/legacy-checkpoint-journal.ts";
 import type { MoguriSdk } from "../packages/sdk/src/index.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
+export async function admitGeneratedSkill(sdk: MoguriSdk, sessionId: string, skillId: string, expectedDigest: string) {
+  const { inspection } = await sdk.skills.inspect(sessionId, skillId, expectedDigest);
+  const admitted = await sdk.skills.admit({ sessionId, skillId, expectedDigest, expectedInspectionDigest: inspection.digest,
+    publisher: { kind: "unverified-local", acknowledge: "publisher-not-verified" }, access: "read-only", paths: ["."], validHours: 24 });
+  return { inspection, admitted };
+}
 export function generatedNodeSupervision(service: Awaited<ReturnType<typeof startService>>): () => void {
   if (process.platform !== "linux") return () => {};
   const snapshots = new Map<typeof service.controller, typeof service.controller.snapshot>();
@@ -304,13 +310,13 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
     let restoreControlsJournal = () => {}, restoreJournal = () => {}, restoreSnapshot = () => {}, restoreCheckpoints = () => {};
     resources.push(async () => {
-      try { await service.close(); } finally { restoreCheckpoints(); restoreJournal(); restoreControlsJournal(); restoreSnapshot(); }
+      try { await service.close(); } finally { restoreJournal(); restoreControlsJournal(); restoreCheckpoints(); restoreSnapshot(); }
     });
     // Generated Node fixtures are not Linux product supervision or release qualification.
     if (options.nodePrimitives !== false) restoreSnapshot = generatedNodeSupervision(service);
+    if (options.legacyTurnCheckpointJournal || options.legacyCandidateJournal || options.legacySessionControlsJournal) restoreCheckpoints = legacyCheckpointJournal(service.store);
     restoreControlsJournal = options.legacySessionControlsJournal ? legacySessionControlsJournal(service.store) : () => {};
     restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
-    if (options.legacyTurnCheckpointJournal || options.legacyCandidateJournal || options.legacySessionControlsJournal) restoreCheckpoints = legacyCheckpointJournal(service.store);
     const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
     const sessionResult = await service.controller.dispatch(envelope({ type: "session.create", projectId: projectResult.id!, title: "New session" }));
     const sessionId = sessionResult.id!;
