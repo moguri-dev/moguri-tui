@@ -283,9 +283,8 @@ Originals stay retained; formulas never execute and scanned PDF pages explicitly
 report unavailable OCR. Source/text files, including Java, and images remain
 supported. See [document limits and usage](docs/architecture/document-attachments.md).
 
-Current source work for [#17](https://github.com/mbianchidev/moguri/issues/17)
-offers the model maximum and half maximum, or actual provider-declared working
-windows, through the same service contract. Unsupported saved values block
+Implemented model controls offer the model maximum and half maximum, or actual
+provider-declared working windows, through the same service contract. Unsupported saved values block
 inference without clamping history. Pastes over 50 lines become exact scoped
 text files, not whole-paste prompt expansions. Desktop, TUI and the SDK preserve
 failed/conflicting unsent pastes; approved bounded file reads work through Local
@@ -389,14 +388,15 @@ This is not public compound scheduling, independent-family proof or acceptance.
 source, independently installed SDK and actual native qualification. The
 qualified 0.28 artifacts remain frozen.
 
-The first milestone remains incomplete. Merged **#51 / protocol 92** includes
-runtime/hardware readiness, exact Kupo window/effort controls and reviewed
-SSH/native-private candidate transports. The
+The first milestone remains incomplete. Merged main through **#60 / protocol99**
+includes the My Work GitHub inbox, opt-in metadata OTLP, governed Local skills,
+per-turn rewind and the session Inbox. The
 [current acceptance and roadmap](docs/remaining-milestone-gaps.md) separates
-these implemented features from the remaining exact native qualification and
-GitHub CI billing gate; [#39](https://github.com/mbianchidev/moguri/issues/39)
-tracks later workflows and distribution. Historical handoffs and version bumps
-do not establish completion or justify an increased estimate.
+delivered work from the remaining wider native/control matrix, hosted-CI
+account gate and final integrated acceptance. [#39](https://github.com/mbianchidev/moguri/issues/39)
+owns those gates and the later roadmap; #17 is consolidated as redundant
+tracking, not milestone acceptance. Historical receipts, closed issues and
+version bumps do not establish completion.
 
 The earlier issue-17 checkpoint used **protocol 37** for shared model windows, scoped
 long-paste files and reviewed SendBox **0.2.3** execution. SDK, CLI/TUI and hidden
