@@ -9,7 +9,7 @@ import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp, TuiMessage } from "../apps/tui/src/App.tsx";
 import { appearanceColors, MoguriSdk, type PublicMessage } from "../packages/sdk/src/index.ts";
 import { tuiTabs } from "../apps/tui/src/commands.ts";
-import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
+import { admitGeneratedSkill, reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
 
 type Terminal = Awaited<ReturnType<typeof createTestRenderer>>;
@@ -67,6 +67,24 @@ test("the idle chat gives space to the conversation instead of navigation and in
     assert.ok(!setup.captureCharFrame().includes("no checklist"), "missing plan data should not add a fake progress row");
     assert.equal(fixture.requests.length, 0);
     assert.equal(fixture.session().draft.text, "");
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
+});
+
+test("the actual TUI shows a named book indicator only after complete explicit skill loading", { skip: process.platform !== "darwin" }, async () => {
+  const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 120, height: 40, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk }))); await frameUntil(setup, "Write a prompt");
+    const source = join(fixture.directory, "generated-tui-book"); await mkdir(source);
+    await writeFile(join(source, "SKILL.md"), "---\nname: generated-tui-book\ndescription: Generated exact TUI source\n---\nGenerated complete instructions.\n");
+    const settings = sdk.settings.get()!;
+    await sdk.settings.update({ ...settings.values, skillSources: [{ id: "generated-tui-book", name: "Generated TUI book", kind: "local", enabled: true, path: source }] }, settings.revision);
+    const skill = (await sdk.skills.find("", { sessionId: fixture.sessionId })).skills[0]!;
+    await sdk.skills.read(skill.id, skill.digest, fixture.sessionId);
+    assert.equal(setup.captureCharFrame().includes("Loaded skill:"), false);
+    await admitGeneratedSkill(sdk, fixture.sessionId, skill.id, skill.digest); await sdk.skills.consume(fixture.sessionId, skill.id, skill.digest);
+    await frameUntil(setup, "Loaded skill: generated-tui-book");
+    assert.ok(setup.captureCharFrame().includes("📖")); assert.equal(fixture.requests.length, 0);
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 

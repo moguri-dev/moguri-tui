@@ -197,7 +197,7 @@ moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
 moguri configuration review|apply|reject ID --digest SHA256 [--acknowledge-config-risk]
-moguri attention list|read ID
+moguri inbox list|read ID|delete ID   Notifications only; attention remains an alias
 moguri context file|image|document PATH --session ID [--capture-id ID]
 moguri context documents --session ID [--filters '{"offset":0,"limit":5}']
 moguri context document-read ID --session ID [--filters '{"page":1,"limit":4096}']
@@ -770,10 +770,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "review" && args[0]) output(await sdk.configuration.review(args[0]));
       else if ((action === "apply" || action === "reject") && args[0] && values.digest) output(await sdk.configuration.decide(args[0], action === "apply", values.digest, values["acknowledge-config-risk"] ?? false));
       else throw new Error("Review scope/base/value first; apply needs --digest and --acknowledge-config-risk. Propose reads a bounded JSON file with --session ID.");
-    } else if (group === "attention") {
-      if (action === "list") output(snapshot.attention.filter((entry) => entry.active));
-      else if (action === "read" && args[0]) output(await sdk.attention.acknowledge([args[0]]));
-      else throw new Error("Use attention list or read ATTENTION_ID. Reading never approves or answers.");
+    } else if (group === "inbox" || group === "attention") {
+      if ((!action || action === "list") && !args.length) output(sdk.attention.list());
+      else if (action === "read" && args.length === 1) output(await sdk.attention.acknowledge([args[0]!]));
+      else if (action === "delete" && args.length === 1) output(await sdk.attention.delete([args[0]!]));
+      else throw new Error("Use inbox list, read ID or delete ID. Deleting a notification never deletes its session or answers/approves anything.");
     } else if (group === "scheduled") {
       if (action === "list") output(sdk.scheduledPrompts.list(values.session));
       else if (action === "create" && values.session && args[0]) {

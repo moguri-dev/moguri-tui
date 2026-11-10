@@ -169,6 +169,7 @@ export function removeOtlpExportFixtureMarker(db: DatabaseSync, events: readonly
   db.exec("DELETE FROM retention_metadata WHERE id='otlp_export_schema'");
 }
 export function removeSkillsRewindFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeInboxSkillFixtureMarkers(db, events);
   if (events.some((event) => event.event_type.startsWith("checkpoint.") || event.event_type.startsWith("rewind.") ||
     ["skill.admission_recorded", "skill.consumed", "session.rewound"].includes(event.event_type) ||
     event.event_type === "sandbox.workspace_recorded" && [4, 5].includes(event.payload.workspace.preparation?.version ?? 0)) ||
@@ -176,6 +177,13 @@ export function removeSkillsRewindFixtureMarkers(db: DatabaseSync, events: reado
     throw new Error("Generate genuine pre-98 history using its original journal before the first turn. Actual captured/admitted/rewound history cannot be relabelled or removed.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('local_skill_admission_schema','turn_checkpoints_schema')");
+}
+export function removeInboxSkillFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "attention.deleted" || event.event_type === "skill.loaded") ||
+    db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type') IN ('attention.deleted','skill.loaded') LIMIT 1").get()) {
+    throw new Error("Generate genuine pre-99 history; deleted notifications and actual explicit skill loads cannot be relabelled or removed.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('session_inbox_schema','explicit_skill_load_schema')");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);

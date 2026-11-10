@@ -5,7 +5,7 @@ import { executeOtlpCommand } from "../../../packages/sdk/src/index.ts";
 import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
-import { useMoguri, useTaskProgress } from "../../../packages/sdk/src/react.ts";
+import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
@@ -400,7 +400,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     try {
       await editor?.flush(); setSelectedId(id); setArchiveReview(null); setMode("compose");
       if (snapshot?.sessions.find((session) => session.id === id)?.unread) await client.sessions.organize(id, { unread: false });
-      const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.acknowledged && entry.reason !== "ci").map((entry) => entry.id) ?? [];
+      const ids = client.getState().snapshot?.attention.filter((entry) => entry.sessionId === id && !entry.deleted && !entry.acknowledged && entry.reason !== "ci").map((entry) => entry.id) ?? [];
       if (ids.length) await client.attention.acknowledge(ids.slice(-100));
     } finally { setNavigationFocus(false); }
   };
@@ -1400,7 +1400,7 @@ Existing shortcut aliases remain available for compatibility.
 /remote-model-token ENDPOINT opens masked remote endpoint credential input
 /model-token ENDPOINT opens a masked endpoint-key input; /defaults shows startup sources
 /new global creates a chat without a workspace
-/meta [REQUEST] | /suggestions [all|run DIGEST|run-all DIGEST] | /attention
+/meta [REQUEST] | /suggestions [all|run DIGEST|run-all DIGEST] | /inbox [read ID|delete ID]
 /config list|review ID|apply ID SHA256 acknowledge-risk|reject ID SHA256
 /mcp login SERVER | /mcp cancel AUTH_ID | /mcp clear-oauth SERVER
 /notifications shows shared attention preferences and current items
@@ -1491,12 +1491,13 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         mode === "trace" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Client request timings (transport, not server/model execution)</text><text fg={colors.muted}>{safe(JSON.stringify(client.getRequestTimings(), null, 2))}</text><text fg={colors.accent}>Recent events (last 200 received)</text>{events.filter((event) => !session || event.session_id === session.id).map((event) => <text key={event.id} fg={colors.muted}>{safe(`#${event.seq} ${event.event_type}\n${JSON.stringify(event.payload)}\n`)}</text>)}</scrollbox> :
         mode === "queue" ? <scrollbox flexGrow={1} focused><text fg={colors.accent}>Held prompts do not run. /run ID releases one. /edit, /remove, /reorder and /copy ID manage prompts.</text>{session?.queue.map((item) => <text key={item.id} fg={colors.foreground}>{safe(`\n${item.id} [${item.held ? "held" : item.delivery}]\n${item.text}\n${item.attachments.map((attachment) => `${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`).join("\n")}\n`)}</text>)}</scrollbox> :
           <scrollbox id="tui-transcript" ref={transcript} key={`conversation-${session?.id ?? "empty"}`} flexGrow={1} minHeight={0} stickyScroll={followTranscript} stickyStart="bottom">
-            {!session?.messages.length && <box flexDirection="column" paddingY={1} gap={1}>
+            {!session?.messages.length && !session?.skillLoadSequence && <box flexDirection="column" paddingY={1} gap={1}>
               <text fg={colors.accent}><strong>What are we working on?</strong></text><text fg={colors.muted}>{session ? `${session.controls.modelId ? "Write a prompt to begin." : "Choose /models, then write a prompt."}\nTools follow this session's approval rules.` : "/new global starts a chat. /open PATH adds a project.\n/connect starts Copilot login. /help shows commands."}</text></box>}
             {!detailed && (session?.messages.length ?? 0) > 150 && <text fg={colors.muted}>Showing the latest 150 messages. F2 or /details reads the full retained conversation.</text>}
             {session?.messages.slice(detailed ? 0 : -150).map((message) => <TuiMessage key={`${message.id}:${detailed}`} message={message} detailed={detailed}
               activeTurnId={session.turnId} settledToolCalls={settledToolCalls} syntaxStyle={markdownStyle} renderMarkdownNode={renderMarkdownNode}
               inspect={() => setFollowTranscript(false)} />)}
+            {session && snapshot && Boolean(session.skillLoadSequence) && <TuiSkillLoads sdk={client} session={session} snapshot={snapshot} />}
             {editor && <TuiPendingInput editor={editor} />}
             {snapshot?.scheduledPrompts.filter((prompt) => prompt.sessionId === session?.id && ["scheduled", "blocked"].includes(prompt.status)).map((prompt) =>
               <box key={prompt.id} flexDirection="column" border borderColor={colors.border} padding={1} marginTop={1}>
@@ -1627,6 +1628,16 @@ export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, 
     {detailed && message.toolCalls?.length ? <text fg={colors.muted}>{safe(JSON.stringify(message.toolCalls, null, 2))}</text> : null}
     {detailed && message.reasoning && <text fg={colors.muted}>{safe(`Provider-exposed reasoning:\n${message.reasoning}`)}</text>}
     {documents}
+  </box>;
+}
+export function TuiSkillLoads({ sdk, session, snapshot }: { sdk: MoguriSdk; session: Session; snapshot: Snapshot }) {
+  const colors = React.useContext(ThemeContext), activity = useSessionActivity(sdk, session, snapshot);
+  const loaded = activity.activity?.entries.filter((entry) => entry.kind === "load-skill" && entry.status === "completed" &&
+    (entry.source === "skill" || entry.label === "Loaded skill")) ?? [];
+  return <box flexDirection="column" flexShrink={0} marginTop={loaded.length ? 1 : 0}>
+    {loaded.map((entry) => <text key={entry.id} id={`tui-skill-${entry.id}`} fg={colors.accent}>{safe(`📖 ${entry.label}: ${entry.subject ?? "Original skill"}`)}</text>)}
+    {activity.error && <text fg={colors.error}>{safe(activity.error)}</text>}
+    {activity.activity?.nextBefore && <text fg={colors.muted}>Earlier original activity remains available through /activity.</text>}
   </box>;
 }
 function TuiScheduleDialog({ sdk, editor, initial, lock, close }: { sdk: MoguriSdk; editor: DraftEditor; initial: "ask" | "schedule"; lock: (pending: boolean) => void; close: () => void }) {

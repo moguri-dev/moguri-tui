@@ -70,6 +70,11 @@ external edits, current Git intent, later history and spent/unknown budgets.
 Sandbox reviewed-script execution remains unqualified; the wider skills-safety
 work is not complete.
 
+Protocol99 adds a [session Inbox and explicit skill-load indicators](docs/architecture/session-inbox.md).
+Inbox follows Dashboard, opens the owning conversation and supports independent
+notification deletion without answering or approving. Successful source loads
+show their actual skill name and book icon; discovery is not loading.
+
 [Model recovery and scheduled prompts](docs/architecture/recovery-scheduling-kupo.md)
 share the same service and SDK. Transient model failures use current-profile
 30/90/120/180-second recovery rounds, without replaying earlier tools or hooks.
