@@ -1601,7 +1601,7 @@ export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, 
       <box id={`tui-tool-${message.id}`} height={1} onMouseDown={(event) => {
         if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); inspect(); setExpanded((value) => !value);
       }}><text height={1} wrapMode="none" truncate fg={important ? colors.attention : colors.muted}>
-        {safe(`${open ? "v" : ">"} ${call?.name ?? "Tool"} / ${message.outcome ?? "result"}  ${summary}${open ? "" : "  F2 details"}`)}
+        {safe(`${open ? "v" : ">"} ${call?.name ?? "Tool"} / ${message.errorCode === "not_found" ? "Not Found" : message.outcome ?? "result"}  ${summary}${open ? "" : "  F2 details"}`)}
       </text></box>
       {open && <text fg={important ? colors.attention : colors.muted}>{safe(message.text || "No text output.")}</text>}
       {documents}

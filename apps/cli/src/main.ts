@@ -65,6 +65,7 @@ moguri home [status] --session ID  Captured Home and independently retained orig
 moguri home acknowledge WRITER REV confirm-inspected --session ID  Actual-user risk acknowledgement, never cleanup proof
 moguri tool NAME SCHEMA_SHA ARGUMENTS_JSON --session ID  Exact approved Local job
 moguri script-review list|read ID --session ID  Original complete script source and agent advice
+moguri script-review approve ID REVIEW_REV SHA SESSION_REV confirm-reviewed --session ID  Approve review only, never execution
 moguri script-review force ID REVIEW_REV SHA SESSION_REV confirm-unsafe --session ID  User force; normal execution approval still applies
 moguri rewind list|read ID|preview ID conversation|workspace --session ID
 moguri rewind apply ID MODE SHA confirm-rewind [FILE_DECISIONS_JSON] --session ID

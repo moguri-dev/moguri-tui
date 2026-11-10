@@ -103,6 +103,12 @@ Go; mutable installs remain private and executable builds are not implied.
 Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
+Protocol100 moves [repository-script assessments to Inbox](docs/setup.md#work-item-comments-and-repository-scripts)
+with collapsible source and explicit user approval, separate from execution.
+Startup shows the original mascot on black with an optional Space-to-flap game.
+Inline code stays plain text; fenced blocks keep explicit copy controls.
+Missing files say **Not Found**, and provider failures retain their redacted diagnostic.
+
 Protocol96 added [original-owner startup reconnect](docs/setup.md#opening-and-last-view-restoration)
 and a default-on option to keep agents working when the last window closes.
 Explicit Quit still stops the service and known user terminals. Startup
@@ -121,7 +127,7 @@ Protocol94 added [authenticated GitHub search and composer fixes](docs/setup.md#
 private-repository reads use the actual configured account, provider tool IDs
 are assigned before ownership is retained, and one Enter sends one ordinary
 message even during autosave. Autonomy settings are beside their choices;
-profile-wide command families and inline/fenced snippet copy controls share
+profile-wide command families and fenced-code copy controls share
 the existing policy and clipboard paths.
 It preserves protocol93 [retained PR CI watches](docs/setup.md#retained-pull-request-ci-watches):
 exact account/root/head ownership, cross-view deduplication, historical

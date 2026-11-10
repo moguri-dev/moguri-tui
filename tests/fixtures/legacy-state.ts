@@ -9,6 +9,7 @@ import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "../../pa
 import { hasGithubPrCiHistory } from "../../packages/protocol/src/github-workflows.ts";
 import { hasMyWorkHistory } from "../../packages/protocol/src/my-work.ts";
 import { hasBackgroundServiceHistory } from "../../packages/protocol/src/application.ts";
+import { hasScriptInboxHistory } from "../../packages/protocol/src/script-reviews.ts";
 
 export async function appendLegacyProjectFreeSession(client: MoguriSdk, control: ControlPlane, title: string): Promise<{ id: string }> {
   const snapshot = control.snapshot(), settings = snapshot.settings;
@@ -179,11 +180,19 @@ export function removeSkillsRewindFixtureMarkers(db: DatabaseSync, events: reado
   db.exec("DELETE FROM retention_metadata WHERE id IN ('local_skill_admission_schema','turn_checkpoints_schema')");
 }
 export function removeInboxSkillFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeScriptInboxFixtureMarkers(db, events);
   if (events.some((event) => event.event_type === "attention.deleted" || event.event_type === "skill.loaded") ||
     db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type') IN ('attention.deleted','skill.loaded') LIMIT 1").get()) {
     throw new Error("Generate genuine pre-99 history; deleted notifications and actual explicit skill loads cannot be relabelled or removed.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('session_inbox_schema','explicit_skill_load_schema')");
+}
+export function removeScriptInboxFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasScriptInboxHistory(events) ||
+    db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type')='script.review_approved' LIMIT 1").get()) {
+    throw new Error("Generate genuine pre-100 history; actual script Inbox/approval/tool failure history cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('script_review_inbox_schema','tool_failure_schema')");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);
