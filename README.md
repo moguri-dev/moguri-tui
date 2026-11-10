@@ -109,6 +109,13 @@ Startup shows the original mascot on black with an optional Space-to-flap game.
 Inline code stays plain text; fenced blocks keep explicit copy controls.
 Missing files say **Not Found**, and provider failures retain their redacted diagnostic.
 
+Protocol101 adds [explicit repo trust, worktree/PR defaults and recoverable output](docs/architecture/repository-workflow-defaults.md).
+Existing exact trusted script entrypoints skip model assessment, not approvals;
+new/package/generated scripts stay outside the baseline. New single-project
+Local Git tasks use managed worktrees and normally finish at a draft PR.
+Inbox has search and type/read filters. Qualified partial results can continue;
+uncertain effects retain enforced read-only recovery, never false success.
+
 Protocol96 added [original-owner startup reconnect](docs/setup.md#opening-and-last-view-restoration)
 and a default-on option to keep agents working when the last window closes.
 Explicit Quit still stops the service and known user terminals. Startup
