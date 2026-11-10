@@ -14,8 +14,15 @@ import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src
 import { kupoThinkingMinimumOutput, qualifiedKupoThinking, supportedThinking } from "../apps/service/src/model-controls.ts";
 import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
 import { legacySessionControlsJournal } from "./fixtures/legacy-session-controls-journal.ts";
+import { legacyCheckpointJournal } from "./fixtures/legacy-checkpoint-journal.ts";
 import type { MoguriSdk } from "../packages/sdk/src/index.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
+export async function admitGeneratedSkill(sdk: MoguriSdk, sessionId: string, skillId: string, expectedDigest: string) {
+  const { inspection } = await sdk.skills.inspect(sessionId, skillId, expectedDigest);
+  const admitted = await sdk.skills.admit({ sessionId, skillId, expectedDigest, expectedInspectionDigest: inspection.digest,
+    publisher: { kind: "unverified-local", acknowledge: "publisher-not-verified" }, access: "read-only", paths: ["."], validHours: 24 });
+  return { inspection, admitted };
+}
 export function generatedNodeSupervision(service: Awaited<ReturnType<typeof startService>>): () => void {
   if (process.platform !== "linux") return () => {};
   const snapshots = new Map<typeof service.controller, typeof service.controller.snapshot>();
@@ -270,7 +277,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
     },
   };
 }
-export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; nodePrimitives?: boolean } = {}) {
+export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; legacyTurnCheckpointJournal?: boolean; nodePrimitives?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project"), home = join(directory, "home");
   const resources: Array<() => void | Promise<void>> = [];
@@ -301,12 +308,13 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
       return runProgram(executable, args, request);
     }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
     const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
-    let restoreControlsJournal = () => {}, restoreJournal = () => {}, restoreSnapshot = () => {};
+    let restoreControlsJournal = () => {}, restoreJournal = () => {}, restoreSnapshot = () => {}, restoreCheckpoints = () => {};
     resources.push(async () => {
-      try { await service.close(); } finally { restoreJournal(); restoreControlsJournal(); restoreSnapshot(); }
+      try { await service.close(); } finally { restoreJournal(); restoreControlsJournal(); restoreCheckpoints(); restoreSnapshot(); }
     });
     // Generated Node fixtures are not Linux product supervision or release qualification.
     if (options.nodePrimitives !== false) restoreSnapshot = generatedNodeSupervision(service);
+    if (options.legacyTurnCheckpointJournal || options.legacyCandidateJournal || options.legacySessionControlsJournal) restoreCheckpoints = legacyCheckpointJournal(service.store);
     restoreControlsJournal = options.legacySessionControlsJournal ? legacySessionControlsJournal(service.store) : () => {};
     restoreJournal = options.legacyCandidateJournal ? legacyCandidateJournal(service.store) : () => {};
     const projectResult = await service.controller.dispatch(envelope({ type: "project.add", path: project }));
@@ -326,6 +334,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     };
     return {
       ...fixture, directory, project, home: options.platform?.terminal?.defaultRoot ?? home, service, sessionId, session, configure, send, retentionKey: GENERATED_RETENTION_KEY, terminalVault: options.platform?.terminal?.vault ?? terminalVault,
+      endLegacyCheckpointJournal: () => { restoreCheckpoints(); restoreCheckpoints = () => {}; },
       approve: async (allow = true) => {
         const approval = await waitFor(() => session().pendingApproval);
         return service.controller.dispatch(envelope({ type: "approval.respond", sessionId, approvalId: approval.id, allow }));

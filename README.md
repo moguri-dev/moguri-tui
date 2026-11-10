@@ -62,6 +62,19 @@ Built-in work-item views remove hidden Markdown comments.
 full exact source to the agent before execution approval; unsafe findings need
 separate actual-user force and never lift hard policy.
 
+Protocol98 adds [Local skill source admission and per-turn rewind](docs/architecture/skills-and-rewind.md).
+Complete source/provenance review, expiring grants, least-privilege restrictions
+and actual-user revocation share the service, SDK and clients. Reviewed rewind
+supports Local, pinned SSH and private Sandbox workspaces while preserving
+external edits, current Git intent, later history and spent/unknown budgets.
+Sandbox reviewed-script execution remains unqualified; the wider skills-safety
+work is not complete.
+
+Protocol99 adds a [session Inbox and explicit skill-load indicators](docs/architecture/session-inbox.md).
+Inbox follows Dashboard, opens the owning conversation and supports independent
+notification deletion without answering or approving. Successful source loads
+show their actual skill name and book icon; discovery is not loading.
+
 [Model recovery and scheduled prompts](docs/architecture/recovery-scheduling-kupo.md)
 share the same service and SDK. Transient model failures use current-profile
 30/90/120/180-second recovery rounds, without replaying earlier tools or hooks.
@@ -90,7 +103,7 @@ Go; mutable installs remain private and executable builds are not implied.
 Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
-Current **protocol96 source** adds [original-owner startup reconnect](docs/setup.md#opening-and-last-view-restoration)
+Protocol96 added [original-owner startup reconnect](docs/setup.md#opening-and-last-view-restoration)
 and a default-on option to keep agents working when the last window closes.
 Explicit Quit still stops the service and known user terminals. Startup
 confirmation, private ownership and unsent drafts remain protected; the

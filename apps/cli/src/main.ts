@@ -66,6 +66,10 @@ moguri home acknowledge WRITER REV confirm-inspected --session ID  Actual-user r
 moguri tool NAME SCHEMA_SHA ARGUMENTS_JSON --session ID  Exact approved Local job
 moguri script-review list|read ID --session ID  Original complete script source and agent advice
 moguri script-review force ID REVIEW_REV SHA SESSION_REV confirm-unsafe --session ID  User force; normal execution approval still applies
+moguri rewind list|read ID|preview ID conversation|workspace --session ID
+moguri rewind apply ID MODE SHA confirm-rewind [FILE_DECISIONS_JSON] --session ID
+moguri rewind settle confirm-stop|inspect ID|stop ID confirm-stop --session ID
+moguri rewind prune|prune-capture ID REV confirm-delete --session ID
 moguri tool-result STEP CALL [OFFSET] --session ID  Original retained source
 moguri state SELECT_SQL --session ID  Canonical todo/memory views
 moguri watch read JOB [OFFSET] --session ID  Real logs, outcome and observed statistics
@@ -193,7 +197,7 @@ moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
 moguri configuration review|apply|reject ID --digest SHA256 [--acknowledge-config-risk]
-moguri attention list|read ID
+moguri inbox list|read ID|delete ID   Notifications only; attention remains an alias
 moguri context file|image|document PATH --session ID [--capture-id ID]
 moguri context documents --session ID [--filters '{"offset":0,"limit":5}']
 moguri context document-read ID --session ID [--filters '{"page":1,"limit":4096}']
@@ -504,6 +508,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (!values.session) throw new Error("Choose --session ID for the exact original script owner.");
       const result = await sdk.slash(values.session, `/script-review ${[action ?? "list", ...args].join(" ")}`, "cli");
       output(result.kind === "text" ? JSON.parse(result.text) : result);
+    } else if (group === "rewind") {
+      if (!values.session) throw new Error("Choose --session ID for the exact checkpoint/rewind owner.");
+      const result = await sdk.slash(values.session, `/rewind ${[action ?? "list", ...args].join(" ")}`, "cli");
+      output(result.kind === "text" ? JSON.parse(result.text) : result);
     } else if (group === "question") {
       if (action === "list") output(snapshot.questions.filter((question) => !values.session || question.sessionId === values.session));
       else if (action === "read" && args[0]) { const question = snapshot.questions.find((question) => question.id === args[0]); if (!question) throw new Error("Choose an actual question ID from this profile."); output(question); }
@@ -762,10 +770,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "review" && args[0]) output(await sdk.configuration.review(args[0]));
       else if ((action === "apply" || action === "reject") && args[0] && values.digest) output(await sdk.configuration.decide(args[0], action === "apply", values.digest, values["acknowledge-config-risk"] ?? false));
       else throw new Error("Review scope/base/value first; apply needs --digest and --acknowledge-config-risk. Propose reads a bounded JSON file with --session ID.");
-    } else if (group === "attention") {
-      if (action === "list") output(snapshot.attention.filter((entry) => entry.active));
-      else if (action === "read" && args[0]) output(await sdk.attention.acknowledge([args[0]]));
-      else throw new Error("Use attention list or read ATTENTION_ID. Reading never approves or answers.");
+    } else if (group === "inbox" || group === "attention") {
+      if ((!action || action === "list") && !args.length) output(sdk.attention.list());
+      else if (action === "read" && args.length === 1) output(await sdk.attention.acknowledge([args[0]!]));
+      else if (action === "delete" && args.length === 1) output(await sdk.attention.delete([args[0]!]));
+      else throw new Error("Use inbox list, read ID or delete ID. Deleting a notification never deletes its session or answers/approves anything.");
     } else if (group === "scheduled") {
       if (action === "list") output(sdk.scheduledPrompts.list(values.session));
       else if (action === "create" && values.session && args[0]) {
@@ -996,7 +1005,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else throw new Error("Use memory index/search/graph PROJECT_ID for Local data, or --session SESSION_ID.");
       }
     } else if (group === "skills" || group === "plugins") {
-      if (group === "skills" && action === "sources") output(sdk.settings.get()?.values.skillSources ?? []);
+      if (group === "skills" && ["inspect", "admit", "audit", "revoke"].includes(action ?? "")) {
+        if (!values.session) throw new Error("Choose --session ID for this actual source review/admission.");
+        const result = await sdk.slash(values.session, `/skills ${[action, ...args].join(" ")}`, "cli");
+        output(result.kind === "text" ? JSON.parse(result.text) : result);
+      } else if (group === "skills" && action === "sources") output(sdk.settings.get()?.values.skillSources ?? []);
       else if (group === "skills" && action === "find") output(await sdk.skills.find(args.join(" "), { ...(values.session ? { sessionId: values.session } : {}) }));
       else if (group === "skills" && action === "read" && args[0] && values.digest) output(await sdk.skills.read(args[0], values.digest, values.session));
       else {
