@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { transform } from "esbuild";
+import { build, transform } from "esbuild";
+import { fileURLToPath } from "node:url";
 import { isRecord, MoguriError, parse, PROTOCOL_VERSION, SandboxConfigurationSchema, type SandboxConfiguration } from "../../packages/sdk/src/index.ts";
 import { distributionConfiguration, readSandboxDistribution } from "../../apps/service/src/sandbox-distribution.ts";
 
@@ -28,12 +29,21 @@ export async function nativeConfiguration(preserveReviewedNetwork = false): Prom
       resources },
   });
 }
-export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing" | "steering" | "checkpoint",
+export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone",
   behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" | "recover-once"): Promise<string[]> {
-  const source = `globalThis.MOGURI_GENERATED_NATIVE_MODEL=${JSON.stringify(modelId)};globalThis.MOGURI_GENERATED_NATIVE_BASE=${JSON.stringify(baseUrl)};${scenario ? `globalThis.MOGURI_GENERATED_NATIVE_SCENARIO=${JSON.stringify(scenario)};` : ""}${behavior ? `globalThis.MOGURI_GENERATED_NATIVE_BEHAVIOR=${JSON.stringify(behavior)};` : ""}\n${await readFile(new URL(behavior === "recover-once" ? "./native-retry-provider.mjs" : scenario === "checkpoint" ? "./native-checkpoint-provider.mjs" : scenario ? "./native-decisions-provider.mjs" :
-    group ? "./native-group-provider.mjs" : "./native-provider.mjs", import.meta.url), "utf8")}`;
-  const { code } = await transform(source, { minify: true, format: "esm", target: "node26" });
-  const preload = `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
-  if (preload.length > 4096) throw new MoguriError("native_fixture", "The generated no-network provider exceeded the existing reviewed argv boundary.");
-  return ["/usr/local/bin/node", "--import", preload, "/opt/moguri/dist/remote-bridge.mjs", "--foreground"];
+  const prefix = `globalThis.MOGURI_GENERATED_NATIVE_MODEL=${JSON.stringify(modelId)};globalThis.MOGURI_GENERATED_NATIVE_BASE=${JSON.stringify(baseUrl)};${scenario ? `globalThis.MOGURI_GENERATED_NATIVE_SCENARIO=${JSON.stringify(scenario)};` : ""}${behavior ? `globalThis.MOGURI_GENERATED_NATIVE_BEHAVIOR=${JSON.stringify(behavior)};` : ""}\n`;
+  const source = prefix + await readFile(new URL(behavior === "recover-once" ? "./native-retry-provider.mjs" : scenario === "milestone" ? "./native-milestone-provider.mjs" : scenario === "checkpoint" ? "./native-checkpoint-provider.mjs" : scenario ? "./native-decisions-provider.mjs" :
+    group ? "./native-group-provider.mjs" : "./native-provider.mjs", import.meta.url), "utf8");
+  const code = (await transform(source, { minify: true, format: "esm", target: "node26" })).code;
+  const modules = scenario === "milestone" ? [(await build({
+    stdin: { contents: 'import { milestoneResponder } from "./milestone-response.ts"; globalThis.MOGURI_GENERATED_MILESTONE_RESPONDER = milestoneResponder;',
+      resolveDir: fileURLToPath(new URL(".", import.meta.url)) },
+    bundle: true, write: false, minify: true, format: "esm", platform: "node", target: "node26",
+  })).outputFiles[0]!.text, code] : [code];
+  const preloads = modules.flatMap((module) => {
+    const preload = `data:text/javascript;base64,${Buffer.from(module).toString("base64")}`;
+    if (preload.length > 4096) throw new MoguriError("native_fixture", "The generated no-network provider exceeded the existing reviewed argv boundary.");
+    return ["--import", preload];
+  });
+  return ["/usr/local/bin/node", ...preloads, "/opt/moguri/dist/remote-bridge.mjs", "--foreground"];
 }
