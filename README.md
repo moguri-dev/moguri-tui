@@ -503,6 +503,8 @@ requires retain, export-then-delete or delete; ordinary documents survive sessio
 retention. Candidate/proposal reports are the explicit session-owned exception.
 Real structured clarifications record actual user answers and retain them by
 default, with an explicit opt-out. Answers never grant tool/Git permissions.
+Desktop [answer controls](docs/architecture/session-interactions.md#direct-question-answers)
+use a scrollable choice list and a blank Other field that sends on Enter.
 Documents can associate with profile folders and project work items. Explicit
 reviewed repository copies preserve complete history under `artifacts/`, with an
 optional new local Git branch. No checkout, push or unrelated staging changes;
