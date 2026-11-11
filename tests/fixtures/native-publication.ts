@@ -47,6 +47,11 @@ export async function nativeGroupPublicationFixture(sourceMode?: number) {
   const second = await sdk.projects.add(roots[1]!), firstId = fixture.session().projectId;
   assert.ok(firstId);
   const ids = [firstId, second.id!];
+  for (const projectId of ids) {
+    const { configuration } = await sdk.projects.configuration(projectId);
+    await sdk.projects.configure(projectId, { ...configuration.values,
+      repo: { ...configuration.values.repo, workspaceMode: "checkout" } }, configuration.revision);
+  }
   const folder = await sdk.projects.group("Generated native publication group", ids.map((projectId) => ({
     projectId, revision: sdk.getState().snapshot?.projectConfigurations.find((configuration) => configuration.projectId === projectId)?.revision ?? 0,
   })));
