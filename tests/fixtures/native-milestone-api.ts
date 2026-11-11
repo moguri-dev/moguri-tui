@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultSandboxManagement, isRecord, PROTOCOL_VERSION, type SandboxConfiguration } from "../../packages/sdk/src/index.ts";
 import { readSandboxDistribution } from "../../apps/service/src/sandbox-distribution.ts";
@@ -8,7 +9,7 @@ import { fixtureProvider, type GeneratedProviderOptions } from "../fixture.ts";
 import { nativeApiFixture } from "./native-api.ts";
 import type { MilestoneFixture } from "./milestone-combinations.ts";
 
-export async function nativeMilestoneFixture(configuration: SandboxConfiguration): Promise<MilestoneFixture> {
+export async function nativeMilestoneFixture(configuration: SandboxConfiguration): Promise<MilestoneFixture & { state: string; nativeRoot: string }> {
   const workloadPath = process.env.MOGURI_NATIVE_WORKLOAD, distributionPath = process.env.MOGURI_SANDBOX_DISTRIBUTION;
   assert.ok(workloadPath && distributionPath && configuration.qualification);
   const workload: unknown = JSON.parse(await readFile(workloadPath, "utf8"));
@@ -32,9 +33,15 @@ export async function nativeMilestoneFixture(configuration: SandboxConfiguration
   const options: GeneratedProviderOptions = { ...capabilities, modelId: "generated-native-matrix-reviewer" };
   const solverOptions: GeneratedProviderOptions = { ...capabilities, modelId: "generated-routed-solver-api" };
   const fixture = await nativeApiFixture(configuration, { scenario: "milestone", providerOptions: options });
-  const solver = await fixtureProvider(solverOptions), { sdk, service } = fixture;
-  const close = async () => { try { await fixture.close(false); } finally { await solver.close(); } };
+  const { sdk, service } = fixture;
+  let ownedSolver: Awaited<ReturnType<typeof fixtureProvider>> | undefined, ownedDirectory: string | undefined;
+  const close = async () => {
+    try { await fixture.close(false); }
+    finally { try { await ownedSolver?.close(); } finally { if (ownedDirectory) await rm(ownedDirectory, { recursive: true, force: true }); } }
+  };
   try {
+    const solver = ownedSolver = await fixtureProvider(solverOptions);
+    const directory = ownedDirectory = await mkdtemp(join(tmpdir(), "moguri-native-matrix-input-"));
     await writeFile(join(fixture.project, "fixture.txt"), "generated original\n");
     const settings = sdk.settings.get()!;
     await sdk.settings.update({ ...settings.values, sandbox: fixture.reviewedConfiguration,
@@ -57,7 +64,7 @@ export async function nativeMilestoneFixture(configuration: SandboxConfiguration
       assert.ok(value?.projectId);
       return { ...value, projectId: value.projectId };
     };
-    return { sdk, service, directory: fixture.root, project: fixture.project, sessionId, session,
+    return { sdk, service, directory, nativeRoot: fixture.root, state: fixture.state, project: fixture.project, sessionId, session,
       modelId: fixture.provider.modelId, solverId: solver.modelId, options, solverOptions, solver, requests: fixture.provider.requests,
       workspace: null, close };
   } catch (error) {
