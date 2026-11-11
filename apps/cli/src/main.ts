@@ -17,7 +17,7 @@ import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOpt
 import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
 import { queuedSlash } from "./queued-commands.ts";
 import { KupoModeSchema, ScheduledTimingSchema } from "../../../packages/sdk/src/index.ts";
-import { MyWorkFiltersSchema } from "../../../packages/sdk/src/index.ts";
+import { AttentionFiltersSchema, MyWorkFiltersSchema, ProjectWorkspaceModeSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -34,6 +34,7 @@ export async function main(argv: string[]): Promise<void> {
     confirmations: { type: "string" }, registry: { type: "string" },
     "capture-id": { type: "string" }, root: { type: "string" }, hold: { type: "boolean" }, repository: { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
+    "workspace-mode": { type: "string" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -65,7 +66,10 @@ moguri home [status] --session ID  Captured Home and independently retained orig
 moguri home acknowledge WRITER REV confirm-inspected --session ID  Actual-user risk acknowledgement, never cleanup proof
 moguri tool NAME SCHEMA_SHA ARGUMENTS_JSON --session ID  Exact approved Local job
 moguri script-review list|read ID --session ID  Original complete script source and agent advice
+moguri script-review approve ID REVIEW_REV SHA SESSION_REV confirm-reviewed --session ID  Approve review only, never execution
 moguri script-review force ID REVIEW_REV SHA SESSION_REV confirm-unsafe --session ID  User force; normal execution approval still applies
+moguri repo-trust preview|trust SHA REV confirm-existing|revoke REV confirm-revoke --session ID
+moguri inbox list --filters '{"query":"text","type":"question","state":"unread"}'  Select notifications, never acknowledge them
 moguri rewind list|read ID|preview ID conversation|workspace --session ID
 moguri rewind apply ID MODE SHA confirm-rewind [FILE_DECISIONS_JSON] --session ID
 moguri rewind settle confirm-stop|inspect ID|stop ID confirm-stop --session ID
@@ -83,7 +87,7 @@ moguri profile update ID CHANGES.json --revision N
 moguri profile retry ID --revision N --confirm-review
 moguri profile stop ID             Explicit owned setup cancellation
 moguri profile defaults CONTROLS.json --revision N  Shared global preferences
-moguri session create [--project ID]  Omit project for a project-free chat
+moguri session create [--project ID] [--workspace-mode worktree|checkout]  Git tasks default to worktrees
 moguri session create --controls FILE  Explicit startup control overrides
 moguri models list|refresh         Copilot and configured local model discovery
 moguri models catalogue            Profile provider/model switches and exact source inventory
@@ -504,9 +508,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (values.digest || values["confirm-review"]) throw new Error("Use both --digest SHA256 and --confirm-review after inspecting the source snapshot.");
         else output(action === "folder" ? await sdk.attachments.folderPreview(values.session, args[0]) : action === "github" ? await sdk.attachments.githubPreview(values.session, args[0]) : await sdk.attachments.sessionPreview(values.session, args[0]));
       } else throw new Error("Use context file/image/document/document-read/document-search/original/cancel/folder/github/session/read. No source is attached implicitly.");
-    } else if (group === "script-review") {
+    } else if (group === "repo-trust" || group === "script-review") {
       if (!values.session) throw new Error("Choose --session ID for the exact original script owner.");
-      const result = await sdk.slash(values.session, `/script-review ${[action ?? "list", ...args].join(" ")}`, "cli");
+      const result = await sdk.slash(values.session, `/${group} ${[action ?? (group === "repo-trust" ? "preview" : "list"), ...args].join(" ")}`, "cli");
       output(result.kind === "text" ? JSON.parse(result.text) : result);
     } else if (group === "rewind") {
       if (!values.session) throw new Error("Choose --session ID for the exact checkpoint/rewind owner.");
@@ -771,10 +775,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if ((action === "apply" || action === "reject") && args[0] && values.digest) output(await sdk.configuration.decide(args[0], action === "apply", values.digest, values["acknowledge-config-risk"] ?? false));
       else throw new Error("Review scope/base/value first; apply needs --digest and --acknowledge-config-risk. Propose reads a bounded JSON file with --session ID.");
     } else if (group === "inbox" || group === "attention") {
-      if ((!action || action === "list") && !args.length) output(sdk.attention.list());
+      if ((!action || action === "list") && !args.length) output(sdk.attention.list(parse(AttentionFiltersSchema, JSON.parse(values.filters ?? "{}"))));
       else if (action === "read" && args.length === 1) output(await sdk.attention.acknowledge([args[0]!]));
       else if (action === "delete" && args.length === 1) output(await sdk.attention.delete([args[0]!]));
-      else throw new Error("Use inbox list, read ID or delete ID. Deleting a notification never deletes its session or answers/approves anything.");
+      else throw new Error("Use inbox list [--filters JSON], read ID or delete ID. Filtering and deleting never answer, approve or delete a session.");
     } else if (group === "scheduled") {
       if (action === "list") output(sdk.scheduledPrompts.list(values.session));
       else if (action === "create" && values.session && args[0]) {
@@ -788,7 +792,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (action === "create") {
         let overrides: ControlDefaults | undefined;
         if (values.controls) { const file = await stat(values.controls); if (!file.isFile() || file.size > 128 * 1024) throw new Error("Choose a bounded control-overrides JSON file."); overrides = parse(ControlDefaultsSchema, JSON.parse(await readFile(values.controls, "utf8"))); }
-        output(await sdk.sessions.create(values.project ?? null, undefined, overrides, values.workspace));
+        output(await sdk.sessions.create(values.project ?? null, undefined, overrides, values.workspace,
+          values["workspace-mode"] === undefined ? undefined : parse(ProjectWorkspaceModeSchema, values["workspace-mode"])));
       }
       else if ((action === "from-pr" || action === "from-issue") && values.project && args[0]) output(await sdk.sessions.fromWork(values.project, action === "from-pr" ? { prUrl: args[0] } : { issueId: args[0] }, values.workspace));
       else if (action === "reorder" && args.length) output(await sdk.sessions.reorder(args));

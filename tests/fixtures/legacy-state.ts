@@ -9,6 +9,8 @@ import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "../../pa
 import { hasGithubPrCiHistory } from "../../packages/protocol/src/github-workflows.ts";
 import { hasMyWorkHistory } from "../../packages/protocol/src/my-work.ts";
 import { hasBackgroundServiceHistory } from "../../packages/protocol/src/application.ts";
+import { hasScriptInboxHistory } from "../../packages/protocol/src/script-reviews.ts";
+import { hasRepositoryWorkflowHistory } from "../../packages/protocol/src/repository-trust.ts";
 
 export async function appendLegacyProjectFreeSession(client: MoguriSdk, control: ControlPlane, title: string): Promise<{ id: string }> {
   const snapshot = control.snapshot(), settings = snapshot.settings;
@@ -18,6 +20,19 @@ export async function appendLegacyProjectFreeSession(client: MoguriSdk, control:
   ], { settingsRevision: settings.revision, projectRevision: null }, snapshot.lastModelSelection);
   const id = randomUUID();
   control.store.commit([{ event_type: "session.created", profile_id: snapshot.profileId, session_id: id, payload: { title, ...startup } }]);
+  control.refreshProfile(); await client.refresh(); return { id };
+}
+export async function appendLegacyProjectSession(client: MoguriSdk, control: ControlPlane, projectId: string, title: string): Promise<{ id: string }> {
+  const snapshot = control.snapshot(), settings = snapshot.settings;
+  if (!snapshot.projects.some((project) => project.id === projectId)) throw new Error("Generate an original attached session only for its actual retained project.");
+  const { configuration } = await client.projects.configuration(projectId);
+  const startup = resolveControls([
+    { source: "global", values: settings.values.startup.global }, { source: "profile", values: settings.values.startup.profile },
+    { source: "project", values: configuration.values.defaults }, { source: "session", values: {} },
+  ], { settingsRevision: settings.revision, projectRevision: configuration.revision }, snapshot.lastModelSelection);
+  const id = randomUUID();
+  control.store.commit([{ event_type: "session.created", profile_id: snapshot.profileId, project_id: projectId,
+    session_id: id, payload: { title, ...startup } }]);
   control.refreshProfile(); await client.refresh(); return { id };
 }
 export async function appendLegacyKupoSelection(client: MoguriSdk, control: ControlPlane, sessionId: string, env: "Local" | "Remote") {
@@ -179,11 +194,26 @@ export function removeSkillsRewindFixtureMarkers(db: DatabaseSync, events: reado
   db.exec("DELETE FROM retention_metadata WHERE id IN ('local_skill_admission_schema','turn_checkpoints_schema')");
 }
 export function removeInboxSkillFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeScriptInboxFixtureMarkers(db, events);
   if (events.some((event) => event.event_type === "attention.deleted" || event.event_type === "skill.loaded") ||
     db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type') IN ('attention.deleted','skill.loaded') LIMIT 1").get()) {
     throw new Error("Generate genuine pre-99 history; deleted notifications and actual explicit skill loads cannot be relabelled or removed.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('session_inbox_schema','explicit_skill_load_schema')");
+}
+export function removeScriptInboxFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeRepositoryWorkflowFixtureMarkers(db, events);
+  if (hasScriptInboxHistory(events) ||
+    db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type')='script.review_approved' LIMIT 1").get()) {
+    throw new Error("Generate genuine pre-100 history; actual script Inbox/approval/tool failure history cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('script_review_inbox_schema','tool_failure_schema')");
+}
+export function removeRepositoryWorkflowFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasRepositoryWorkflowHistory(events) || db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type') IN ('repository.trust_recorded','repository.script_reserved','turn.recovery_entered') LIMIT 1").get()) {
+    throw new Error("Generate genuine pre-101 history; actual trust, default worktree intent and partial recovery cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('repository_trust_schema','project_workflow_defaults_schema','partial_tool_recovery_schema')");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);

@@ -12,6 +12,7 @@ import type { IntegrationOptions } from "../apps/service/src/project-integration
 import type { GithubScope } from "../packages/protocol/src/github-workflows.ts";
 import { defaultBoard, MoguriError } from "../packages/protocol/src/index.ts";
 import { generatedNodeSupervision } from "./fixture.ts";
+import { appendLegacyProjectSession } from "./fixtures/legacy-state.ts";
 
 export async function connectGithubSdk(sdk: MoguriSdk): Promise<void> {
   await sdk.connect();
@@ -60,7 +61,7 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
     generatedNodeSupervision(service);
     sdk = new MoguriSdk(service.connection); await connectGithubSdk(sdk);
     const projectId = (await sdk.command({ type: "project.add", path: root })).id!;
-    const sessionId = (await sdk.sessions.create(projectId, "Generated GitHub workflow")).id!;
+    const sessionId = (await appendLegacyProjectSession(sdk, service.controller, projectId, "Generated GitHub workflow")).id;
     const scope: GithubScope = { env: "Local", projectId, sessionId };
     const session = () => sdk!.getState().snapshot!.sessions.find((value) => value.id === sessionId)!;
     return { directory, root, remote, hooks, stateDir, service, sdk, scope, projectId, sessionId, session, git, bare, githubProgram: options.runProgram,

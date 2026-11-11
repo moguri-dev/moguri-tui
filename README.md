@@ -103,6 +103,19 @@ Go; mutable installs remain private and executable builds are not implied.
 Desktop exposes the same APIs under Settings; shared `/git`, `/github`, `/linear`,
 `/knowledge`, `/hooks`, `/marketplace` and `/cache` commands reach TUI/CLI.
 
+Protocol100 moves [repository-script assessments to Inbox](docs/setup.md#work-item-comments-and-repository-scripts)
+with collapsible source and explicit user approval, separate from execution.
+Startup shows the original mascot on black with an optional Space-to-flap game.
+Inline code stays plain text; fenced blocks keep explicit copy controls.
+Missing files say **Not Found**, and provider failures retain their redacted diagnostic.
+
+Protocol101 adds [explicit repo trust, worktree/PR defaults and recoverable output](docs/architecture/repository-workflow-defaults.md).
+Existing exact trusted script entrypoints skip model assessment, not approvals;
+new/package/generated scripts stay outside the baseline. New single-project
+Local Git tasks use managed worktrees and normally finish at a draft PR.
+Inbox has search and type/read filters. Qualified partial results can continue;
+uncertain effects retain enforced read-only recovery, never false success.
+
 Protocol96 added [original-owner startup reconnect](docs/setup.md#opening-and-last-view-restoration)
 and a default-on option to keep agents working when the last window closes.
 Explicit Quit still stops the service and known user terminals. Startup
@@ -121,7 +134,7 @@ Protocol94 added [authenticated GitHub search and composer fixes](docs/setup.md#
 private-repository reads use the actual configured account, provider tool IDs
 are assigned before ownership is retained, and one Enter sends one ordinary
 message even during autosave. Autonomy settings are beside their choices;
-profile-wide command families and inline/fenced snippet copy controls share
+profile-wide command families and fenced-code copy controls share
 the existing policy and clipboard paths.
 It preserves protocol93 [retained PR CI watches](docs/setup.md#retained-pull-request-ci-watches):
 exact account/root/head ownership, cross-view deduplication, historical
@@ -490,6 +503,8 @@ requires retain, export-then-delete or delete; ordinary documents survive sessio
 retention. Candidate/proposal reports are the explicit session-owned exception.
 Real structured clarifications record actual user answers and retain them by
 default, with an explicit opt-out. Answers never grant tool/Git permissions.
+Desktop [answer controls](docs/architecture/session-interactions.md#direct-question-answers)
+use a scrollable choice list and a blank Other field that sends on Enter.
 Documents can associate with profile folders and project work items. Explicit
 reviewed repository copies preserve complete history under `artifacts/`, with an
 optional new local Git branch. No checkout, push or unrelated staging changes;

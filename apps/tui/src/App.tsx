@@ -1570,7 +1570,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             <text id="tui-status-env" width={inlineControls ? "50%" : "100%"} height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${safe(session.controls.modelId ?? "not set (/models)")}` : "Env Local | Model not set"}</text>
             <text id="tui-status-budget" width={inlineControls ? "50%" : "100%"} height={1} wrapMode="none" truncate fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
           </box>
-          {sessionStateVisible && <text height={1} wrapMode="none" truncate fg={["failed", "partial"].includes(session.status) ? colors.attention : colors.muted}>{`${session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${session.status}${session.queue.length ? ` | ${session.queue.length} queued` : ""}${session.kind === "side" ? " | main context per question" : ""}`}</text>}
+          {sessionStateVisible && <text height={1} wrapMode="none" truncate fg={["failed", "partial"].includes(session.status) || session.toolRecovery?.turnId === session.turnId ? colors.attention : colors.muted}>{`${session.toolRecovery?.turnId === session.turnId ? "read-only recovery" : session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${snapshot?.managedWorkspaces.some((workspace) => workspace.id === session.workspaceId && workspace.status === "creating") ? "preparing worktree" : session.status}${session.queue.length ? ` | ${session.queue.length} queued` : ""}${session.kind === "side" ? " | main context per question" : ""}`}</text>}
           {planVisible && <text height={1} wrapMode="none" truncate fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : `${taskProgress.progress?.checklist.completed}/${taskProgress.progress?.checklist.total}`} / estimate, 15s`)}</text>}
           {estimateVisible && <text height={1} wrapMode="none" truncate fg={colors.attention}>{safe(`Model estimate ${progressBar(estimateVisible.percent, 8)}${estimateVisible.stale ? " (stale)" : ""}${taskProgress.progress?.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>
@@ -1601,7 +1601,7 @@ export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, 
       <box id={`tui-tool-${message.id}`} height={1} onMouseDown={(event) => {
         if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); inspect(); setExpanded((value) => !value);
       }}><text height={1} wrapMode="none" truncate fg={important ? colors.attention : colors.muted}>
-        {safe(`${open ? "v" : ">"} ${call?.name ?? "Tool"} / ${message.outcome ?? "result"}  ${summary}${open ? "" : "  F2 details"}`)}
+        {safe(`${open ? "v" : ">"} ${call?.name ?? "Tool"} / ${message.errorCode === "not_found" ? "Not Found" : message.outcome ?? "result"}  ${summary}${open ? "" : "  F2 details"}`)}
       </text></box>
       {open && <text fg={important ? colors.attention : colors.muted}>{safe(message.text || "No text output.")}</text>}
       {documents}
