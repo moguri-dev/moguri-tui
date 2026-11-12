@@ -235,12 +235,17 @@ test("actual native TUI qualifies the guest, prepares reviewed source, schedules
     assert.equal(decisions.length, 2);
     assert.ok(decisions.every((event) => event.event_type === "tool.decided" && event.payload.actor === "user" && event.payload.allow));
     assert.equal(await readFile(join(project, "fixture.txt"), "utf8"), "generated source original\n");
-    const execution = service.controller.snapshot().sandboxExecutions!.find((value) => value.sessionId === created.id)!;
+    const completed = service.controller.snapshot().sandboxExecutions!.find((value) => value.sessionId === created.id)!;
+    const after = await waitFor(() => service.controller.snapshot().checkpointCaptures.findLast((capture) =>
+      capture.turnId === completed.turnId && capture.phase === "after" && ["consumed", "failed", "partial"].includes(capture.status)), 30000);
+    assert.equal(after.status, "consumed", after.diagnostic ?? "The original terminal capture must complete before source publication.");
+    const execution = service.controller.snapshot().sandboxExecutions!.find((value) => value.id === completed.id)!;
     const review = (await sdk.sandbox.publicationPreview(execution.id, ["fixture.txt"])).preview;
     await slash(`/sandbox publish ${JSON.stringify({ executionId: execution.id, paths: ["fixture.txt"], expectedDigest: review.digest, expectedRevision: execution.revision })} confirm-publish`, '"sandbox.publication"');
     assert.equal(service.controller.snapshot().sandboxPublications?.[0]?.status, "completed");
     assert.equal(await readFile(join(project, "fixture.txt"), "utf8"), "generated native replacement\n");
-    assert.equal(session().usage.length, 3); assert.equal(provider.requests.length, 0); passed = true;
+    assert.deepEqual(session().usage.map((usage) => usage.role), ["solver", "solver", "solver", "title"]);
+    assert.equal(provider.requests.length, 0); passed = true;
   } finally { await closeTui(root, setup, sdk, () => fixture.close(passed)); }
 });
 
