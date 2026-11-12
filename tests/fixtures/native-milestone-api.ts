@@ -47,6 +47,12 @@ export async function nativeMilestoneFixture(configuration: SandboxConfiguration
     await sdk.settings.update({ ...settings.values, sandbox: fixture.reviewedConfiguration,
       sandboxManagement: { ...defaultSandboxManagement(), enabled: true, automaticUpdates: false } }, settings.revision);
     await fixture.qualify();
+    const qualified = sdk.settings.get()!;
+    assert.ok(qualified.values.sandbox.qualification);
+    await sdk.settings.update({ ...qualified.values, sandbox: { ...qualified.values.sandbox,
+      qualification: { ...qualified.values.sandbox.qualification, allowedDomains: [], allowCopilot: true } } }, qualified.revision);
+    await sdk.sandbox.probe(); await sdk.refresh();
+    assert.equal(service.controller.sandbox.readiness.ready, true);
     const original = fixture.provider.provider.prepare.bind(fixture.provider.provider);
     fixture.provider.provider.state = { ...fixture.provider.provider.state,
       models: [...fixture.provider.provider.state.models, ...solver.provider.state.models] };

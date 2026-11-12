@@ -11,13 +11,17 @@ import { reviewNativeTools, waitFor } from "./fixture.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
 import { generatedDocx } from "./fixtures/documents.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
-import { configureMilestoneRouting, milestoneAxes, milestoneResponses } from "./fixtures/milestone-combinations.ts";
+import { configureMilestoneRouting, milestoneAxes, milestoneCellId, milestoneCalls, milestoneResponses } from "./fixtures/milestone-combinations.ts";
+import { nativeConfiguration } from "./fixtures/native-target.ts";
+import { nativeMilestoneFixture } from "./fixtures/native-milestone-api.ts";
 
-for (const env of ["Local", "Remote"] as const) for (const selection of milestoneAxes.selection)
+const native = await nativeConfiguration(true);
+for (const env of ["Local", "Remote", "Sandbox"] as const) for (const selection of milestoneAxes.selection)
 test(`actual TUI ${env}/${selection} applies exact controls and a warned combined cap, then approves only selected document access`, {
-  skip: process.platform !== "darwin", timeout: 45000,
+  skip: process.platform !== "darwin" || env === "Sandbox" && !native, timeout: 45000,
 }, async () => {
-  const fixture = await routedFixture({ env, legacy: false, configured: false, reasoningRoles: true, imageInput: true, toolInput: true });
+  const fixture = env === "Sandbox" ? await nativeMilestoneFixture(native!) :
+    await routedFixture({ env, legacy: false, configured: false, reasoningRoles: true, imageInput: true, toolInput: true });
   let terminal: Awaited<ReturnType<typeof createTestRenderer>> | undefined;
   let root: ReturnType<typeof createRoot> | undefined;
   try {
@@ -28,9 +32,10 @@ test(`actual TUI ${env}/${selection} applies exact controls and a warned combine
     const path = join(fixture.directory, "generated-tui-matrix.docx");
     await writeFile(path, generatedDocx());
     const document = await fixture.sdk.attachments.document(fixture.sessionId, path);
-    const observed = milestoneResponses(fixture, {
+    const cell = {
       env, selection, autonomy: "Manual", budget: "both", window: "half", effort: "high", input: "document",
-    }, document.id!);
+    } as const;
+    const observed = milestoneResponses(fixture, cell, document.id!);
     const ui = terminal = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false });
     const rendered = root = createRoot(ui.renderer);
     const frame = async (text: string) => {
@@ -55,20 +60,21 @@ test(`actual TUI ${env}/${selection} applies exact controls and a warned combine
     }
     assert.deepEqual(fixture.session().controls.modelOptions, { contextWindow: 16384, thinkingEffort: "high" });
     assert.equal(observed.length, 0);
-    await ui.mockInput.typeText("Generated actual TUI matrix document question.");
+    await ui.mockInput.typeText(`Generated actual TUI matrix document question. ${milestoneCellId(cell)}`);
     ui.mockInput.pressEnter({ ctrl: true, shift: true });
     const approval = await waitFor(() => fixture.session().pendingApproval, 20000);
     assert.equal(approval.call.name, "read_document");
     await frame("Approval required: read_document");
     assert.equal(fixture.service.controller.events(0).some((event) => event.event_type === "tool.started"), false);
     ui.mockInput.pressKey("y", { ctrl: true });
-    await fixture.terminal();
+    await waitFor(() => !fixture.session().turnId && ["completed", "failed", "partial"].includes(fixture.session().status), 20000);
     assert.equal(fixture.session().status, "completed", fixture.session().lastError ?? "");
     await frame("Generated selected milestone response.");
-    assert.ok(observed.every((call) => call.request.reasoning_effort === "high"));
+    const calls = await milestoneCalls(fixture, observed);
+    assert.ok(calls.length > 0 && calls.every((call) => call.request.reasoning_effort === "high"));
     const events = fixture.service.controller.events(0);
     assert.equal(events.filter((event) => event.event_type === "tool.decided" && event.payload.actor === "user").length, 1);
-    assert.equal((await fixture.sdk.budgets.status(fixture.sessionId)).status.totals.knownReportedTokens, observed.length * 42);
+    assert.equal((await fixture.sdk.budgets.status(fixture.sessionId)).status.totals.knownReportedTokens, calls.length * 42);
     assert.equal(fixture.session().controls.env, env);
   } finally {
     if (root && terminal) await closeTui(root, terminal, fixture.sdk, () => fixture.close());

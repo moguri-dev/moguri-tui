@@ -1,7 +1,9 @@
-import { defaultKupoSettings, defaultSingleKupoSettings, type Controls } from "../../packages/sdk/src/index.ts";
+import assert from "node:assert/strict";
+import { defaultKupoSettings, defaultSingleKupoSettings, isRecord, type Controls } from "../../packages/sdk/src/index.ts";
 import { routedFixture } from "./single-routing.ts";
 import { generatedKupoProfile } from "./kupo-profiles.ts";
 import { milestoneResponder } from "./milestone-response.ts";
+import { waitFor } from "../fixture.ts";
 
 export const milestoneAxes = {
   env: ["Local", "Remote", "Sandbox"],
@@ -62,6 +64,26 @@ export function milestoneResponses(fixture: MilestoneFixture, cell: MilestoneCel
     return respond(request);
   };
   return observed;
+}
+
+export async function milestoneCalls(fixture: MilestoneFixture, observed: Array<{ modelId: string; request: Record<string, unknown> }>) {
+  if (fixture.session().controls.env !== "Sandbox") return observed;
+  assert.equal(observed.length, 0); assert.equal(fixture.requests.length + fixture.solver.requests.length, 0);
+  const execution = await waitFor(() => fixture.service.controller.snapshot().sandboxExecutions?.find((entry) =>
+    entry.sessionId === fixture.sessionId && entry.cleanup === "owned-guest-stopped" && !fixture.service.controller.sandbox.owns(entry.id)), 15000);
+  const result = (await fixture.sdk.sandbox.result(execution.id)).result;
+  assert.equal(result?.journal.status, "verified");
+  assert.deepEqual(execution.networkScope?.allowedDomains, ["api.githubcopilot.com"]);
+  const witness = result?.files.find((file) => file.path === "generated-native-matrix.json");
+  assert.ok(witness);
+  const proof: unknown = JSON.parse(witness.text);
+  assert.ok(isRecord(proof) && Array.isArray(proof.calls));
+  assert.equal(proof.platform, "linux"); assert.ok(Number.isSafeInteger(proof.uid) && Number(proof.uid) > 0);
+  assert.equal(proof.runId, execution.id);
+  return proof.calls.map((call) => {
+    assert.ok(isRecord(call) && typeof call.modelId === "string" && isRecord(call.request));
+    return { modelId: call.modelId, request: call.request };
+  });
 }
 
 export async function configureMilestoneRouting(fixture: MilestoneFixture, selection: MilestoneCell["selection"]) {

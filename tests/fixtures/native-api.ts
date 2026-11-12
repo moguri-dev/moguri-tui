@@ -49,7 +49,13 @@ export async function nativeApiFixture(configuration: SandboxConfiguration, opti
       return outcome;
     };
     return { root, state, project, home, provider, service, sdk, runtimeOptions, reviewedConfiguration, qualify, close: async (passed: boolean) => {
-      sdk.disconnect(); await service.close(); await provider.close();
+      sdk.disconnect();
+      const cleanup = await Promise.allSettled([service.close(), provider.close()]);
+      const failures = cleanup.filter((result) => result.status === "rejected").map((result) => result.reason);
+      if (failures.length) {
+        console.error("Generated native cleanup diagnostics retained:", root);
+        throw new AggregateError(failures, `Original native cleanup is unconfirmed; retained ${root}.`);
+      }
       if (passed) await rm(root, { recursive: true, force: true });
       else console.error("Generated native service diagnostics retained:", root);
     } };

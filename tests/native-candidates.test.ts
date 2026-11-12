@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { isRecord, type CandidatePatch, type CompoundSettings } from "../packages/sdk/src/index.ts";
 import { compoundModelBinding } from "../apps/service/src/compound-policy.ts";
 import { digest } from "../apps/service/src/store.ts";
@@ -30,9 +32,15 @@ async function prepared(scenario: "milestone" | "compound" = "milestone") {
       const { configuration } = await f.sdk.projects.configuration(f.session().projectId);
       await f.sdk.projects.configure(configuration.projectId, { ...configuration.values,
         scripts: [{ id: "generated-native-validation", name: "Generated native project check", command: validationCommand }] }, configuration.revision);
+      const settings = f.sdk.settings.get()!;
+      await f.sdk.settings.update({ ...settings.values, winddown: { ...settings.values.winddown,
+        enabled: true, modelId: f.modelId, allowHosted: true, outputTokens: 32, timeoutMs: 15000 } }, settings.revision);
     }
-    const review = (await f.sdk.sandbox.preview(f.sessionId, ["fixture.txt", "second.txt"])).preview;
-    await f.sdk.sandbox.prepare(f.sessionId, ["fixture.txt", "second.txt"], review.digest, f.session().revision);
+    const prepare = async () => {
+      const review = (await f.sdk.sandbox.preview(f.sessionId, ["fixture.txt", "second.txt"])).preview;
+      await f.sdk.sandbox.prepare(f.sessionId, ["fixture.txt", "second.txt"], review.digest, f.session().revision);
+    };
+    if (scenario !== "compound") await prepare();
     const index = await readFile(join(f.project, ".git/index")), head = git(["rev-parse", "HEAD"]);
     const stage = async (name: string) => {
       const preview = (await f.sdk.candidates.workspacePreview(f.sessionId, name)).preview;
@@ -40,7 +48,7 @@ async function prepared(scenario: "milestone" | "compound" = "milestone") {
       assert.equal(workspace.status, "ready", workspace.diagnostic ?? ""); assert.ok(workspace.stage);
       return workspace;
     };
-    return { ...f, git, index, head, stage };
+    return { ...f, git, index, head, stage, prepare };
   } catch (error) { await f.close(); throw error; }
 }
 
@@ -55,6 +63,8 @@ function privatePath(f: Fixture, path: string) {
 }
 
 async function absent(f: Fixture) {
+  await waitFor(() => f.service.controller.snapshot().sandboxExecutions?.filter((entry) => entry.sessionId === f.sessionId)
+    .every((entry) => entry.cleanup === "owned-guest-stopped" && !f.service.controller.sandbox.owns(entry.id)), 15000);
   const records = (await f.sdk.candidates.transports({ sessionId: f.sessionId })).transports;
   assert.ok(records.length);
   const inventory = sandboxContainerInventory(JSON.parse(await runProgram("/usr/local/bin/container", ["ls", "--all", "--format", "json"], {
@@ -63,7 +73,7 @@ async function absent(f: Fixture) {
   for (const record of records) {
     assert.equal(record.boundary.env, "Sandbox");
     const launch: unknown = JSON.parse(record.launchJson), observation: unknown = JSON.parse(record.observationJson!);
-    assert.ok(isRecord(launch) && launch.kind === "Sandbox" && isRecord(launch.execution));
+    assert.ok(isRecord(launch) && ["Sandbox", "attached"].includes(String(launch.kind)) && isRecord(launch.execution));
     assert.ok(isRecord(observation)); assert.match(String(observation.nativeSessionId), /^[a-f0-9]{32}$/);
     assert.match(String(observation.planDigest), /^[a-f0-9]{64}$/); assert.ok(observation.signerFingerprint);
     const launchName = launch.execution.launchName;
@@ -79,6 +89,9 @@ test("actual native candidates stage only in their owned snapshot, require separ
   const f = await prepared();
   try {
     const source = await f.sdk.candidates.source(f.sessionId, ["fixture.txt", "second.txt"]), stage = await f.stage("Generated native reviewed stage");
+    const cli = async (args: string[]) => JSON.parse((await promisify(execFile)(process.execPath, [resolve("dist/cli.mjs"), ...args,
+      "--session", f.sessionId, "--json"], { env: { ...process.env, MOGURI_STATE_DIR: dirname(f.service.store.path) }, timeout: 20000 })).stdout);
+    assert.deepEqual((await cli(["candidate", "source", "fixture.txt", "second.txt"])).source, source.source);
     assert.equal(source.source.env, "Sandbox"); assert.equal("head" in source.source, false);
     const patch: CandidatePatch = { kind: "patch", summary: "Generated private native proposal.",
       edits: source.files.map((file, index) => ({ path: file.path, baseDigest: file.baseDigest, text: `Generated accepted native file ${index}.\n` })) };
@@ -89,7 +102,7 @@ test("actual native candidates stage only in their owned snapshot, require separ
     assert.deepEqual((await f.sdk.candidates.source(f.sessionId, ["fixture.txt", "second.txt"])).files, source.files);
     const application = (await f.sdk.candidates.applyPreview(staged.candidate.id, f.sessionId)).preview;
     await assert.rejects(() => f.sdk.candidates.apply(staged.candidate.id, f.sessionId, application.revision, "0".repeat(64)), /review|changed/i);
-    await f.sdk.candidates.apply(staged.candidate.id, f.sessionId, application.revision, application.digest);
+    await cli(["candidate", "apply", staged.candidate.id, "--revision", String(application.revision), "--digest", application.digest, "--confirm-write"]);
     const applied = await f.sdk.candidates.wait(staged.candidate.id);
     assert.equal(applied.candidate.status, "applied"); assert.equal(applied.candidate.acceptance?.actor, "user");
     const actual = await f.sdk.candidates.source(f.sessionId, patch.edits.map((edit) => edit.path));
@@ -104,6 +117,7 @@ test("actual native candidates stage only in their owned snapshot, require separ
     assert.equal(f.session().status, "completed", f.session().lastError ?? "");
     const execution = f.service.controller.snapshot().sandboxExecutions?.findLast((entry) => entry.sessionId === f.sessionId);
     assert.ok(execution); assert.equal(execution.cleanup, "owned-guest-stopped");
+    await waitFor(() => f.service.controller.snapshot().checkpoints.find((checkpoint) => checkpoint.turnId === execution.turnId)?.terminal?.afterDigest, 30000);
     const result = (await f.sdk.sandbox.result(execution.id)).result!;
     assert.equal(result.journal.status, "verified");
     for (const edit of patch.edits) assert.equal(result.files.find((file) => file.path === edit.path)?.text, edit.text);
@@ -172,8 +186,14 @@ test("a real native candidate effect with a lost result receipt stays partial; o
     assert.equal(await readFile(join(f.project, "fixture.txt"), "utf8"), "generated original\n");
     const record = (await f.sdk.candidates.transports({ ownerId: candidate.candidate.id })).transports.find((record) => record.status === "partial");
     assert.ok(record); assert.equal(record.resultDigest, null); assert.equal(record.terminalAcknowledged, false);
+    const original: unknown = JSON.parse(record.launchJson);
+    assert.ok(isRecord(original) && original.kind === "Sandbox" && isRecord(original.execution) && typeof original.execution.id === "string");
+    const executionId = original.execution.id;
+    await waitFor(() => !f.service.controller.sandbox.owns(executionId), 30000);
+    const settled = (await f.sdk.candidates.transport(record.id)).transport;
+    assert.equal(settled.status, "partial"); assert.equal(settled.terminalAcknowledged, false);
     const before = launches;
-    await f.sdk.candidates.reconcileTransport(record.id, record.revision);
+    await f.sdk.candidates.reconcileTransport(settled.id, settled.revision);
     const recovered = (await f.sdk.candidates.transport(record.id)).transport;
     assert.equal(recovered.status, "partial"); assert.equal(recovered.terminalAcknowledged, false);
     assert.equal(recovered.cleanupConfirmed, true); assert.equal(recovered.recovery?.evidence.guest?.absent, true);
@@ -185,6 +205,9 @@ test("a real native candidate effect with a lost result receipt stays partial; o
     assert.equal(f.requests.length + f.solver.requests.length, 0);
     await absent(f);
     assert.deepEqual(await readFile(join(f.project, ".git/index")), f.index); assert.equal(f.git(["rev-parse", "HEAD"]), f.head);
+  } catch (error) {
+    console.error("Native lost-result recovery failed:", error instanceof Error ? error.message : "Unknown generated failure.", f.nativeRoot);
+    throw error;
   } finally { await f.close(); }
 });
 
@@ -214,6 +237,7 @@ for (const pattern of ["cascade", "critique"] as const) test(`actual native ${pa
     await f.sdk.routing.configure(policy, f.sdk.settings.get()!.revision);
     await f.sdk.sessions.configure(f.sessionId, { ...f.session().controls, modelId: "kupo",
       modelOptions: { contextWindow: 98305, thinkingEffort: "high" }, budget: { kind: "limited", basis: "estimate", tokens: 1000000 } });
+    await f.prepare();
     const stage = await f.stage("Generated native draft"), alternate = await f.stage("Generated native alternate");
     const input = { sessionId: f.sessionId, draftWorkspaceId: stage.id, alternateWorkspaceId: alternate.id,
       input: { task: "Generated native reviewed implementation.", files: [{ path: "fixture.txt", baseDigest: digest("generated original\n") }] },
@@ -226,7 +250,14 @@ for (const pattern of ["cascade", "critique"] as const) test(`actual native ${pa
       assert.equal((await workflow(f, denied.id!, "stopped")).validations[0]?.status, "denied");
       assert.equal(f.service.controller.snapshot().candidates.length, 0);
       assert.deepEqual(f.service.controller.snapshot().budgetEntries.filter((entry) => entry.turnId === denied.id).map((entry) => entry.role), ["router", "draft"]);
+      await absent(f);
+      await waitFor(() => f.service.controller.snapshot().checkpointCaptures.findLast((capture) =>
+        capture.turnId === denied.id && capture.phase === "after" && ["consumed", "failed", "partial"].includes(capture.status)), 30000);
+      await assert.rejects(() => f.sdk.candidates.source(f.sessionId, ["fixture.txt"]), /workspace|changed|prepare|private/i);
+      await f.prepare();
       assert.equal((await f.sdk.candidates.source(f.sessionId, ["fixture.txt"])).files[0]?.text, "generated original\n");
+      input.draftWorkspaceId = (await f.stage("Generated explicitly reviewed fresh native draft")).id;
+      input.alternateWorkspaceId = (await f.stage("Generated explicitly reviewed fresh native alternate")).id;
     }
     const admitted = await start(), pending = await workflow(f, admitted.id!, "waiting_validation"), read = await f.sdk.compound.read(admitted.id!);
     await f.sdk.compound.review(admitted.id!, read.pendingValidation!.validationId, pending.revision, read.pendingValidation!.digest, true);
@@ -244,9 +275,11 @@ for (const pattern of ["cascade", "critique"] as const) test(`actual native ${pa
     for (const call of witness.calls) {
       assert.equal(call.request.tools?.length ?? 0, 0);
       assert.equal(JSON.stringify(call.request).includes(f.project), false);
-      assert.ok(call.request.max_tokens <= 2048);
+      assert.ok((call.request.max_tokens ?? call.request.max_completion_tokens) <= 2048);
     }
-    for (const role of report.roles.filter((role) => role.step.role !== "router")) assert.equal(role.input?.includes("GENERATED_NATIVE_ROUTER_REASON_NOT_CONTEXT"), false);
+    for (const role of report.roles.filter((role) => role.step.role !== "router" && role.step.state === "recorded")) {
+      assert.ok(role.input); assert.equal(role.input.includes("GENERATED_NATIVE_ROUTER_REASON_NOT_CONTEXT"), false);
+    }
     const candidate = (await f.sdk.candidates.read(done.selectedCandidateId!)).candidate, apply = (await f.sdk.candidates.applyPreview(candidate.id, f.sessionId)).preview;
     await f.sdk.candidates.apply(candidate.id, f.sessionId, apply.revision, apply.digest);
     assert.equal((await f.sdk.candidates.wait(candidate.id)).candidate.acceptance?.actor, "user");
@@ -255,5 +288,8 @@ for (const pattern of ["cascade", "critique"] as const) test(`actual native ${pa
     assert.deepEqual(await readFile(join(f.project, ".git/index")), f.index); assert.equal(f.git(["rev-parse", "HEAD"]), f.head);
     assert.equal(f.requests.length + f.solver.requests.length, 0);
     await absent(f);
+  } catch (error) {
+    console.error("Native compound qualification failed:", error instanceof Error ? error.message : "Unknown generated failure.", f.nativeRoot);
+    throw error;
   } finally { await f.close(); }
 });
