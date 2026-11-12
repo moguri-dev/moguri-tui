@@ -65,11 +65,12 @@ export async function homeCommand(sdk: MoguriSdk, sessionId: string, command: st
 
 export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 8000): Promise<NonNullable<T>> {
   const deadline = Date.now() + timeout;
-  do {
+  for (;;) {
     const value = read();
     if (value) return value;
+    if (Date.now() >= deadline) break;
     await new Promise((resolve) => setTimeout(resolve, 15));
-  } while (Date.now() < deadline);
+  }
   throw new Error("Generated fixture condition did not settle before the deadline.");
 }
 export interface GeneratedProviderOptions {
