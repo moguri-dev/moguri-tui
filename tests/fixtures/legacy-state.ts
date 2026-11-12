@@ -11,6 +11,7 @@ import { hasMyWorkHistory } from "../../packages/protocol/src/my-work.ts";
 import { hasBackgroundServiceHistory } from "../../packages/protocol/src/application.ts";
 import { hasScriptInboxHistory } from "../../packages/protocol/src/script-reviews.ts";
 import { hasRepositoryWorkflowHistory } from "../../packages/protocol/src/repository-trust.ts";
+import { hasNativeCandidateIdentityHistory } from "../../packages/protocol/src/candidate-workspaces.ts";
 
 export async function appendLegacyProjectFreeSession(client: MoguriSdk, control: ControlPlane, title: string): Promise<{ id: string }> {
   const snapshot = control.snapshot(), settings = snapshot.settings;
@@ -210,10 +211,15 @@ export function removeScriptInboxFixtureMarkers(db: DatabaseSync, events: readon
   db.exec("DELETE FROM retention_metadata WHERE id IN ('script_review_inbox_schema','tool_failure_schema')");
 }
 export function removeRepositoryWorkflowFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeNativeCandidateIdentityFixtureMarker(db, events);
   if (hasRepositoryWorkflowHistory(events) || db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type') IN ('repository.trust_recorded','repository.script_reserved','turn.recovery_entered') LIMIT 1").get()) {
     throw new Error("Generate genuine pre-101 history; actual trust, default worktree intent and partial recovery cannot be relabelled.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('repository_trust_schema','project_workflow_defaults_schema','partial_tool_recovery_schema')");
+}
+export function removeNativeCandidateIdentityFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasNativeCandidateIdentityHistory(events)) throw new Error("Generate genuine pre-102 history; actual private-root grants cannot become historical VM identities.");
+  db.exec("DELETE FROM retention_metadata WHERE id='native_candidate_identity_schema'");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);

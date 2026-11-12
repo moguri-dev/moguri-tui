@@ -29,10 +29,10 @@ export async function nativeConfiguration(preserveReviewedNetwork = false): Prom
       resources },
   });
 }
-export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone",
+export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone" | "compound",
   behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" | "recover-once"): Promise<string[]> {
   const prefix = `globalThis.MOGURI_GENERATED_NATIVE_MODEL=${JSON.stringify(modelId)};globalThis.MOGURI_GENERATED_NATIVE_BASE=${JSON.stringify(baseUrl)};${scenario ? `globalThis.MOGURI_GENERATED_NATIVE_SCENARIO=${JSON.stringify(scenario)};` : ""}${behavior ? `globalThis.MOGURI_GENERATED_NATIVE_BEHAVIOR=${JSON.stringify(behavior)};` : ""}\n`;
-  const source = prefix + await readFile(new URL(behavior === "recover-once" ? "./native-retry-provider.mjs" : scenario === "milestone" ? "./native-milestone-provider.mjs" : scenario === "checkpoint" ? "./native-checkpoint-provider.mjs" : scenario ? "./native-decisions-provider.mjs" :
+  const source = prefix + await readFile(new URL(behavior === "recover-once" ? "./native-retry-provider.mjs" : scenario === "compound" ? "./native-compound-provider.mjs" : scenario === "milestone" ? "./native-milestone-provider.mjs" : scenario === "checkpoint" ? "./native-checkpoint-provider.mjs" : scenario ? "./native-decisions-provider.mjs" :
     group ? "./native-group-provider.mjs" : "./native-provider.mjs", import.meta.url), "utf8");
   const code = (await transform(source, { minify: true, format: "esm", target: "node26" })).code;
   const modules = scenario === "milestone" ? [(await build({

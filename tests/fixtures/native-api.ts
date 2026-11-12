@@ -14,7 +14,7 @@ const generatedModelDns: SandboxDns = { addresses: async () => ["1.1.1.1"], alia
 
 export async function nativeApiFixture(configuration: SandboxConfiguration, options: { providerBaseUrl?: string; dns?: SandboxDns; distribution?: string; group?: boolean; intakeClock?: IntakeClock;
   providerOptions?: GeneratedProviderOptions;
-  scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone"; behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" | "recover-once" } = {}) {
+  scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone" | "compound"; behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" | "recover-once" } = {}) {
   assert.ok(configuration.qualification);
   await mkdir(".native/qualification", { recursive: true, mode: 0o700 });
   const root = await realpath(await mkdtemp(".native/qualification/native-service-")), state = join(root, "state"), project = join(root, "project"), home = join(root, "home");

@@ -9,7 +9,7 @@ import { fixtureProvider, type GeneratedProviderOptions } from "../fixture.ts";
 import { nativeApiFixture } from "./native-api.ts";
 import type { MilestoneFixture } from "./milestone-combinations.ts";
 
-export async function nativeMilestoneFixture(configuration: SandboxConfiguration): Promise<MilestoneFixture & { state: string; nativeRoot: string }> {
+export async function nativeMilestoneFixture(configuration: SandboxConfiguration, scenario: "milestone" | "compound" = "milestone"): Promise<MilestoneFixture & { state: string; nativeRoot: string }> {
   const workloadPath = process.env.MOGURI_NATIVE_WORKLOAD, distributionPath = process.env.MOGURI_SANDBOX_DISTRIBUTION;
   assert.ok(workloadPath && distributionPath && configuration.qualification);
   const workload: unknown = JSON.parse(await readFile(workloadPath, "utf8"));
@@ -28,11 +28,11 @@ export async function nativeMilestoneFixture(configuration: SandboxConfiguration
       `The physical milestone fixture cannot use stale payload bytes: ${path}`);
   }
   assert.equal(createHash("sha256").update(JSON.stringify(actual)).digest("hex"), definition.distribution.worker.payloadDigest);
-  const capabilities = { maxOutputTokens: 128, reasoning: true, contextWindow: 32768,
+  const capabilities = { maxOutputTokens: scenario === "compound" ? 8192 : 128, reasoning: true, contextWindow: scenario === "compound" ? 262144 : 32768,
     thinkingLevelMap: { xhigh: "xhigh", max: "max" }, imageInput: true, toolInput: true, exposeModels: true } as const;
   const options: GeneratedProviderOptions = { ...capabilities, modelId: "generated-native-matrix-reviewer" };
   const solverOptions: GeneratedProviderOptions = { ...capabilities, modelId: "generated-routed-solver-api" };
-  const fixture = await nativeApiFixture(configuration, { scenario: "milestone", providerOptions: options });
+  const fixture = await nativeApiFixture(configuration, { scenario, providerOptions: options });
   const { sdk, service } = fixture;
   let ownedSolver: Awaited<ReturnType<typeof fixtureProvider>> | undefined, ownedDirectory: string | undefined;
   const close = async () => {
