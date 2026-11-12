@@ -89,11 +89,7 @@ test("actual native candidates stage only in their owned snapshot, require separ
     assert.deepEqual((await f.sdk.candidates.source(f.sessionId, ["fixture.txt", "second.txt"])).files, source.files);
     const application = (await f.sdk.candidates.applyPreview(staged.candidate.id, f.sessionId)).preview;
     await assert.rejects(() => f.sdk.candidates.apply(staged.candidate.id, f.sessionId, application.revision, "0".repeat(64)), /review|changed/i);
-    await f.sdk.command({ type: "policy.set", allowedEnvs: ["Local", "Remote"] });
-    await assert.rejects(() => f.sdk.candidates.apply(staged.candidate.id, f.sessionId, application.revision, application.digest), /policy|allowed|environment|denied/i);
-    await f.sdk.command({ type: "policy.set", allowedEnvs: ["Local", "Sandbox", "Remote"] });
-    const fresh = (await f.sdk.candidates.applyPreview(staged.candidate.id, f.sessionId)).preview;
-    await f.sdk.candidates.apply(staged.candidate.id, f.sessionId, fresh.revision, fresh.digest);
+    await f.sdk.candidates.apply(staged.candidate.id, f.sessionId, application.revision, application.digest);
     const applied = await f.sdk.candidates.wait(staged.candidate.id);
     assert.equal(applied.candidate.status, "applied"); assert.equal(applied.candidate.acceptance?.actor, "user");
     const actual = await f.sdk.candidates.source(f.sessionId, patch.edits.map((edit) => edit.path));
@@ -123,6 +119,30 @@ test("actual native candidates stage only in their owned snapshot, require separ
     assert.equal((await f.sdk.candidates.workspace(stage.id)).workspace.status, "ready");
     assert.equal(f.service.controller.snapshot().candidates.some((candidate) => candidate.id === staged.candidate.id), false);
     assert.equal((await f.sdk.sandbox.publication(published.publication.id)).publication.status, "completed");
+  } finally { await f.close(); }
+});
+
+test("revoked native policy denies an already reviewed candidate and restoring the allowed Env cannot revive its old workspace authority", {
+  skip: !native, timeout: 180000,
+}, async () => {
+  const f = await prepared();
+  try {
+    const source = await f.sdk.candidates.source(f.sessionId, ["fixture.txt"]), stage = await f.stage("Generated native policy-bound stage");
+    const patch: CandidatePatch = { kind: "patch", summary: "Generated native revocation boundary.",
+      edits: [{ path: "fixture.txt", baseDigest: source.files[0]!.baseDigest, text: "Generated never-accepted native proposal.\n" }] };
+    const preview = (await f.sdk.candidates.preview(f.sessionId, stage.id, patch)).preview;
+    const staged = await f.sdk.candidates.wait((await f.sdk.candidates.stage(f.sessionId, stage.id, patch, preview.digest)).id!);
+    const application = (await f.sdk.candidates.applyPreview(staged.candidate.id, f.sessionId)).preview;
+    await f.sdk.command({ type: "policy.set", allowedEnvs: ["Local", "Remote"] });
+    await assert.rejects(() => f.sdk.candidates.apply(staged.candidate.id, f.sessionId, application.revision, application.digest), /policy|allowed|environment|denied/i);
+    await f.sdk.command({ type: "policy.set", allowedEnvs: ["Local", "Sandbox", "Remote"] });
+    await assert.rejects(() => f.sdk.candidates.applyPreview(staged.candidate.id, f.sessionId), /prepare.*workspace|policy|changed/i);
+    assert.equal((await f.sdk.candidates.read(staged.candidate.id)).candidate.acceptance, null);
+    assert.equal(await readFile(join(workspace(f).stage.workspace, "fixture.txt"), "utf8"), "generated original\n");
+    assert.equal(await readFile(join(f.project, "fixture.txt"), "utf8"), "generated original\n");
+    assert.deepEqual(await readFile(join(f.project, ".git/index")), f.index);
+    assert.equal(f.service.controller.snapshot().budgetEntries.length, 0);
+    await absent(f);
   } finally { await f.close(); }
 });
 
