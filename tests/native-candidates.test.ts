@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { isRecord, type CandidatePatch, type CompoundSettings } from "../packages/sdk/src/index.ts";
+import { isRecord, type CandidatePatch, type Command, type CompoundSettings } from "../packages/sdk/src/index.ts";
 import { compoundModelBinding } from "../apps/service/src/compound-policy.ts";
 import { digest } from "../apps/service/src/store.ts";
 import { sandboxContainerInventory } from "../apps/service/src/apple-container.ts";
@@ -243,7 +243,23 @@ for (const pattern of ["cascade", "critique"] as const) test(`actual native ${pa
       input: { task: "Generated native reviewed implementation.", files: [{ path: "fixture.txt", baseDigest: digest("generated original\n") }] },
       requestPlan: "Generated reviewed plan.", requestArchitecture: "Generated reviewed architecture.",
       validationScriptId: "generated-native-validation", validationTimeoutMs: 10000 };
-    const start = async () => f.sdk.compound.start(input, (await f.sdk.compound.preview(input)).preview.digest, true);
+    const start = async () => {
+      const command: Command = { type: "compound.start", input: structuredClone(input),
+        expectedDigest: (await f.sdk.compound.preview(input)).preview.digest, confirmCost: true };
+      const commandId = randomUUID(), deadline = performance.now() + 90000;
+      try { return await f.sdk.command(command, commandId); }
+      catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "command_pending")) throw error;
+        console.error("Native compound start is still pending; inspecting only its original receipt:", commandId);
+        do {
+          const receipt = await f.sdk.commandReceipt(command, commandId);
+          if (receipt.status === "committed") { await f.sdk.refresh(); return receipt.result; }
+          if (receipt.status === "unknown") throw new Error("The original native compound start has no confirmed receipt. No write or model call was replayed.");
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        } while (performance.now() < deadline);
+        throw error;
+      }
+    };
     if (pattern === "critique") {
       const denied = await start(), pending = await workflow(f, denied.id!, "waiting_validation"), read = await f.sdk.compound.read(denied.id!);
       await f.sdk.compound.review(denied.id!, read.pendingValidation!.validationId, pending.revision, read.pendingValidation!.digest, false);
