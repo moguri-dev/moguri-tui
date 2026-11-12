@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { defaultKupoSettings, defaultSingleKupoSettings, isRecord, type Controls } from "../../packages/sdk/src/index.ts";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { defaultKupoSettings, defaultSingleKupoSettings, isRecord, type Controls, type SandboxExecution, type SandboxResult } from "../../packages/sdk/src/index.ts";
+import { readNativeCompletion } from "../../apps/service/src/native-evidence.ts";
 import { routedFixture } from "./single-routing.ts";
 import { generatedKupoProfile } from "./kupo-profiles.ts";
 import { milestoneResponder } from "./milestone-response.ts";
@@ -66,16 +69,32 @@ export function milestoneResponses(fixture: MilestoneFixture, cell: MilestoneCel
   return observed;
 }
 
+export async function nativeMilestoneWitness(execution: SandboxExecution, result: SandboxResult) {
+  assert.equal(execution.status, "completed"); assert.equal(execution.cleanup, "owned-guest-stopped");
+  assert.equal(result.executionId, execution.id); assert.equal(result.journal.status, "verified");
+  assert.ok(execution.nativeSessionId && execution.planDigest && execution.signerFingerprint);
+  assert.equal(result.nativeSessionId, execution.nativeSessionId);
+  const evidence = await readNativeCompletion({ stateRoot: join(homedir(), ".sendbox", "run"), sessionId: execution.nativeSessionId,
+    workspace: execution.stage.workspace, image: execution.image, command: { program: execution.command[0]!, arguments: execution.command.slice(1) },
+    createdAfter: execution.createdAfter, createdBefore: execution.createdBefore, planDigest: execution.planDigest, signerFingerprint: execution.signerFingerprint });
+  for (const key of ["beforeId", "afterId", "auditDigest", "planDigest", "signerFingerprint", "afterBinding", "rollback", "exitCode"] as const) {
+    assert.deepEqual(evidence[key], result[key], "Qualification cannot adopt a different original native result.");
+  }
+  assert.equal(evidence.exitCode, 0);
+  const file = await evidence.read("generated-native-matrix.json", 2 * 1024 * 1024);
+  return { text: new TextDecoder("utf-8", { fatal: true }).decode(file.content), digest: file.digest, bytes: file.content.length,
+    auditDigest: evidence.auditDigest, afterId: evidence.afterId };
+}
+
 export async function milestoneCalls(fixture: MilestoneFixture, observed: Array<{ modelId: string; request: Record<string, unknown> }>) {
   if (fixture.session().controls.env !== "Sandbox") return observed;
   assert.equal(observed.length, 0); assert.equal(fixture.requests.length + fixture.solver.requests.length, 0);
   const execution = await waitFor(() => fixture.service.controller.snapshot().sandboxExecutions?.find((entry) =>
     entry.sessionId === fixture.sessionId && entry.cleanup === "owned-guest-stopped" && !fixture.service.controller.sandbox.owns(entry.id)), 15000);
   const result = (await fixture.sdk.sandbox.result(execution.id)).result;
-  assert.equal(result?.journal.status, "verified");
+  assert.ok(result); assert.equal(result.journal.status, "verified");
   assert.deepEqual(execution.networkScope?.allowedDomains, ["api.githubcopilot.com"]);
-  const witness = result?.files.find((file) => file.path === "generated-native-matrix.json");
-  assert.ok(witness);
+  const witness = await nativeMilestoneWitness(execution, result);
   const proof: unknown = JSON.parse(witness.text);
   assert.ok(isRecord(proof) && Array.isArray(proof.calls));
   assert.equal(proof.platform, "linux"); assert.ok(Number.isSafeInteger(proof.uid) && Number(proof.uid) > 0);
