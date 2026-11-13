@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
-import { defaultKupoSettings, defaultSingleKupoSettings, isRecord, type Controls } from "../../packages/sdk/src/index.ts";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { defaultKupoSettings, defaultSingleKupoSettings, isRecord, type Controls, type SandboxExecution, type SandboxResult } from "../../packages/sdk/src/index.ts";
+import { readNativeCompletion } from "../../apps/service/src/native-evidence.ts";
 import { routedFixture } from "./single-routing.ts";
 import { generatedKupoProfile } from "./kupo-profiles.ts";
+import { milestoneResponder } from "./milestone-response.ts";
+import { waitFor } from "../fixture.ts";
 
 export const milestoneAxes = {
   env: ["Local", "Remote", "Sandbox"],
@@ -46,62 +51,58 @@ export const milestoneBudget = (kind: MilestoneCell["budget"]): Controls["budget
     ...(kind !== "tokens" ? { usd: 10 } : {}),
   };
 
-export type MilestoneFixture = Awaited<ReturnType<typeof routedFixture>>;
+export type MilestoneFixture = Pick<Awaited<ReturnType<typeof routedFixture>>,
+  "sdk" | "service" | "directory" | "project" | "sessionId" | "session" | "modelId" | "solverId" | "options" |
+  "solverOptions" | "solver" | "requests" | "workspace" | "close">;
 
 export function milestoneResponses(fixture: MilestoneFixture, cell: MilestoneCell, documentId?: string, question = false) {
   const observed: Array<{ modelId: string; request: Record<string, unknown> }> = [];
-  let reviews = 0;
-  const solver = (request: Record<string, unknown>) => {
-    const messages = request.messages;
-    assert.ok(Array.isArray(messages));
-    if (question && !messages.some((message) => isRecord(message) && message.role === "tool")) return {
-      tool: { name: "ask_user", args: {
-        question: "Choose a generated matrix approach?", choices: ["Generated first choice", "Generated second choice"], allowFreeform: false,
-        ...(cell.autonomy === "Guided" ? {
-          recommendation: { choiceIndex: 1, reason: "Generated selected solver recommendation, not a human answer." },
-        } : {}),
-      } },
-    };
-    const hasDocumentResult = messages.some((message) => isRecord(message) && message.role === "tool" &&
-      typeof message.content === "string" && message.content.includes("GENERATED_DOCUMENT_SECRET"));
-    return documentId && !hasDocumentResult ?
-      { tool: { name: "read_document", args: { attachmentId: documentId, section: 2, limit: 512 } } } :
-      { text: "Generated selected milestone response." };
-  };
+  const respond = milestoneResponder({ ...cell, solverId: fixture.solverId, documentId, question });
   fixture.solverOptions.respond = (request) => {
     observed.push({ modelId: fixture.solverId, request });
-    return solver(request);
+    return respond(request);
   };
   fixture.options.respond = (request) => {
     observed.push({ modelId: fixture.modelId, request });
-    const messages = request.messages;
-    assert.ok(Array.isArray(messages));
-    const system = messages.filter(isRecord).find((message) => message.role === "system")?.content;
-    assert.equal(typeof system, "string");
-    if (String(system).includes("Evaluate only the supplied state and named System One-style questions")) return {
-      text: JSON.stringify({ answers: { action: {
-        type: "choice", choice: "option1", confidence: 0.98, probabilities: { option0: 0.01, option1: 0.98, askUser: 0.01 },
-      } } }),
-    };
-    if (String(system).includes("You classify a Moguri task for an explicitly approved Single workflow")) return {
-      text: JSON.stringify({ pattern: "single", modelId: fixture.solverId, confidence: 1,
-        reason: "GENERATED_MATRIX_ROUTER_REASON_NOT_SOLVER_CONTEXT" }),
-    };
-    if (String(system).includes("Choose the least complex eligible Kupo workflow")) return { text: JSON.stringify({
-      pattern: cell.selection, modelId: fixture.solverId, complexity: "moderate", taskKind: "substantive", confidence: 1,
-      reason: "GENERATED_MATRIX_ROUTER_REASON_NOT_SOLVER_CONTEXT",
-      ...(cell.selection === "cascade" ? { escalationId: fixture.modelId } : { criticId: fixture.modelId }),
-    }) };
-    if (String(system).includes("Review the proposed Kupo response") || String(system).includes("Critique the proposed Kupo response")) {
-      reviews++;
-      return { text: JSON.stringify({
-        verdict: reviews % 2 === 1 ? cell.selection === "cascade" ? "escalate" : "revise" : "pass",
-        reason: "Generated untrusted gate advice, never source acceptance or permission.",
-      }) };
-    }
-    return solver(request);
+    return respond(request);
   };
   return observed;
+}
+
+export async function nativeMilestoneWitness(execution: SandboxExecution, result: SandboxResult) {
+  assert.equal(execution.status, "completed"); assert.equal(execution.cleanup, "owned-guest-stopped");
+  assert.equal(result.executionId, execution.id); assert.equal(result.journal.status, "verified");
+  assert.ok(execution.nativeSessionId && execution.planDigest && execution.signerFingerprint);
+  assert.equal(result.nativeSessionId, execution.nativeSessionId);
+  const evidence = await readNativeCompletion({ stateRoot: join(homedir(), ".sendbox", "run"), sessionId: execution.nativeSessionId,
+    workspace: execution.stage.workspace, image: execution.image, command: { program: execution.command[0]!, arguments: execution.command.slice(1) },
+    createdAfter: execution.createdAfter, createdBefore: execution.createdBefore, planDigest: execution.planDigest, signerFingerprint: execution.signerFingerprint });
+  for (const key of ["beforeId", "afterId", "auditDigest", "planDigest", "signerFingerprint", "afterBinding", "rollback", "exitCode"] as const) {
+    assert.deepEqual(evidence[key], result[key], "Qualification cannot adopt a different original native result.");
+  }
+  assert.equal(evidence.exitCode, 0);
+  const file = await evidence.read("generated-native-matrix.json", 2 * 1024 * 1024);
+  return { text: new TextDecoder("utf-8", { fatal: true }).decode(file.content), digest: file.digest, bytes: file.content.length,
+    auditDigest: evidence.auditDigest, afterId: evidence.afterId };
+}
+
+export async function milestoneCalls(fixture: MilestoneFixture, observed: Array<{ modelId: string; request: Record<string, unknown> }>) {
+  if (fixture.session().controls.env !== "Sandbox") return observed;
+  assert.equal(observed.length, 0); assert.equal(fixture.requests.length + fixture.solver.requests.length, 0);
+  const execution = await waitFor(() => fixture.service.controller.snapshot().sandboxExecutions?.find((entry) =>
+    entry.sessionId === fixture.sessionId && entry.cleanup === "owned-guest-stopped" && !fixture.service.controller.sandbox.owns(entry.id)), 15000);
+  const result = (await fixture.sdk.sandbox.result(execution.id)).result;
+  assert.ok(result); assert.equal(result.journal.status, "verified");
+  assert.deepEqual(execution.networkScope?.allowedDomains, ["api.githubcopilot.com"]);
+  const witness = await nativeMilestoneWitness(execution, result);
+  const proof: unknown = JSON.parse(witness.text);
+  assert.ok(isRecord(proof) && Array.isArray(proof.calls));
+  assert.equal(proof.platform, "linux"); assert.ok(Number.isSafeInteger(proof.uid) && Number(proof.uid) > 0);
+  assert.equal(proof.runId, execution.id);
+  return proof.calls.map((call) => {
+    assert.ok(isRecord(call) && typeof call.modelId === "string" && isRecord(call.request));
+    return { modelId: call.modelId, request: call.request };
+  });
 }
 
 export async function configureMilestoneRouting(fixture: MilestoneFixture, selection: MilestoneCell["selection"]) {

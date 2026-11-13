@@ -43,5 +43,10 @@ export async function profileFixture(extra?: (profileId: string, directory: stri
     await client.command({ type: "message.send", sessionId: id, expectedRevision: current.draft.revision + 1, delivery: "queue" });
   };
   return { directory, stateDir, key, options, providers, assigned, vaults, service, sdk, clients, create, session, send,
-    close: async () => { for (const client of clients) client.disconnect(); await service.close(); restoreJournal(); for (const provider of providers) await provider.close(); await rm(directory, { recursive: true, force: true }); } };
+    close: async (retain = false) => {
+      for (const client of clients) client.disconnect(); await service.close(); restoreJournal();
+      for (const provider of providers) await provider.close();
+      if (retain) console.error("Generated profile qualification diagnostics retained:", directory);
+      else await rm(directory, { recursive: true, force: true });
+    } };
 }

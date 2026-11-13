@@ -55,6 +55,8 @@ test("native TUI intake reviews a URL list and starts only the exact confirmed s
     assert.equal(f.service.controller.snapshot().commandExecutions.filter((entry) => entry.name === "repositories").length, 2);
     assert.equal(f.requests.length, 0); assert.equal(f.session().projectId, f.service.controller.snapshot().projects[0]?.id);
     const imported = (await sdk.projects.imports.read(batch.id)).batch.items[0]!, session = await sdk.sessions.create(imported.projectId!);
+    const workspaceId = sdk.sessions.get(session.id!)?.workspaceId;
+    assert.ok(workspaceId); assert.equal((await sdk.workspaces.wait(workspaceId)).status, "ready");
     const remote = await sdk.slash(session.id!, '/git remote-preview {"remote":"origin","url":"git@github.com:generated-tui-moved/project.git"}', "tui");
     assert.equal(remote.kind, "text");
     if (remote.kind !== "text") throw new Error("Generated TUI remote review did not return its original source.");
