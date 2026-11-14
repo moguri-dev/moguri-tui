@@ -8,8 +8,11 @@ import { readSandboxDistribution } from "../../apps/service/src/sandbox-distribu
 import { fixtureProvider, type GeneratedProviderOptions } from "../fixture.ts";
 import { nativeApiFixture } from "./native-api.ts";
 import type { MilestoneFixture } from "./milestone-combinations.ts";
+import type { startService } from "../../apps/service/src/server.ts";
 
-export async function nativeMilestoneFixture(configuration: SandboxConfiguration, scenario: "milestone" | "compound" = "milestone"): Promise<MilestoneFixture & { state: string; nativeRoot: string }> {
+export async function nativeMilestoneFixture(configuration: SandboxConfiguration, scenario: "milestone" | "compound" | "scripts" = "milestone"): Promise<MilestoneFixture & {
+  state: string; nativeRoot: string; restartOptions: Parameters<typeof startService>[0];
+}> {
   const workloadPath = process.env.MOGURI_NATIVE_WORKLOAD, distributionPath = process.env.MOGURI_SANDBOX_DISTRIBUTION;
   assert.ok(workloadPath && distributionPath && configuration.qualification);
   const workload: unknown = JSON.parse(await readFile(workloadPath, "utf8"));
@@ -70,7 +73,7 @@ export async function nativeMilestoneFixture(configuration: SandboxConfiguration
       assert.ok(value?.projectId);
       return { ...value, projectId: value.projectId };
     };
-    return { sdk, service, directory, nativeRoot: fixture.root, state: fixture.state, project: fixture.project, sessionId, session,
+    return { sdk, service, directory, nativeRoot: fixture.root, state: fixture.state, restartOptions: fixture.runtimeOptions, project: fixture.project, sessionId, session,
       modelId: fixture.provider.modelId, solverId: solver.modelId, options, solverOptions, solver, requests: fixture.provider.requests,
       workspace: null, close };
   } catch (error) {

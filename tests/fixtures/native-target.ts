@@ -29,17 +29,23 @@ export async function nativeConfiguration(preserveReviewedNetwork = false): Prom
       resources },
   });
 }
-export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone" | "compound",
+export async function nativeFixtureCommand(modelId: string, baseUrl = "https://api.githubcopilot.com", group = false, scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone" | "compound" | "scripts",
   behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" | "recover-once"): Promise<string[]> {
   const prefix = `globalThis.MOGURI_GENERATED_NATIVE_MODEL=${JSON.stringify(modelId)};globalThis.MOGURI_GENERATED_NATIVE_BASE=${JSON.stringify(baseUrl)};${scenario ? `globalThis.MOGURI_GENERATED_NATIVE_SCENARIO=${JSON.stringify(scenario)};` : ""}${behavior ? `globalThis.MOGURI_GENERATED_NATIVE_BEHAVIOR=${JSON.stringify(behavior)};` : ""}\n`;
-  const source = prefix + await readFile(new URL(behavior === "recover-once" ? "./native-retry-provider.mjs" : scenario === "compound" ? "./native-compound-provider.mjs" : scenario === "milestone" ? "./native-milestone-provider.mjs" : scenario === "checkpoint" ? "./native-checkpoint-provider.mjs" : scenario ? "./native-decisions-provider.mjs" :
-    group ? "./native-group-provider.mjs" : "./native-provider.mjs", import.meta.url), "utf8");
+  const provider = behavior === "recover-once" ? "./native-retry-provider.mjs" : scenario === "scripts" ? "./native-script-provider.mjs" :
+    scenario === "compound" ? "./native-compound-provider.mjs" : scenario === "milestone" ? "./native-milestone-provider.mjs" :
+    scenario === "checkpoint" ? "./native-checkpoint-provider.mjs" : scenario ? "./native-decisions-provider.mjs" :
+    group ? "./native-group-provider.mjs" : "./native-provider.mjs";
+  const source = prefix + await readFile(new URL(provider, import.meta.url), "utf8");
   const code = (await transform(source, { minify: true, format: "esm", target: "node26" })).code;
   const modules = scenario === "milestone" ? [(await build({
     stdin: { contents: 'import { milestoneResponder } from "./milestone-response.ts"; globalThis.MOGURI_GENERATED_MILESTONE_RESPONDER = milestoneResponder;',
       resolveDir: fileURLToPath(new URL(".", import.meta.url)) },
     bundle: true, write: false, minify: true, format: "esm", platform: "node", target: "node26",
-  })).outputFiles[0]!.text, code] : [code];
+  })).outputFiles[0]!.text, code] : scenario === "scripts" ? [
+    'import dns from "node:dns/promises";import{syncBuiltinESMExports}from"node:module";dns.lookup=async(host)=>{if(host!==new URL(globalThis.MOGURI_GENERATED_NATIVE_BASE).hostname)throw Error("Generated DNS denied.");return[{address:"1.1.1.1",family:4}];};syncBuiltinESMExports();',
+    code,
+  ] : [code];
   const preloads = modules.flatMap((module) => {
     const preload = `data:text/javascript;base64,${Buffer.from(module).toString("base64")}`;
     if (preload.length > 4096) throw new MoguriError("native_fixture", "The generated no-network provider exceeded the existing reviewed argv boundary.");
