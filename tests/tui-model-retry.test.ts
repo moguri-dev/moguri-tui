@@ -83,7 +83,7 @@ test("native TUI mode selection actually excludes frontier models in Savings wit
     await terminal.mockInput.typeText("Generated unchanged mode task.");
     terminal.mockInput.pressKey("F11"); await frame(terminal, "Performance [unavailable]");
     terminal.mockInput.pressArrow("down"); terminal.mockInput.pressEnter();
-    await waitFor(() => fixture.session().controls.kupoMode === "savings"); await frame(terminal, "Kupo mode: Savings");
+    await waitFor(() => fixture.session().controls.kupoMode === "savings"); await frame(terminal, "Kupo routing: Savings");
     await waitFor(() => fixture.session().draft.text === "Generated unchanged mode task.");
     assert.equal(fixture.session().draft.text, "Generated unchanged mode task."); assert.equal(fixture.session().controls.autonomy, "Manual");
     assert.equal(fixture.requests.length, 0); assert.equal(fixture.solver.requests.length, 0);

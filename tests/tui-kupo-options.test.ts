@@ -8,7 +8,7 @@ import { KUPO_MODEL_ID, MoguriSdk } from "../packages/sdk/src/index.ts";
 import { setupFixture } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
 
-test("actual TUI shortcuts keep Kupo selected while saving exact shared role controls without inference", {
+test("actual TUI keeps Kupo's exact window and rejects manual thinking without inference", {
   skip: process.platform !== "darwin", timeout: 20_000,
 }, async () => {
   const fixture = await setupFixture({ reasoning: true, contextWindow: 32768, maxOutputTokens: 512, responseMode: "text" });
@@ -30,14 +30,14 @@ test("actual TUI shortcuts keep Kupo selected while saving exact shared role con
     await frameUntil("Write a prompt");
     for (const [command, acknowledgement] of [
       ["/context-window 24577", "Context window set to 24,577"],
-      ["/thinking high", "Thinking effort set to high"],
+      ["/thinking high", "chosen automatically"],
     ] as const) {
       await terminal.mockInput.typeText(command);
       terminal.mockInput.pressEnter();
       await frameUntil(acknowledgement);
     }
     assert.equal(fixture.session().controls.modelId, KUPO_MODEL_ID);
-    assert.deepEqual(fixture.session().controls.modelOptions, { contextWindow: 24577, thinkingEffort: "high" });
+    assert.deepEqual(fixture.session().controls.modelOptions, { contextWindow: 24577 });
     assert.equal(fixture.requests.length, 0);
   } finally { await closeTui(root, terminal, sdk, () => fixture.close()); }
 });

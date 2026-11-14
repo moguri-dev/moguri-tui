@@ -33,7 +33,7 @@ test(`actual TUI ${env}/${selection} applies exact controls and a warned combine
     await writeFile(path, generatedDocx());
     const document = await fixture.sdk.attachments.document(fixture.sessionId, path);
     const cell = {
-      env, selection, autonomy: "Manual", budget: "both", window: "half", effort: "high", input: "document",
+      env, selection, autonomy: "Manual", budget: "both", window: "half", effort: selection === "fixed" ? "high" : "default", input: "document",
     } as const;
     const observed = milestoneResponses(fixture, cell, document.id!);
     const ui = terminal = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false });
@@ -51,14 +51,14 @@ test(`actual TUI ${env}/${selection} applies exact controls and a warned combine
     await frame("Write a prompt");
     for (const [command, acknowledgement] of [
       ["/context-window half", "Context window set to 16,384"],
-      ["/thinking high", "Thinking effort set to high"],
+      ...selection === "fixed" ? [["/thinking high", "Thinking effort set to high"] as const] : [],
       ["/budget set 1000000 10 confirm-estimates", "Session estimate-based cap saved."],
     ] as const) {
       await ui.mockInput.typeText(command);
       ui.mockInput.pressEnter();
       await frame(acknowledgement);
     }
-    assert.deepEqual(fixture.session().controls.modelOptions, { contextWindow: 16384, thinkingEffort: "high" });
+    assert.deepEqual(fixture.session().controls.modelOptions, { contextWindow: 16384, ...(selection === "fixed" ? { thinkingEffort: "high" } : {}) });
     assert.equal(observed.length, 0);
     await ui.mockInput.typeText(`Generated actual TUI matrix document question. ${milestoneCellId(cell)}`);
     ui.mockInput.pressEnter({ ctrl: true, shift: true });
@@ -71,7 +71,9 @@ test(`actual TUI ${env}/${selection} applies exact controls and a warned combine
     assert.equal(fixture.session().status, "completed", fixture.session().lastError ?? "");
     await frame("Generated selected milestone response.");
     const calls = await milestoneCalls(fixture, observed);
-    assert.ok(calls.length > 0 && calls.every((call) => call.request.reasoning_effort === "high"));
+    assert.ok(calls.length > 0);
+    if (selection === "fixed") assert.ok(calls.every((call) => call.request.reasoning_effort === "high"));
+    else assert.equal(fixture.session().controls.modelOptions?.thinkingEffort, undefined);
     const events = fixture.service.controller.events(0);
     assert.equal(events.filter((event) => event.event_type === "tool.decided" && event.payload.actor === "user").length, 1);
     assert.equal((await fixture.sdk.budgets.status(fixture.sessionId)).status.totals.knownReportedTokens, calls.length * 42);

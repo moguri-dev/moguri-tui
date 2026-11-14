@@ -1513,7 +1513,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); void perform(() => submit(editor?.getState().text ?? "")); }}>
           <text fg={colors.error}>{safe(`[X] Model request failed / ${retry.status}. [Retry] Enter or F10 retries the original request, not this draft.\n${retry.diagnostic}`)}</text>
         </box>}
-        {mode === "compose" && session?.controls.modelId === "kupo" && <text fg={colors.muted} height={1} flexShrink={0}>{safe(`Kupo mode: ${kupoModes.find((mode) => mode.id === session.controls.kupoMode)?.name ?? "Legacy / choose a mode"} | F11 modes | Context: dynamic / maximum per model`)}</text>}
+        {mode === "compose" && session?.controls.modelId === "kupo" && <text fg={colors.muted} height={1} flexShrink={0}>{safe(`Kupo routing: ${kupoModes.find((mode) => mode.id === session.controls.kupoMode)?.name ?? "Legacy / choose a preference"} | F11 routing | Thinking: automatic | Context: dynamic / maximum per model`)}</text>}
         {mode === "compose" && continuedWork && <box flexDirection="column" border borderColor={colors.accent} padding={1} flexShrink={0}>
           <text fg={colors.accent}>{safe(`${continuedWork.source.title}: ${continuedWork.status} / one delegated task to its PR`)}</text>
           <text fg={colors.muted}>{safe(continuedWork.diagnostic ?? (continuedWork.prUrl ? `PR: ${continuedWork.prUrl}` : `Open its child in the sessions list, or inspect /kanban work ${continuedWork.id}.`))}</text>
