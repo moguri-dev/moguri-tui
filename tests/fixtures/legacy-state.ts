@@ -9,7 +9,7 @@ import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "../../pa
 import { hasGithubPrCiHistory } from "../../packages/protocol/src/github-workflows.ts";
 import { hasMyWorkHistory } from "../../packages/protocol/src/my-work.ts";
 import { hasBackgroundServiceHistory } from "../../packages/protocol/src/application.ts";
-import { hasScriptInboxHistory } from "../../packages/protocol/src/script-reviews.ts";
+import { hasScriptInboxHistory, hasNativeScriptHistory } from "../../packages/protocol/src/script-reviews.ts";
 import { hasRepositoryWorkflowHistory } from "../../packages/protocol/src/repository-trust.ts";
 import { hasNativeCandidateIdentityHistory } from "../../packages/protocol/src/candidate-workspaces.ts";
 
@@ -218,8 +218,15 @@ export function removeRepositoryWorkflowFixtureMarkers(db: DatabaseSync, events:
   db.exec("DELETE FROM retention_metadata WHERE id IN ('repository_trust_schema','project_workflow_defaults_schema','partial_tool_recovery_schema')");
 }
 export function removeNativeCandidateIdentityFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeNativeScriptFixtureMarker(db, events);
   if (hasNativeCandidateIdentityHistory(events)) throw new Error("Generate genuine pre-102 history; actual private-root grants cannot become historical VM identities.");
   db.exec("DELETE FROM retention_metadata WHERE id='native_candidate_identity_schema'");
+}
+export function removeNativeScriptFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (hasNativeScriptHistory(events) || db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type')='script.review_recorded' AND json_type(data,'$.turn_id')='text' LIMIT 1").get()) {
+    throw new Error("Generate genuine pre-103 history; actual native script root grants and observed results cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='native_script_execution_schema'");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);

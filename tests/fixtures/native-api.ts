@@ -14,7 +14,7 @@ const generatedModelDns: SandboxDns = { addresses: async () => ["1.1.1.1"], alia
 
 export async function nativeApiFixture(configuration: SandboxConfiguration, options: { providerBaseUrl?: string; dns?: SandboxDns; distribution?: string; group?: boolean; intakeClock?: IntakeClock;
   providerOptions?: GeneratedProviderOptions;
-  scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone" | "compound"; behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" | "recover-once" } = {}) {
+  scenario?: "decisions" | "finishing" | "steering" | "checkpoint" | "milestone" | "compound" | "scripts"; behavior?: "hold-decision" | "unknown-checkpoint" | "hold-checkpoint" | "recover-once" } = {}) {
   assert.ok(configuration.qualification);
   await mkdir(".native/qualification", { recursive: true, mode: 0o700 });
   const root = await realpath(await mkdtemp(".native/qualification/native-service-")), state = join(root, "state"), project = join(root, "project"), home = join(root, "home");
@@ -31,7 +31,9 @@ export async function nativeApiFixture(configuration: SandboxConfiguration, opti
   try {
     const distribution = options.distribution ?? process.env.MOGURI_SANDBOX_DISTRIBUTION;
     const runtimeOptions = { stateDir: state, provider: provider.provider, retentionKey: GENERATED_RETENTION_KEY,
-      platform: { vault, terminal: { defaultRoot: home, vault }, intakeClock: options.intakeClock, sandbox: { vault, command: await nativeFixtureCommand(provider.modelId, baseUrl, options.group, options.scenario, options.behavior),
+      platform: { vault, terminal: { defaultRoot: home, vault }, intakeClock: options.intakeClock,
+        scriptReviews: options.scenario === "scripts" ? { fetchSource: async () => { throw new Error("A native script source must not fetch through the controller."); } } : undefined,
+        sandbox: { vault, command: await nativeFixtureCommand(provider.modelId, baseUrl, options.group, options.scenario, options.behavior),
         dns: options.dns ?? generatedModelDns, distribution, setup: { automatic: false } } } };
     const service = await startService(runtimeOptions);
     started = service;
