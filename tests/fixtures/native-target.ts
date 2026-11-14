@@ -42,7 +42,10 @@ export async function nativeFixtureCommand(modelId: string, baseUrl = "https://a
     stdin: { contents: 'import { milestoneResponder } from "./milestone-response.ts"; globalThis.MOGURI_GENERATED_MILESTONE_RESPONDER = milestoneResponder;',
       resolveDir: fileURLToPath(new URL(".", import.meta.url)) },
     bundle: true, write: false, minify: true, format: "esm", platform: "node", target: "node26",
-  })).outputFiles[0]!.text, code] : [code];
+  })).outputFiles[0]!.text, code] : scenario === "scripts" ? [
+    'import dns from "node:dns/promises";import{syncBuiltinESMExports}from"node:module";dns.lookup=async(host)=>{if(host!==new URL(globalThis.MOGURI_GENERATED_NATIVE_BASE).hostname)throw Error("Generated DNS denied.");return[{address:"1.1.1.1",family:4}];};syncBuiltinESMExports();',
+    code,
+  ] : [code];
   const preloads = modules.flatMap((module) => {
     const preload = `data:text/javascript;base64,${Buffer.from(module).toString("base64")}`;
     if (preload.length > 4096) throw new MoguriError("native_fixture", "The generated no-network provider exceeded the existing reviewed argv boundary.");

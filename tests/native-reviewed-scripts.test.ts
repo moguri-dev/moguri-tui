@@ -3,11 +3,16 @@ import test from "node:test";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { createElement } from "react";
+import { createTestRenderer } from "@opentui/core/testing";
+import { createRoot, flushSync } from "@opentui/react";
+import { ClientError, MoguriSdk } from "../packages/sdk/src/index.ts";
+import { TuiApp } from "../apps/tui/src/App.tsx";
 import { startService } from "../apps/service/src/server.ts";
 import { nativeConfiguration } from "./fixtures/native-target.ts";
 import { nativeMilestoneFixture } from "./fixtures/native-milestone-api.ts";
 import { waitFor } from "./fixture.ts";
+import { closeTui, waitTuiFrame } from "./fixtures/tui-client.ts";
 
 const native = await nativeConfiguration(true);
 type Fixture = Awaited<ReturnType<typeof nativeMilestoneFixture>>;
@@ -40,9 +45,16 @@ for (const kind of ["safe", "unsafe", "url", "url-invalid"] as const) test(`actu
     await writeFile(join(f.project, "generated-script.sh"), source);
     await send(f, `generated native script ${kind}${kind === "unsafe" ? " attempt" : ""}`);
     if (kind.startsWith("url")) {
-      const approval = await waitFor(() => f.session().pendingApproval?.call.name === "review_script" && f.session().pendingApproval, 30000);
-      assert.equal(approval.call.arguments.url, "https://api.githubcopilot.com/generated-source.sh");
-      await f.sdk.approvals.respond(f.sessionId, approval.id, true);
+      const requested = await waitFor(() => f.service.controller.events(0).find((event) => event.event_type === "tool.requested" &&
+        event.session_id === f.sessionId && event.payload.approval.call.name === "review_script" &&
+        event.payload.approval.call.arguments.url === "https://api.githubcopilot.com/generated-source.sh"), 30000);
+      assert.equal(requested.event_type, "tool.requested");
+      if (requested.event_type !== "tool.requested") assert.fail("The original native URL request lost its type.");
+      const decision = await waitFor(() => f.service.controller.events(0).find((event) => event.event_type === "tool.decided" &&
+        event.session_id === f.sessionId && event.payload.approvalId === requested.payload.approval.id));
+      assert.equal(decision.event_type, "tool.decided");
+      if (decision.event_type !== "tool.decided") assert.fail("The existing exact native-host allowance lost its original decision.");
+      assert.equal(decision.payload.actor, "policy"); assert.equal(decision.payload.ruleId, "native:enforced-network");
     }
     if (kind === "unsafe" || kind === "url-invalid") {
       await terminal(f);
@@ -129,6 +141,31 @@ test("native user-script cancellation retains one partial attempt, stops its gue
     assert.equal(execution.cleanup, "owned-guest-stopped"); assert.equal(f.service.controller.sandbox.owns(execution.id), false);
     assert.equal(f.service.controller.snapshot().budgetEntries.length, calls);
     await assert.rejects(() => access(join(f.project, "generated-script-started.txt")), { code: "ENOENT" });
-    await assert.rejects(() => f.sdk.scriptReviews.force(f.sessionId, review.id, review.source.digest, retained.review.revision), /original|retained|exact|revision/i);
+    const executions = f.service.controller.snapshot().sandboxExecutions!.length;
+    await assert.rejects(() => f.sdk.scriptReviews.force(f.sessionId, review.id, review.source.digest, retained.review.revision), (error: unknown) => {
+      assert.ok(error instanceof ClientError); assert.equal(error.code, "workspace_unconfirmed"); return true;
+    });
+    assert.equal(f.service.controller.snapshot().sandboxExecutions!.length, executions);
   } finally { await f.close(); }
+});
+
+test("the actual native TUI discloses the guest and approves only the exact pending script by keyboard", {
+  skip: !native, timeout: 180000,
+}, async () => {
+  const f = await fixture(), terminalView = await createTestRenderer({ width: 120, height: 42, exitOnCtrlC: false });
+  const root = createRoot(terminalView.renderer);
+  try {
+    await writeFile(join(f.project, "generated-script.sh"), "printf GENERATED_NATIVE_TUI > generated-script-result.txt\n");
+    await send(f, "generated native script safe terminal");
+    await waitFor(() => f.session().pendingApproval?.call.name === "run_script", 30000);
+    flushSync(() => root.render(createElement(TuiApp, { client: f.sdk })));
+    await waitTuiFrame(terminalView, "Reviewed bytes / SendBox guest").catch((error: unknown) => {
+      throw new Error(`The actual native approval was not readable:\n${terminalView.captureCharFrame()}`, { cause: error });
+    });
+    await assert.rejects(() => access(join(stage(f), "generated-script-result.txt")), { code: "ENOENT" });
+    terminalView.mockInput.pressKey("y", { ctrl: true });
+    await terminal(f);
+    assert.equal(await readFile(join(stage(f), "generated-script-result.txt"), "utf8"), "GENERATED_NATIVE_TUI");
+    await assert.rejects(() => access(join(f.project, "generated-script-result.txt")), { code: "ENOENT" });
+  } finally { await closeTui(root, terminalView, f.sdk, () => f.close()); }
 });
