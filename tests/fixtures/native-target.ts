@@ -11,6 +11,7 @@ export async function nativeConfiguration(preserveReviewedNetwork = false): Prom
   const candidate: unknown = JSON.parse(await readFile(installation, "utf8")), image: unknown = JSON.parse(await readFile(workload, "utf8"));
   if (!isRecord(candidate) || !isRecord(image) || image.status !== "PASS" || !isRecord(image.payload) || image.payload.protocol !== PROTOCOL_VERSION ||
     !isRecord(image.payload.files)) throw new MoguriError("native_fixture", "Use the actual verified installation and current-protocol immutable workload receipt.");
+  if (typeof candidate.version !== "string") throw new MoguriError("native_fixture", "Use an installation receipt that records its exact SendBox version; no release is inferred.");
   let resources = { cpus: 2, memoryMb: 2048, diskMb: 2048 };
   if (process.env.MOGURI_SANDBOX_DISTRIBUTION) {
     const definition = await readSandboxDistribution(process.env.MOGURI_SANDBOX_DISTRIBUTION, AbortSignal.timeout(30_000));
@@ -22,7 +23,7 @@ export async function nativeConfiguration(preserveReviewedNetwork = false): Prom
   }
   return parse(SandboxConfigurationSchema, {
     executable: candidate.executable, configPath: null, image: image.image, bundlePath: candidate.bundle, trustRootPath: candidate.key,
-    qualification: { release: candidate.version ?? "0.2.3", hostSha256: candidate.hostSha256, keySha256: candidate.keySha256, manifestSha256: candidate.manifestSha256,
+    qualification: { release: candidate.version, hostSha256: candidate.hostSha256, keySha256: candidate.keySha256, manifestSha256: candidate.manifestSha256,
       workerDigest: image.payload.files["dist/worker.mjs"], bridgeDigest: image.payload.files["dist/remote-bridge.mjs"],
       trustRootId: candidate.trustRootId, minimumReleaseSequence: candidate.minimumReleaseSequence,
       allowedDomains: preserveReviewedNetwork ? candidate.allowedDomains : [], allowCopilot: preserveReviewedNetwork ? candidate.allowCopilot : false,

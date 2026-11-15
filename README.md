@@ -151,15 +151,18 @@ Require qualified SendBox** or `moguri containment require-sandbox
 qualification blocks new work; selecting this policy does not silently change
 an existing session's Env, qualify an old workload or choose a model.
 
-The macOS app bundles **SendBox 0.2.4 and a compatible pinned Linux worker,
+The macOS app bundles **SendBox 0.2.7 and a compatible pinned Linux worker,
 Node runtime and native dependencies**. [Managed setup](docs/architecture/managed-sandbox.md)
-replaces developer commands with one explicit in-app review. Private workspaces
-and selected-provider DNS aliases are automatic. Setup review discloses 0.2.4's
-broader GitHub Meta network delegation; public runtime updates stay
-separate from activation and tool permissions.
-The [exact current native qualification](docs/architecture/sendbox-0.2.4-qualification.md)
-records physical artifact/network evidence separately from historical runs and
-the remaining milestone gates.
+replaces developer commands with one explicit in-app review. SendBox 0.2.7 is
+the minimum supported release; a saved older selection is blocked until you
+explicitly review the bundled setup, never silently upgraded or replaced by
+Local. Private workspaces and selected-provider DNS aliases are automatic.
+Setup review discloses the broader GitHub Meta network delegation (the SendBox
+host caches Meta ranges and seeds each guest; guests never contact Meta).
+Public runtime updates stay separate from activation and tool permissions.
+The [native combination record](docs/architecture/milestone-combination-matrix.md)
+tracks current physical evidence separately from historical runs and the
+remaining milestone gates.
 
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
@@ -401,18 +404,17 @@ This is not public compound scheduling, independent-family proof or acceptance.
 source, independently installed SDK and actual native qualification. The
 qualified 0.28 artifacts remain frozen.
 
-The first milestone remains incomplete. Merged main through **#60 / protocol99**
-includes the My Work GitHub inbox, opt-in metadata OTLP, governed Local skills,
-per-turn rewind and the session Inbox. The
-[current acceptance and roadmap](docs/remaining-milestone-gaps.md) separates
-delivered work from the remaining wider native/control matrix, hosted-CI
-account gate and final integrated acceptance. [#39](https://github.com/mbianchidev/moguri/issues/39)
-owns those gates and the later roadmap; #17 is consolidated as redundant
-tracking, not milestone acceptance. Historical receipts, closed issues and
-version bumps do not establish completion.
+**Milestone 1 is accepted** at protocol 106 with SendBox 0.2.7: all 10,080
+required Local/SSH/Sandbox cells, ten physical native gates and the full
+source, hidden desktop, SDK and package runs pass. The
+[acceptance record and roadmap](docs/remaining-milestone-gaps.md) maps every
+milestone criterion to its evidence, records the user-directed replacement of
+account-blocked hosted CI with local evidence, and lists the remaining roadmap
+owned by [#39](https://github.com/mbianchidev/moguri/issues/39). It is still a
+development alpha: not signed, notarized or publicly distributed.
 
 The earlier issue-17 checkpoint used **protocol 37** for shared model windows, scoped
-long-paste files and reviewed SendBox **0.2.3** execution. SDK, CLI/TUI and hidden
+long-paste files and reviewed SendBox execution. SDK, CLI/TUI and hidden
 desktop run the same qualified private-stage worker, Manual decisions, budget
 ledger, exact-owner stop/recovery and separate actual-user source publication.
 Actual guest/control-loss checks retain partial work and unknown usage without
@@ -535,7 +537,7 @@ scripts and hooks, use private staging and keep mutable trees worktree-local.
 This is not a malware-free guarantee; script execution stays unavailable until
 a real SendBox boundary is qualified.
 
-This is a **macOS development alpha**, not the completed first milestone.
+This is a **macOS development alpha** that completes Milestone 1; it is not a signed, notarized public release.
 Explicit **estimate-based token/USD caps** and separate profile/global hard
 policies now share cumulative role-aware reservations. Unknown completion holds
 capacity; deletion, defaults and restart do not refund it. Named Copilot/reseller
@@ -607,7 +609,7 @@ remote/native wind-down remain incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed
-configuration/readiness surface. The development 0.2.3 SDK/client lifecycle
+configuration/readiness surface. The development SDK/client lifecycle
 now passes actual native generated-provider checks, but readiness still needs
 explicit reviewed release/image/network pins and private staging. Endpoint-only
 cold networking remains blocked; no alias or Local fallback is added
@@ -707,7 +709,7 @@ requirements from deferred work.
   - Allow to attach an orchestrator session later
 - Command palette
 - Split panel
-- Desktop-only, main-session-aware [sidebar](docs/specs/desktop-sidebar.md) for Changes, Terminal, Files, Stainless Browser, Side chat, Insights, and Extensions
+- Desktop-only, main-session-aware [sidebar](docs/specs/desktop-sidebar.md) for Code change (PR or workspace changes), Terminal, Files, Stainless Browser, Side chat, Insights, and Extensions; project-free chats show only Terminal, Browser, Insights, Plan and Side chat
 - Save draft prompts so if app closes nothing happens to that prompt, in the same way save queued ones for when a session resumes
 - Session archive must be visible and explorable
 - Delete session policy, default off, configurable in amount of days or max GB occupied
