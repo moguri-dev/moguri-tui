@@ -516,6 +516,10 @@ Dictation uses local NVIDIA Nemotron 3.5 through a pinned native runtime. The
 user explicitly accepts and downloads the model once. NVIDIA documents
 **40 locales: 19 ready, 13 broad coverage, 8 adaptation-only**, not 22 verified
 ready languages. No cloud ASR fallback or automatic model-weight download occurs.
+You can instead trust an existing streaming model file, such as a Nemotron
+streaming GGUF or Handy's Parakeet/Moonshine streaming GGUF; Moguri locks its
+SHA-256, asks again if it changes and never deletes it
+([setup](docs/setup.md#use-an-existing-streaming-model-file)).
 
 Projects also have a **local Kanban** for feature, bug and misc tickets, with
 their own board chat, shared Show/Hide preference and same-panel GitHub/Linear
