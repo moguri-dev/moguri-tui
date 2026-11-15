@@ -6,7 +6,7 @@ import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type Cli
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
@@ -187,7 +187,7 @@ export async function waitForCommandFrame(renderer: ReturnType<typeof useRendere
   } finally { renderer.off(CliRenderEvents.FRAME, observed); }
 }
 const label = (session: Session) => sessionTitle(session, 44);
-type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "my-work" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "runtime-review" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode";
+type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "my-work" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "runtime-review" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode" | "repository-import";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 type ArchiveReview = {
   session: Pick<Session, "id" | "title" | "revision">;
@@ -309,6 +309,18 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     return () => { active = false; };
   }, [client, mode, session?.id, session?.controls.env, snapshot?.settings.revision]);
   const project = snapshot?.projects.find((project) => project.id === session?.projectId);
+  const proposal = sessionRepositoryProposal(session, snapshot);
+  const repositoryPrompt = session && proposal && !proposal.project && proposal.confirm ? { sessionId: session.id, revision: session.revision, root: proposal.root.root } : null;
+  const importRepository = async (remember: boolean) => {
+    if (!repositoryPrompt) throw new Error("This chat no longer proposes a repository. Nothing was imported.");
+    await client.sessions.importRepository(repositoryPrompt.sessionId, repositoryPrompt.root, true, repositoryPrompt.revision);
+    if (remember) {
+      const current = client.settings.get();
+      if (!current) throw new Error("The repository was imported, but the preference was not saved. Reconnect and retry.");
+      await client.settings.update({ ...current.values, interactions: { ...current.values.interactions, confirmRepositoryImport: false } }, current.revision);
+    }
+    setMode("compose"); setNotice(`Imported ${repositoryPrompt.root} and moved this chat into it.`);
+  };
   const pendingQuestion = snapshot?.questions.find((question) => question.id === session?.pendingQuestionId && question.status === "open");
   const compactDecision = compact && Boolean(session?.pendingApproval || pendingQuestion);
   useEffect(() => { setOtherQuestion(null); }, [client.profileId, pendingQuestion?.id, pendingQuestion?.revision]);
@@ -976,6 +988,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (mode === "compose" && key.name === "f11" && session?.controls.modelId === "kupo") {
       key.preventDefault(); setMode("kupo-mode"); return;
     }
+    if (mode === "compose" && key.name === "f12" && repositoryPrompt) { key.preventDefault(); setMode("repository-import"); return; }
     if (key.name === "f6") { key.preventDefault(); if (pendingQuestion) setMode("question"); else setNotice("No actual pending question is owned by this turn."); return; }
     if (mode === "compose" && ["return", "kpenter"].includes(key.name) && (key.ctrl || key.meta || key.super)) {
       key.preventDefault(); key.stopPropagation();
@@ -1296,6 +1309,21 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
           <ThemedInput focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
+        mode === "repository-import" ? <box flexGrow={1} flexDirection="column" padding={1}>
+          <text fg={colors.accent} height={2}>{safe(repositoryPrompt ? `Import ${repositoryPrompt.root} as a project and move this chat?` : "This chat has no pending repository proposal.")}</text>
+          <text fg={colors.muted} height={2}>The chat and its child chats move into the repository; later turns run there. Esc keeps it in Home.</text>
+          {repositoryPrompt && <ThemedSelect focused flexGrow={1} options={[
+            { name: "Import and move", description: "Ask again next time.", value: "import" },
+            { name: "Import and move, don't ask again", description: "Saves this profile's preference to import observed repositories automatically.", value: "remember" },
+            { name: "Not now", description: "Dismiss this proposal; the same repository is not proposed again.", value: "dismiss" },
+          ]} onSelect={(_, option) => {
+            if (!option || !repositoryPrompt) return;
+            void perform(async () => {
+              if (option.value === "dismiss") { await client.sessions.dismissRepository(repositoryPrompt.sessionId, repositoryPrompt.revision); setMode("compose"); return; }
+              await importRepository(option.value === "remember");
+            });
+          }} />}
+        </box> :
         mode === "kupo-mode" ? <box flexGrow={1} flexDirection="column" padding={1}><text fg={colors.accent} height={2}>Kupo modes / actual effort is model-selected</text>
           <text fg={colors.muted} height={4}>Balanced uses declared capabilities. Savings/Performance require reviewed evaluation and reference-price profiles. Performance never drops below xhigh. Context is always the selected model's qualified maximum. No permission or source acceptance is delegated here.</text>
           {kupoOptionError && <text fg={colors.error} height={3}>{safe(kupoOptionError)}</text>}
@@ -1554,6 +1582,10 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <text fg={colors.foreground} height={2} truncate flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>
           {recommendation && !compact && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}
           <text fg={colors.muted} height={compact ? 1 : 2} wrapMode={compact ? "none" : "word"} truncate flexShrink={0}>{compact ? "Enter answers | Cmd/Ctrl+Enter holds" : "Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted."}</text>
+        </box>}
+        {mode === "compose" && repositoryPrompt && <box id="tui-repository-proposal" height={1} flexShrink={0}
+          onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); setMode("repository-import"); }}>
+          <text fg={colors.attention} height={1} wrapMode="none" truncate>{safe(`[F12] This chat wrote code in ${repositoryPrompt.root}. Import it as a project and move this chat?`)}</text>
         </box>}
         {session?.localFinishing && <text fg={colors.attention}>Local finishing: new Local turns are blocked by policy.</text>}
         {notice || error ? <TerminalAlert key={`${client.profileId}:${selectedId}:${notice?.id ?? error}`} text={notice?.text || error || ""}

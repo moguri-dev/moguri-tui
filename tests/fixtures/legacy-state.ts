@@ -223,10 +223,19 @@ export function removeNativeCandidateIdentityFixtureMarker(db: DatabaseSync, eve
   db.exec("DELETE FROM retention_metadata WHERE id='native_candidate_identity_schema'");
 }
 export function removeNativeScriptFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeChatRepositoryBindingFixtureMarker(db, events);
   if (hasNativeScriptHistory(events) || db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type')='script.review_recorded' AND json_type(data,'$.turn_id')='text' LIMIT 1").get()) {
     throw new Error("Generate genuine pre-103 history; actual native script root grants and observed results cannot be relabelled.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id='native_script_execution_schema'");
+}
+export function removeChatRepositoryBindingFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => ["session.repository_observed", "session.repository_dismissed", "session.project_bound"].includes(event.event_type) ||
+    event.event_type === "settings.updated" && event.payload.settings.interactions?.confirmRepositoryImport !== undefined) ||
+    db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type') IN ('session.repository_observed','session.repository_dismissed','session.project_bound') LIMIT 1").get()) {
+    throw new Error("Generate genuine pre-105 history; actual chat repository observations, bindings and import preferences cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='chat_repository_binding_schema'");
 }
 export function removeEventReadFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   removeChatTitleFixtureMarkers(db, events);
