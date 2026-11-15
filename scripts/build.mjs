@@ -2,7 +2,7 @@ import { build } from "esbuild";
 import { build as viteBuild } from "vite";
 import { chmod, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
-import { prepareSpeech } from "./prepare-speech.mjs";
+import { prepareSpeech, prepareTranscribe } from "./prepare-speech.mjs";
 import { buildIcons } from "./build-icons.mjs";
 import { bundledCliLauncher } from "../apps/desktop/src/cli-installation.ts";
 import { buildCache, cacheImports } from "./build-cache.mjs";
@@ -12,8 +12,9 @@ await rm("dist", { recursive: true, force: true });
 await mkdir("dist/desktop", { recursive: true });
 await writeFile("dist/moguri", bundledCliLauncher(), { mode: 0o755 });
 await chmod("dist/moguri", 0o755);
-const speech = await prepareSpeech();
+const speech = await prepareSpeech(), transcribe = await prepareTranscribe();
 await cp(new URL("../.native/speech", import.meta.url), "dist/native/speech", { recursive: true });
+await cp(new URL("../.native/transcribe", import.meta.url), "dist/native/transcribe", { recursive: true });
 const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
 const define = { __MOGURI_BUILD_VERSION__: JSON.stringify(version) };
 await buildCache();
@@ -44,6 +45,7 @@ await Promise.all([
   build({ ...nodeBuild, entryPoints: ["apps/service/src/data-worker.ts"], outfile: "dist/data-worker.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/playwright-worker.ts"], outfile: "dist/playwright-worker.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/speech-host.ts"], outfile: "dist/speech-host.mjs" }),
+  build({ ...nodeBuild, entryPoints: ["apps/service/src/transcribe-host.ts"], outfile: "dist/transcribe-host.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/cli/src/main.ts"], outfile: "dist/cli.mjs" }),
   build({ entryPoints: ["packages/sdk/src/index.ts"], outfile: "dist/sdk/index.mjs", bundle: true, platform: "browser", format: "esm", target: "es2024", packages: "external" }),
   build({ ...nodeBuild, entryPoints: ["packages/sdk/src/node.ts"], outfile: "dist/sdk/node.mjs" }),
@@ -57,4 +59,4 @@ await Promise.all([
   buildIcons(),
 ]);
 execFileSync("node_modules/.bin/tsc", ["-p", "tsconfig.sdk.json"], { stdio: "inherit" });
-console.log(`Built shared SDK/types, CLI/exec launcher, service/workers, TUI and desktop. Pinned local speech runtime: ${speech}. No model weights downloaded.`);
+console.log(`Built shared SDK/types, CLI/exec launcher, service/workers, TUI and desktop. Pinned local speech runtimes: ${speech}, ${transcribe}. No model weights downloaded.`);
