@@ -229,7 +229,15 @@ export function removeNativeScriptFixtureMarker(db: DatabaseSync, events: readon
   }
   db.exec("DELETE FROM retention_metadata WHERE id='native_script_execution_schema'");
 }
+export function removeCapabilityDeletionFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "capability.deleted") ||
+    db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type')='capability.deleted' LIMIT 1").get()) {
+    throw new Error("Generate genuine pre-106 history; actual skill deletions cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='capability_deletion_schema'");
+}
 export function removeChatRepositoryBindingFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeCapabilityDeletionFixtureMarker(db, events);
   if (events.some((event) => ["session.repository_observed", "session.repository_dismissed", "session.project_bound"].includes(event.event_type) ||
     event.event_type === "settings.updated" && event.payload.settings.interactions?.confirmRepositoryImport !== undefined) ||
     db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type') IN ('session.repository_observed','session.repository_dismissed','session.project_bound') LIMIT 1").get()) {
