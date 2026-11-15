@@ -1,6 +1,6 @@
 # Repository State
 
-- This repository contains an initial executable macOS alpha, not the completed first milestone. `docs/setup.md` identifies implemented behavior and unavailable capabilities. Never describe the wider roadmap as implemented.
+- This repository contains a macOS development alpha that completes Milestone 1 (see `docs/remaining-milestone-gaps.md`); it is not a signed, notarized public release. `docs/setup.md` identifies implemented behavior and unavailable capabilities. Never describe the wider roadmap as implemented.
 - `docs/implementation.md` is the canonical implementation specification. `README.md` retains the product feature inventory; `docs/architecture/decisions.md` is authoritative for the selected stack. Reconcile documentation with executable code/config once those exist.
 - Moguri is built from zero with borrowed libraries; it does not fork OpenCode or Pi. The stack is Node.js 26, OpenTUI + React, Electron + React, and a Moguri-owned worker loop using maintained `@earendil-works/pi-ai`. D06 explicitly permits Node/PTY supervision for this checkpoint; Rust helpers remain unvalidated. Change decisions in `docs/architecture/decisions.md`.
 - Before adding Moguri features, follow Phase 0: run the validation spikes listed in `docs/architecture/decisions.md` and record each pass or fail result with measurements under `docs/`.

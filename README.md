@@ -404,15 +404,14 @@ This is not public compound scheduling, independent-family proof or acceptance.
 source, independently installed SDK and actual native qualification. The
 qualified 0.28 artifacts remain frozen.
 
-The first milestone remains incomplete. Merged main through **#60 / protocol99**
-includes the My Work GitHub inbox, opt-in metadata OTLP, governed Local skills,
-per-turn rewind and the session Inbox. The
-[current acceptance and roadmap](docs/remaining-milestone-gaps.md) separates
-delivered work from the remaining wider native/control matrix, hosted-CI
-account gate and final integrated acceptance. [#39](https://github.com/mbianchidev/moguri/issues/39)
-owns those gates and the later roadmap; #17 is consolidated as redundant
-tracking, not milestone acceptance. Historical receipts, closed issues and
-version bumps do not establish completion.
+**Milestone 1 is accepted** at protocol 106 with SendBox 0.2.7: all 10,080
+required Local/SSH/Sandbox cells, ten physical native gates and the full
+source, hidden desktop, SDK and package runs pass. The
+[acceptance record and roadmap](docs/remaining-milestone-gaps.md) maps every
+milestone criterion to its evidence, records the user-directed replacement of
+account-blocked hosted CI with local evidence, and lists the remaining roadmap
+owned by [#39](https://github.com/mbianchidev/moguri/issues/39). It is still a
+development alpha: not signed, notarized or publicly distributed.
 
 The earlier issue-17 checkpoint used **protocol 37** for shared model windows, scoped
 long-paste files and reviewed SendBox execution. SDK, CLI/TUI and hidden
@@ -538,7 +537,7 @@ scripts and hooks, use private staging and keep mutable trees worktree-local.
 This is not a malware-free guarantee; script execution stays unavailable until
 a real SendBox boundary is qualified.
 
-This is a **macOS development alpha**, not the completed first milestone.
+This is a **macOS development alpha** that completes Milestone 1; it is not a signed, notarized public release.
 Explicit **estimate-based token/USD caps** and separate profile/global hard
 policies now share cumulative role-aware reservations. Unknown completion holds
 capacity; deletion, defaults and restart do not refund it. Named Copilot/reseller
