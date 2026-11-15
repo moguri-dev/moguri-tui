@@ -151,15 +151,18 @@ Require qualified SendBox** or `moguri containment require-sandbox
 qualification blocks new work; selecting this policy does not silently change
 an existing session's Env, qualify an old workload or choose a model.
 
-The macOS app bundles **SendBox 0.2.4 and a compatible pinned Linux worker,
+The macOS app bundles **SendBox 0.2.7 and a compatible pinned Linux worker,
 Node runtime and native dependencies**. [Managed setup](docs/architecture/managed-sandbox.md)
-replaces developer commands with one explicit in-app review. Private workspaces
-and selected-provider DNS aliases are automatic. Setup review discloses 0.2.4's
-broader GitHub Meta network delegation; public runtime updates stay
-separate from activation and tool permissions.
-The [exact current native qualification](docs/architecture/sendbox-0.2.4-qualification.md)
-records physical artifact/network evidence separately from historical runs and
-the remaining milestone gates.
+replaces developer commands with one explicit in-app review. SendBox 0.2.7 is
+the minimum supported release; a saved older selection is blocked until you
+explicitly review the bundled setup, never silently upgraded or replaced by
+Local. Private workspaces and selected-provider DNS aliases are automatic.
+Setup review discloses the broader GitHub Meta network delegation (the SendBox
+host caches Meta ranges and seeds each guest; guests never contact Meta).
+Public runtime updates stay separate from activation and tool permissions.
+The [native combination record](docs/architecture/milestone-combination-matrix.md)
+tracks current physical evidence separately from historical runs and the
+remaining milestone gates.
 
 Explicitly configured **local OpenAI-compatible models** now share the same
 worker, permissions and accounting as Copilot. Endpoint discovery never scans
@@ -412,7 +415,7 @@ tracking, not milestone acceptance. Historical receipts, closed issues and
 version bumps do not establish completion.
 
 The earlier issue-17 checkpoint used **protocol 37** for shared model windows, scoped
-long-paste files and reviewed SendBox **0.2.3** execution. SDK, CLI/TUI and hidden
+long-paste files and reviewed SendBox execution. SDK, CLI/TUI and hidden
 desktop run the same qualified private-stage worker, Manual decisions, budget
 ledger, exact-owner stop/recovery and separate actual-user source publication.
 Actual guest/control-loss checks retain partial work and unknown usage without
@@ -607,7 +610,7 @@ remote/native wind-down remain incomplete.
 Unknown usage and Copilot billing are not presented as zero cost.
 Manual remains the default. Guided still needs human confirmation; Autopilot
 can use only explicit bounded user grants. SendBox has a visible fail-closed
-configuration/readiness surface. The development 0.2.3 SDK/client lifecycle
+configuration/readiness surface. The development SDK/client lifecycle
 now passes actual native generated-provider checks, but readiness still needs
 explicit reviewed release/image/network pins and private staging. Endpoint-only
 cold networking remains blocked; no alias or Local fallback is added
