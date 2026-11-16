@@ -104,7 +104,8 @@
     "docs/architecture/file-access.md",
     "docs/architecture/content-review.md",
     "docs/architecture/skills-and-rewind.md",
-    "docs/architecture/repository-management.md"
+    "docs/architecture/repository-management.md",
+    "docs/architecture/workspace-folders.md"
   ],
   "engines": {
     "node": ">=26.4.0 <27"

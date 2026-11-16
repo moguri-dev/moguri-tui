@@ -62,7 +62,10 @@ session/settings search and compact settings controls share the
 The [Dashboard](docs/setup.md#workspace-experience-and-skill-gateway) follows
 active sessions and opens their exact conversations. Project settings select
 registered projects; project-group menus fold only their member folders.
-**Settings / Repositories** accepts reviewed URL/bullet lists for bulk import.
+**Settings / Repositories** accepts reviewed URL/bullet lists for bulk import, and
+[workspace folders](docs/setup.md#adding-a-workspace-folder): trust a folder such as
+`~/workspace` and Moguri adds its Git repositories as read-only projects, optionally
+kept in sync. Their sessions always work in Moguri-owned worktrees, never the original checkout.
 Project settings also reviews [remote URL changes](docs/setup.md#importing-repositories-and-changing-a-remote)
 across the actual shared-worktree boundary, without fetching or rewriting old PR sources.
 Built-in work-item views remove hidden Markdown comments.
