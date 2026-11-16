@@ -7,7 +7,7 @@ import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
-import { approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
+import { agentHarnessProduct, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
@@ -1345,7 +1345,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           {availableModels.length || readinessModels.length ? <ThemedSelect focused flexGrow={1} options={[...availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
             model.environments && !model.environments.includes(session?.controls.env ?? "Local") ? `Unavailable: ${snapshot?.routingDiagnostics?.join(" ") ?? "No eligible model in this environment."}` :
               snapshot?.settings.values.kupo.workflow === "auto" ? "Automatic Single / Cascade / eligible Critique; every actual role is metered" :
-                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : model.source === "claude-agent" ? "your installed Claude Code" : "GitHub Copilot"}`, value: model.id })),
+                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : model.source === "claude-agent" ? "your installed Claude Code" : model.source === "codex-agent" ? "your installed Codex" : "GitHub Copilot"}`, value: model.id })),
               ...readinessModels.map((model) => ({
                 name: `Inspect runtime and hardware / ${model.name}`, description: "Read-only on the selected execution machine; no model selection, inference or installation.",
                 value: `readiness:${model.id}`,
@@ -1552,7 +1552,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {snapshot?.provider.diagnostic && <text fg={colors.attention}>{safe(snapshot.provider.diagnostic)}</text>}
         {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1}
           height={compact ? mode === "approval" || mode === "approval-choices" ? 10 : 6 : mode === "approval-choices" ? 17 : 10} flexShrink={0}>
-          <text fg={colors.attention} height={1} wrapMode="none" truncate><strong>Approval required: {session.pendingApproval.call.harness ? `Claude Code ${session.pendingApproval.call.name}` : session.pendingApproval.call.name}</strong></text>
+          <text fg={colors.attention} height={1} wrapMode="none" truncate><strong>Approval required: {session.pendingApproval.call.harness ? `${agentHarnessProduct(session.pendingApproval.call.harness)} ${session.pendingApproval.call.name}` : session.pendingApproval.call.name}</strong></text>
           {mode === "approval-choices" ? <ThemedSelect focused flexGrow={1} options={[
             { name: "Approve only this action", description: "No remembered grant.", value: "once" },
             ...(session.pendingApproval.call.name === "run_script" || session.pendingApproval.call.harness ? [] : [
