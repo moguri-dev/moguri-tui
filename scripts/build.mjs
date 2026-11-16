@@ -38,6 +38,9 @@ await Promise.all([
   build({ ...nodeBuild, entryPoints: ["apps/service/src/server.ts"], outfile: "dist/runtime.mjs" }),
   build({ entryPoints: ["apps/service/src/worker.ts"], outfile: "dist/worker.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "external", plugins: [cacheImports] }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/mcp-worker.ts"], outfile: "dist/mcp-worker.mjs" }),
+  // The Claude Agent SDK is a pinned devDependency bundled here; its optional bundled Claude binaries are stubbed out and never shipped.
+  build({ entryPoints: ["apps/service/src/claude-agent-worker.ts"], outfile: "dist/claude-agent-worker.mjs", bundle: true, platform: "node", format: "esm", target: "node26", packages: "bundle",
+    banner: { js: "import { createRequire as __moguriCreateRequire } from 'node:module'; const require = __moguriCreateRequire(import.meta.url);" } }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/remote-bridge.ts"], outfile: "dist/remote-bridge.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/terminal-broker.ts"], outfile: "dist/terminal-broker.mjs" }),
   build({ ...nodeBuild, entryPoints: ["apps/service/src/terminal-bridge.ts"], outfile: "dist/terminal-bridge.mjs" }),

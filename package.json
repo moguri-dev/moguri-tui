@@ -183,7 +183,7 @@
     "yauzl": "3.4.0"
   },
   "devDependencies": {
-    "cacache": "21.0.1",
+    "@anthropic-ai/claude-agent-sdk": "0.3.325",
     "@electron/packager": "20.3.0",
     "@playwright/test": "1.64.1",
     "@resvg/resvg-js": "2.6.2",
@@ -195,6 +195,7 @@
     "@types/yauzl": "3.4.0",
     "@vitejs/plugin-react": "6.1.2",
     "@vscode/debugprotocol": "1.68.0",
+    "cacache": "21.0.1",
     "electron": "44.9.3",
     "esbuild": "0.28.2",
     "tsx": "4.23.15",
@@ -205,7 +206,15 @@
     "glob": "14.0.3",
     "minimatch": "11.0.3",
     "encoding-sniffer": "1.0.2",
-    "node-fetch": "npm:node-fetch-native@1.6.7"
+    "node-fetch": "npm:node-fetch-native@1.6.7",
+    "@anthropic-ai/claude-agent-sdk-darwin-arm64": "file:./scripts/stubs/claude-agent-sdk-no-bundled-binary",
+    "@anthropic-ai/claude-agent-sdk-darwin-x64": "file:./scripts/stubs/claude-agent-sdk-no-bundled-binary",
+    "@anthropic-ai/claude-agent-sdk-linux-arm64": "file:./scripts/stubs/claude-agent-sdk-no-bundled-binary",
+    "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "file:./scripts/stubs/claude-agent-sdk-no-bundled-binary",
+    "@anthropic-ai/claude-agent-sdk-linux-x64": "file:./scripts/stubs/claude-agent-sdk-no-bundled-binary",
+    "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "file:./scripts/stubs/claude-agent-sdk-no-bundled-binary",
+    "@anthropic-ai/claude-agent-sdk-win32-arm64": "file:./scripts/stubs/claude-agent-sdk-no-bundled-binary",
+    "@anthropic-ai/claude-agent-sdk-win32-x64": "file:./scripts/stubs/claude-agent-sdk-no-bundled-binary"
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
