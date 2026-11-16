@@ -229,6 +229,15 @@ export function removeNativeScriptFixtureMarker(db: DatabaseSync, events: readon
   }
   db.exec("DELETE FROM retention_metadata WHERE id='native_script_execution_schema'");
 }
+export function removeClaudeAgentFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type.startsWith("agent.") ||
+    event.event_type === "settings.updated" && event.payload.settings.claudeAgent !== undefined ||
+    event.event_type === "tool.requested" && event.payload.approval.call.harness !== undefined ||
+    event.event_type === "tool.completed" && event.payload.call.harness !== undefined)) {
+    throw new Error("Generate genuine pre-108 history; actual Claude Agent sessions, harness tools and settings cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='claude_agent_harness_schema'");
+}
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
     event.event_type === "settings.updated" && event.payload.settings.voice?.model !== undefined ||
@@ -237,6 +246,7 @@ export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: 
     event.event_type === "question.answered" && event.payload.answer.skipped !== undefined)) {
     throw new Error("Generate genuine pre-107 history; actual external voice model reviews, trusted selections, trusted-folder skill admissions, skill attachments and skipped questions cannot be relabelled.");
   }
+  removeClaudeAgentFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='external_voice_model_schema'");
 }
 export function removeCapabilityDeletionFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {

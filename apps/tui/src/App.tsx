@@ -1345,7 +1345,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           {availableModels.length || readinessModels.length ? <ThemedSelect focused flexGrow={1} options={[...availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
             model.environments && !model.environments.includes(session?.controls.env ?? "Local") ? `Unavailable: ${snapshot?.routingDiagnostics?.join(" ") ?? "No eligible model in this environment."}` :
               snapshot?.settings.values.kupo.workflow === "auto" ? "Automatic Single / Cascade / eligible Critique; every actual role is metered" :
-                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : "GitHub Copilot"}`, value: model.id })),
+                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : model.source === "claude-agent" ? "your installed Claude Code" : "GitHub Copilot"}`, value: model.id })),
               ...readinessModels.map((model) => ({
                 name: `Inspect runtime and hardware / ${model.name}`, description: "Read-only on the selected execution machine; no model selection, inference or installation.",
                 value: `readiness:${model.id}`,
@@ -1552,10 +1552,10 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         {snapshot?.provider.diagnostic && <text fg={colors.attention}>{safe(snapshot.provider.diagnostic)}</text>}
         {session?.pendingApproval && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1}
           height={compact ? mode === "approval" || mode === "approval-choices" ? 10 : 6 : mode === "approval-choices" ? 17 : 10} flexShrink={0}>
-          <text fg={colors.attention} height={1} wrapMode="none" truncate><strong>Approval required: {session.pendingApproval.call.name}</strong></text>
+          <text fg={colors.attention} height={1} wrapMode="none" truncate><strong>Approval required: {session.pendingApproval.call.harness ? `Claude Code ${session.pendingApproval.call.name}` : session.pendingApproval.call.name}</strong></text>
           {mode === "approval-choices" ? <ThemedSelect focused flexGrow={1} options={[
             { name: "Approve only this action", description: "No remembered grant.", value: "once" },
-            ...(session.pendingApproval.call.name === "run_script" ? [] : [
+            ...(session.pendingApproval.call.name === "run_script" || session.pendingApproval.call.harness ? [] : [
             { name: "Approve for this session", description: "Same exact command/arguments or MCP tool.", value: "session:exact" },
             ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: "Approve for this project", description: "All sessions of the selected repository, current environment.", value: "project:exact" }] : []),
             { name: "Always approve across this profile", description: "Same exact command/arguments or schema-bound MCP tool.", value: "global:exact" },
@@ -1565,7 +1565,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
               { name: `Always approve ${session.pendingApproval.call.name} globally`, description: "Current profile and environment; not a command or MCP wildcard.", value: "global:tool" },
             ] : []),
             ]),
-            ...((session.pendingApproval.call.name === "run_command" || session.pendingApproval.call.name === "command_job" && session.pendingApproval.call.arguments.action === "start") &&
+            ...(!session.pendingApproval.call.harness && (session.pendingApproval.call.name === "run_command" || session.pendingApproval.call.name === "command_job" && session.pendingApproval.call.arguments.action === "start") &&
               typeof session.pendingApproval.call.arguments.command === "string" && commandFamily(session.pendingApproval.call.arguments.command) ? [
                 ...(approvalProject(session, session.pendingApproval.call.arguments.repository) ? [{ name: `Always approve ${commandFamily(session.pendingApproval.call.arguments.command)} for this project`, description: "Any simple command arguments in this repository; compound expressions still ask.", value: "project:family" }] : []),
                 { name: `This family of commands: ${commandFamily(session.pendingApproval.call.arguments.command)}`, description: "Across this profile in the current environment. Compound expressions still ask; hard denials still win.", value: "global:family" },
