@@ -7,7 +7,7 @@ import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
-import { agentHarnessProduct, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
+import { agentHarnessProduct, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
@@ -281,7 +281,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const githubOwner = useRef("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
-  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache">("mcp");
+  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache" | "hosted-key" | "hosted-code">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
   const planEditor = useRef<PlanEditorRequest | null>(null), planSaving = useRef(false);
@@ -651,6 +651,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           if (!editor || editor.getState().text || editor.getState().dirty) throw new Error("Newer composer input exists. Resolve its draft explicitly; the original queued command cannot overwrite it.");
           if (result.name === "reload-draft") editor.reload(); else await editor.keepMine();
           return;
+        case "api-key": case "login-code":
+          setTokenKind(result.name === "api-key" ? "hosted-key" : "hosted-code"); setTokenServer(result.argument); setTokenValue(""); setMode("mcp-token"); return;
         case "cache": case "linear": case "mcp": case "model-token": case "remote-model-token": {
           const server = result.name === "cache" ? result.argument.slice(6) : result.name === "mcp" ? result.argument.split(/\s+/)[1] ?? "" : result.name === "linear" ? "" : result.argument;
           if (result.name === "cache" && !snapshot?.dependencyRegistries.some((registry) => registry.id === server)) throw new Error("Choose an exact registry ID from /cache registries.");
@@ -710,6 +712,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       if (name === "/new" && (!argument || argument === "global")) await newSession(true);
       else if (name === "/open" && argument) await openProject(argument);
       else if (name === "/connect" && !argument) await client.command({ type: "provider.login" });
+      else if (name === "/connect" && (argument === "chatgpt" || argument === "openrouter")) await client.models.hosted.login(argument);
       else if (name === "/profiles" && !argument) await openProfiles();
       else if (name === "/settings" && !argument) setMode("settings");
       else if (name === "/theme" && !argument) setMode("themes");
@@ -896,7 +899,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
       if (key.name === "backspace") setTokenValue((value) => value.slice(0, -1));
-      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "cache") await client.cache.registries.setToken(tokenServer, tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
+      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "cache") await client.cache.registries.setToken(tokenServer, tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "hosted-key") await client.models.hosted.setKey(tokenServer as "openrouter", tokenValue); else if (tokenKind === "hosted-code") await client.models.hosted.submitCode(tokenServer as "chatgpt", tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
@@ -1306,7 +1309,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.muted} height={2}>Tab switches the scrollable exact preview and choices. Review all fields. Esc exits without stopping the agent.</text>
         </box> :
         mode === "capability-output" ? <scrollbox key="command-output" flexGrow={1} minHeight={0} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
-        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
+        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "hosted-key" ? `${tokenServer} API key` : tokenKind === "hosted-code" ? `${tokenServer} sign-in redirect URL` : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
           <ThemedInput focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "repository-import" ? <box flexGrow={1} flexDirection="column" padding={1}>
@@ -1345,7 +1348,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           {availableModels.length || readinessModels.length ? <ThemedSelect focused flexGrow={1} options={[...availableModels.map((model) => ({ name: model.name, description: model.synthetic ?
             model.environments && !model.environments.includes(session?.controls.env ?? "Local") ? `Unavailable: ${snapshot?.routingDiagnostics?.join(" ") ?? "No eligible model in this environment."}` :
               snapshot?.settings.values.kupo.workflow === "auto" ? "Automatic Single / Cascade / eligible Critique; every actual role is metered" :
-                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : model.source === "claude-agent" ? "your installed Claude Code" : model.source === "codex-agent" ? "your installed Codex" : "GitHub Copilot"}`, value: model.id })),
+                snapshot?.settings.values.kupo.workflow === "compound" ? "Moguri reviewed compound / separately metered actual roles" : "Moguri Single alpha / separately metered router and solver" : `${model.contextWindow} context tokens / ${model.source === "local" ? model.providerId : model.source === "claude-agent" ? "your installed Claude Code" : model.source === "codex-agent" ? "your installed Codex" : model.source === "hosted" ? hostedProvider(model.providerId ?? "")?.name ?? "hosted account" : "GitHub Copilot"}`, value: model.id })),
               ...readinessModels.map((model) => ({
                 name: `Inspect runtime and hardware / ${model.name}`, description: "Read-only on the selected execution machine; no model selection, inference or installation.",
                 value: `readiness:${model.id}`,
@@ -1422,6 +1425,8 @@ Shift+Cmd/Ctrl+Enter sends now. Ctrl+C saves and leaves this TUI; /stop stops th
 Existing shortcut aliases remain available for compatibility.
 
 /connect | /cancel-login | /disconnect | /models | /model ID
+/connect chatgpt|openrouter signs in; /api-key openrouter|anthropic|openai opens masked key input; /login-code PROVIDER pastes a redirect URL
+/disconnect PROVIDER removes a hosted provider's stored credential
 /model-settings [JSON|reset] configures working context/thinking via the shared SDK
 /local-models [refresh] inspects configured endpoints without inference or host scans
 /remote [probe|reconcile ID|acknowledge ID] uses pinned SSH, never Local fallback
@@ -1546,6 +1551,10 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <text fg={colors.accent}>{safe(`${continuedWork.source.title}: ${continuedWork.status} / one delegated task to its PR`)}</text>
           <text fg={colors.muted}>{safe(continuedWork.diagnostic ?? (continuedWork.prUrl ? `PR: ${continuedWork.prUrl}` : `Open its child in the sessions list, or inspect /kanban work ${continuedWork.id}.`))}</text>
         </box>}
+        {snapshot?.provider.catalogue?.providers.filter((provider) => provider.account?.login).map((provider) => <box key={provider.id} flexDirection="column" border borderColor={colors.accent} padding={1}>
+          <text fg={colors.accent}>{provider.name} sign-in</text><text fg={colors.foreground}>{provider.account!.login!.url}</text>
+          <text fg={colors.muted}>Open this URL in your browser. If it cannot reach this machine, /login-code {provider.id} accepts the final redirect URL. /cancel-login {provider.id} cancels.</text>
+        </box>)}
         {snapshot?.provider.login && <box flexDirection="column" border borderColor={colors.accent} padding={1}>
           <text fg={colors.accent}>GitHub Copilot sign-in: {snapshot.provider.login.code}</text><text fg={colors.foreground}>{snapshot.provider.login.url}</text><text fg={colors.muted}>Authorize in your browser. /cancel-login cancels. Account model policies may be enabled.</text>
         </box>}
