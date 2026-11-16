@@ -412,7 +412,9 @@ qualified 0.28 artifacts remain frozen.
 
 **Milestone 1 is accepted** at protocol 106 with SendBox 0.2.7: all 10,080
 required Local/SSH/Sandbox cells, ten physical native gates and the full
-source, hidden desktop, SDK and package runs pass. The
+source, hidden desktop, SDK and package runs pass. Regression runs now use a
+78-cell covering array; the full product is opt-in `npm run test:matrix`
+([D38](docs/architecture/decisions.md#d38-covering-array-milestone-regression)). The
 [acceptance record and roadmap](docs/remaining-milestone-gaps.md) maps every
 milestone criterion to its evidence, records the user-directed replacement of
 account-blocked hosted CI with local evidence, and lists the remaining roadmap
