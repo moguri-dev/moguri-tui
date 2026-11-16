@@ -290,6 +290,14 @@ export function appendLegacyAutopilot(service: Awaited<ReturnType<typeof startSe
     project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy } } }]);
   service.controller.refreshProfile();
 }
+/** Autopilot/Max that explicitly opts out of automatic approvals, keeping the bounded decision-layer path. */
+export function appendBoundedAutopilot(service: Awaited<ReturnType<typeof startService>>, sessionId: string, autonomy: "Autopilot" | "Autopilot Max" = "Autopilot"): void {
+  const session = service.controller.snapshot().sessions.find((value) => value.id === sessionId);
+  if (!session || session.controls.automaticApprovals === true) throw new Error("Generate an original bounded session; never strip actual automatic-approval consent.");
+  service.store.commit([{ event_type: "session.configured", profile_id: service.controller.snapshot().profileId,
+    project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy, automaticApprovals: false } } }]);
+  service.controller.refreshProfile();
+}
 export function removePost44FixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
   const future = db.prepare("SELECT count(*) AS count FROM events WHERE json_extract(data,'$.event_type') IN ('candidate.owner_bound','candidate.cleanup_recorded','candidate.usage_retained','model.selection_remembered','session.pr_observed','skill.used','sandbox.setup_recorded','task.plan_updated','notification.sound_saved','notification.sound_removed','application.configured','application.storage_recorded','application.update_recorded')").get();
   if (Number(future?.count)) throw new Error("Generate genuine pre-settings history before relabeling an additive-marker fixture. New native intent or sound grants cannot become old data.");

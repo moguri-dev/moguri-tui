@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { defaultKupoSettings, KUPO_MODEL_ID, MoguriSdk } from "../../packages/sdk/src/index.ts";
 import { fixtureProvider, setupFixture, type GeneratedProviderOptions } from "../fixture.ts";
-import { appendLegacyAutopilot } from "./legacy-state.ts";
+import { appendBoundedAutopilot } from "./legacy-state.ts";
 import { routedFixture } from "./single-routing.ts";
 
 export const generatedAdvice = (choice = "allow", confidence = 0.98) => JSON.stringify({ answers: { action: {
@@ -38,7 +38,7 @@ export async function setupDecisions(options: { primary?: GeneratedProviderOptio
     const configured = structuredClone(sdk.settings.get()!.values);
     configured.decisions = { ...configured.decisions, enabled: true, modelId: model.id, outputTokens: 256 };
     await sdk.settings.update(configured, sdk.settings.get()!.revision);
-    appendLegacyAutopilot(f.service, f.sessionId, "Autopilot Max");
+    appendBoundedAutopilot(f.service, f.sessionId, "Autopilot Max");
     await sdk.refresh();
     return { ...f, sdk, advice, decisionModelId: model.id, close: async () => { sdk.disconnect(); await f.close(); await advice.close(); } };
   } catch (error) { sdk.disconnect(); await f.close(); await advice.close(); throw error; }
