@@ -232,8 +232,9 @@ export function removeNativeScriptFixtureMarker(db: DatabaseSync, events: readon
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
     event.event_type === "settings.updated" && event.payload.settings.voice?.model !== undefined ||
-    event.event_type === "skill.admission_recorded" && event.payload.admission.basis !== undefined)) {
-    throw new Error("Generate genuine pre-107 history; actual external voice model reviews, trusted selections and trusted-folder skill admissions cannot be relabelled.");
+    event.event_type === "skill.admission_recorded" && event.payload.admission.basis !== undefined ||
+    event.event_type === "draft.saved" && event.payload.attachments.some((attachment) => attachment.kind === "skill"))) {
+    throw new Error("Generate genuine pre-107 history; actual external voice model reviews, trusted selections, trusted-folder skill admissions and skill attachments cannot be relabelled.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id='external_voice_model_schema'");
 }
