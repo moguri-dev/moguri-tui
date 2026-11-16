@@ -7,7 +7,7 @@ notices remain in installed and packaged dependencies.
 | Component | License | Use |
 | --- | --- | --- |
 | Node.js | MIT plus included third-party notices | Pinned 26.x service, worker and CLI runtime; built-in SQLite |
-| `@earendil-works/pi-ai` | MIT | GitHub Copilot authentication, account catalog and model transport |
+| `@earendil-works/pi-ai` | MIT | GitHub Copilot, OpenRouter, Anthropic API, OpenAI API and Sign in with ChatGPT authentication, catalogues and model transport |
 | OpenTUI core and React renderer | MIT | Native terminal rendering |
 | React and React DOM | MIT | Shared state hooks and desktop UI |
 | Electron | MIT plus Chromium/Node notices | Isolated desktop shell |
@@ -53,4 +53,8 @@ with retained account/root/revision provenance, never an automatic model grant.
 No OpenCode source, branding, provider session store or OAuth implementation was
 copied into Moguri. The pi-ai package owns its upstream authentication flow.
 Authentication support does not grant a license to a hosted provider or imply
-partnership status.
+partnership status. Codex Agent launches the user's own Codex CLI
+(<https://github.com/openai/codex>, Apache-2.0) and speaks its documented
+app-server protocol; no Codex code or binary is bundled. Sign in with ChatGPT
+follows OpenAI's terms for open-source, locally hosted apps; Claude.ai
+subscription sign-in is not offered.
