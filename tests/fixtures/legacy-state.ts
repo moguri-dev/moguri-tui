@@ -236,7 +236,15 @@ export function removeClaudeAgentFixtureMarker(db: DatabaseSync, events: readonl
     event.event_type === "tool.completed" && event.payload.call.harness !== undefined)) {
     throw new Error("Generate genuine pre-108 history; actual Claude Agent sessions, harness tools and settings cannot be relabelled.");
   }
+  removeWorkspaceFoldersFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='claude_agent_harness_schema'");
+}
+export function removeWorkspaceFoldersFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type.startsWith("workspace_folder.") ||
+    event.event_type === "project.added" && event.payload.project.workspaceFolderId !== undefined)) {
+    throw new Error("Generate genuine pre-109 history; actual workspace folders and read-only folder projects cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='workspace_folders_schema'");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
