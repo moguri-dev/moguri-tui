@@ -229,7 +229,18 @@ export function removeNativeScriptFixtureMarker(db: DatabaseSync, events: readon
   }
   db.exec("DELETE FROM retention_metadata WHERE id='native_script_execution_schema'");
 }
+export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
+    event.event_type === "settings.updated" && event.payload.settings.voice?.model !== undefined ||
+    event.event_type === "skill.admission_recorded" && event.payload.admission.basis !== undefined ||
+    event.event_type === "draft.saved" && event.payload.attachments.some((attachment) => attachment.kind === "skill") ||
+    event.event_type === "question.answered" && event.payload.answer.skipped !== undefined)) {
+    throw new Error("Generate genuine pre-107 history; actual external voice model reviews, trusted selections, trusted-folder skill admissions, skill attachments and skipped questions cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='external_voice_model_schema'");
+}
 export function removeCapabilityDeletionFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  removeExternalVoiceModelFixtureMarker(db, events);
   if (events.some((event) => event.event_type === "capability.deleted") ||
     db.prepare("SELECT 1 FROM events WHERE json_extract(data,'$.event_type')='capability.deleted' LIMIT 1").get()) {
     throw new Error("Generate genuine pre-106 history; actual skill deletions cannot be relabelled.");
@@ -279,6 +290,14 @@ export function appendLegacyAutopilot(service: Awaited<ReturnType<typeof startSe
   if (!session || session.controls.automaticApprovals !== undefined) throw new Error("Generate an original bounded session; never strip actual automatic-approval consent.");
   service.store.commit([{ event_type: "session.configured", profile_id: service.controller.snapshot().profileId,
     project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy } } }]);
+  service.controller.refreshProfile();
+}
+/** Autopilot/Max that explicitly opts out of automatic approvals, keeping the bounded decision-layer path. */
+export function appendBoundedAutopilot(service: Awaited<ReturnType<typeof startService>>, sessionId: string, autonomy: "Autopilot" | "Autopilot Max" = "Autopilot"): void {
+  const session = service.controller.snapshot().sessions.find((value) => value.id === sessionId);
+  if (!session || session.controls.automaticApprovals === true) throw new Error("Generate an original bounded session; never strip actual automatic-approval consent.");
+  service.store.commit([{ event_type: "session.configured", profile_id: service.controller.snapshot().profileId,
+    project_id: session.projectId, session_id: session.id, payload: { controls: { ...session.controls, autonomy, automaticApprovals: false } } }]);
   service.controller.refreshProfile();
 }
 export function removePost44FixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
