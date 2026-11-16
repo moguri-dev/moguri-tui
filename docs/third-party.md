@@ -22,6 +22,7 @@ notices remain in installed and packaged dependencies.
 | Playwright | Apache-2.0 | Hidden Electron end-to-end testing |
 | `@electron/packager` | BSD-2-Clause | Development macOS application packaging |
 | `@modelcontextprotocol/sdk` | MIT | Native gateway, stdio/Streamable HTTP connectors and outward single MCP |
+| `@anthropic-ai/claude-agent-sdk` 0.3.325 | Proprietary, Anthropic Commercial Terms ([legal](https://code.claude.com/docs/en/legal-and-compliance)) | Optional Claude Agent `sdk` transport, bundled into `dist/claude-agent-worker.mjs`. Its optional bundled Claude Code binaries are replaced by an empty stub and never installed or shipped; Moguri launches the user's own Claude Code. |
 | `sqlite-vec` | MIT/Apache-2.0 | Local project-partitioned lexical-vector database |
 | Ajv | MIT | Current external MCP JSON-schema argument validation |
 | YAML | ISC | Standard `SKILL.md` front matter |
