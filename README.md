@@ -35,7 +35,9 @@ navigation and a focus-safe sidebar. [Terminal controls](docs/setup.md#terminal-
 preserve drafts while reading history. [Shared themes](docs/architecture/themes-and-tui.md)
 include ten presets in Dark and Light, without changing saved choices or factory
 Dark. Moguri includes its own verified [source setup instructions](docs/setup.md)
-in normal model context, including project-free chats.
+in normal model context, including project-free chats. Desktop Settings keeps
+on-screen text short; the [Settings reference](docs/settings/README.md) holds
+each page's full behavior and safeguards.
 The [Local website allowlist](docs/architecture/native-network-policy.md) supports
 session, project and profile-wide grants through Guardrails and `/firewall`.
 
@@ -152,7 +154,7 @@ keeps complete Local/SSH generated coverage separate from missing current
 physical SendBox and account-blocked hosted-CI acceptance.
 
 Whole-descendant containment can be required explicitly through **Guardrails /
-Require qualified SendBox** or `moguri containment require-sandbox
+Require Sandbox** (qualified SendBox) or `moguri containment require-sandbox
 --confirm-review`. Ordinary Local/SSH still owns known groups only. Missing
 qualification blocks new work; selecting this policy does not silently change
 an existing session's Env, qualify an old workload or choose a model.
