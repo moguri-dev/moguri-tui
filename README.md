@@ -197,8 +197,9 @@ separate from exact shared role-effort and working-window controls. It selects
 only compatible actual roles within
 the selected boundary; Savings/Performance require reviewed evaluation and
 reference-price profiles, never guessed frontier classes. Bounded Cascade and
-Critique retain original role results, and explicit opt-in text compaction
-preserves readable history and source provenance. Finite automatic work uses
+Critique retain original role results, and text compaction (on by default,
+following the shared smart compaction setting) preserves readable history and
+source provenance. Finite automatic work uses
 complete all-role holds and selected-boundary finishing. The
 [owned transport contract](docs/architecture/owned-model-transports.md) keeps
 SSH/native bounded decisions and metadata finishing on their original parent;
@@ -588,8 +589,14 @@ tool-less Local/SSH model call through the same SDK. Previewing does not infer;
 generation, actual history/content review, apply/discard and original-context
 restore are separate actions. Complete recent turns, original encrypted history
 and drafts remain retained; rejected/unknown calls still count. Desktop exposes
-review under Model, and CLI/TUI share `/compact`. Images, automatic compaction
-and implicit kupo compactor selection are not supported.
+review under Model, and CLI/TUI share `/compact`. Images and implicit kupo
+compactor selection are not supported.
+
+**Smart compaction** is on by default: when a chat nears its model's working
+window (75%, or 200k tokens), Moguri summarizes older turns with that chat's
+model in one metered call and keeps going, with original history restorable.
+Type `/compact` to compact now. Built-in slash commands always win over a skill
+with the same name, and Moguri asks you to rename such skills.
 
 [**Kupo**](docs/architecture/automatic-kupo.md) is always in the model picker.
 Its automatic policy uses configured models: none blocks inference, one runs
