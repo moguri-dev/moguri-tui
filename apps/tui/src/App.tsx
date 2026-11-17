@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { agentHarnessProduct, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
-import { continueWorkInput, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
 import { configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
@@ -721,6 +721,15 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       else if (name === "/quit" && !argument) await quit();
       else throw new Error("No current chat. Use /new global, /open ABSOLUTE_PATH, /connect, /profiles, /theme, /settings or /help. Nothing was sent.");
       setStartupCommand(""); return;
+    }
+    const shell = parseShellCommand(text);
+    if (shell !== null) {
+      // The user's own console input: no prompt, steer, queue item or model call.
+      if (held) throw new Error("! runs a command in this chat's terminal right away; it cannot be held or scheduled. Nothing was run.");
+      const ran = await client.terminal.run(session.id, shell);
+      if (editor.getState().text === text) { editor.edit(""); await editor.flush(); }
+      setNotice(`Ran in this chat's terminal${ran.root ? ` at ${ran.root}` : ""}. /terminals read ${ran.terminalId} shows its output; interactive prompts need the desktop Terminal.`);
+      return;
     }
     if (!text.startsWith("/")) {
       if (!held && retry) {
