@@ -11,12 +11,13 @@ import { reviewNativeTools, waitFor } from "./fixture.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
 import { generatedDocx } from "./fixtures/documents.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
-import { configureMilestoneRouting, milestoneAxes, milestoneCellId, milestoneCalls, milestoneResponses } from "./fixtures/milestone-combinations.ts";
+import { configureMilestoneRouting, milestoneCellId, milestoneCalls, milestoneClientCells, milestoneResponses } from "./fixtures/milestone-combinations.ts";
 import { nativeConfiguration } from "./fixtures/native-target.ts";
 import { nativeMilestoneFixture } from "./fixtures/native-milestone-api.ts";
 
 const native = await nativeConfiguration(true);
-for (const env of ["Local", "Remote", "Sandbox"] as const) for (const selection of milestoneAxes.selection)
+for (const cell of milestoneClientCells()) {
+const { env, selection } = cell;
 test(`actual TUI ${env}/${selection} applies exact controls and a warned combined cap, then approves only selected document access`, {
   skip: process.platform !== "darwin" || env === "Sandbox" && !native, timeout: 45000,
 }, async () => {
@@ -32,9 +33,6 @@ test(`actual TUI ${env}/${selection} applies exact controls and a warned combine
     const path = join(fixture.directory, "generated-tui-matrix.docx");
     await writeFile(path, generatedDocx());
     const document = await fixture.sdk.attachments.document(fixture.sessionId, path);
-    const cell = {
-      env, selection, autonomy: "Manual", budget: "both", window: "half", effort: selection === "fixed" ? "high" : "default", input: "document",
-    } as const;
     const observed = milestoneResponses(fixture, cell, document.id!);
     const ui = terminal = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false });
     const rendered = root = createRoot(ui.renderer);
@@ -83,3 +81,4 @@ test(`actual TUI ${env}/${selection} applies exact controls and a warned combine
     else await fixture.close();
   }
 });
+}

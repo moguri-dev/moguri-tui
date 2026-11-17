@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolve as resolvePath } from "node:path";
 import { createRequire } from "node:module";
 import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, restartMoguriService, ensureConnection, stateDirectory, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
 import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
@@ -25,7 +26,7 @@ export async function main(argv: string[]): Promise<void> {
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
     "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, "forward-access": { type: "boolean" }, children: { type: "string" }, digest: { type: "string" }, binding: { type: "string" },
-    "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" },
+    "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" }, "trust-folder": { type: "boolean" }, once: { type: "boolean" }, include: { type: "string" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
     "confirm-write": { type: "boolean" }, "confirm-cost": { type: "boolean" }, generation: { type: "string" }, "role-sequence": { type: "string" }, branch: { type: "string" }, "materialization-id": { type: "string" },
@@ -51,6 +52,11 @@ moguri models runtime-probe MODEL_ID REVIEW_ID [required] --session ID  Consume 
 moguri project import-preview LIST_FILE --root PARENT  Review all URL/bullet destinations
 moguri project import LIST_FILE --root PARENT --digest SHA --confirm-review
 moguri project imports             Retained batches, no replay
+moguri project folders             Workspace folders and their latest sync check
+moguri project folder-preview FOLDER  List Git repositories in a workspace folder
+moguri project folder-import FOLDER --digest SHA --trust-folder [--include JSON] [--once]
+                                   Trust the folder, add repositories as read-only projects, keep in sync unless --once
+moguri project folder-sync FOLDER_ID on|off | folder-check FOLDER_ID | folder-remove FOLDER_ID
 moguri project import-read|import-stop|import-wait BATCH_ID
 moguri project import-acknowledge BATCH_ID LINE --revision N --confirm-review  Actual inspection, not cleanup proof
 moguri project remote-preview PROJECT_ID REMOTE URL  Review actual linked-worktree config
@@ -266,6 +272,7 @@ moguri skills import PROJECT_ID SKILL.md
 moguri skills sources|find [QUERY] [--session ID]
 moguri skills read ID --digest SHA [--session ID]  Refresh and check exact skill bytes
 moguri dashboard [work|usage|cost|velocity] [--filters JSON --project ID]
+moguri dashboard analytics [SESSION_ID]
 moguri plugins import PROJECT_ID manifest.json
 moguri mcp --session SESSION_ID    Native stdio MCP gateway
 moguri mcp tools SERVER [QUERY]    Bounded tool discovery
@@ -283,7 +290,7 @@ moguri mcp oauth-client SERVER     Read registered client JSON from piped stdin
 moguri mcp token SERVER            Read a bearer credential from piped stdin
 moguri dictate download --accept-license
 moguri dictate record|file WAV --session SESSION_ID
-moguri dictate model inspect /absolute/model.gguf | trust REVIEW_JOB_ID | managed
+moguri dictate model discover [FILE_OR_FOLDER] | inspect /absolute/model.gguf | trust REVIEW_JOB_ID | managed
 moguri agents run TEXT --session SESSION_ID
 moguri issues list|refresh PROJECT_ID
 moguri issues create PROJECT_ID issue.json
@@ -825,6 +832,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       }
     } else if (group === "project") {
       if (action === "imports") output(sdk.projects.imports.list());
+      else if (action === "folders") output({ folders: sdk.projects.folders.list(), status: await sdk.projects.folders.status() });
       else if (!args[0]) throw new Error("Choose the exact project, original batch or URL-list file shown in moguri --help.");
       else if (action === "import-preview" || action === "import") {
         if (!values.root) throw new Error("Choose an explicit --root parent folder before reviewing a repository list.");
@@ -835,7 +843,19 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           const result = await sdk.command({ type: "projects.import.start", input, expectedDigest: values.digest, confirm: true });
           output(await sdk.projects.imports.read(result.id!));
         }
-      } else if (action === "import-read") output(await sdk.projects.imports.read(args[0]));
+      } else if (action === "folder-preview") output(await sdk.projects.folders.preview(resolvePath(args[0])));
+      else if (action === "folder-import") {
+        if (!values.digest || !values["trust-folder"]) throw new Error("Use the preview --digest SHA and --trust-folder to let Moguri read this folder. Nothing was imported.");
+        const preview = await sdk.projects.folders.preview(resolvePath(args[0]));
+        if (preview.preview.digest !== values.digest) throw new Error("The folder changed since its preview. Run folder-preview again; nothing was imported.");
+        const include = values.include ? JSON.parse(values.include) as unknown : preview.preview.document.entries.filter((entry) => entry.disposition === "new").map((entry) => entry.relative);
+        if (!Array.isArray(include) || include.some((entry) => typeof entry !== "string")) throw new Error("--include must be a JSON array of relative repository paths from the preview.");
+        const result = await sdk.projects.folders.import(preview.preview, include as string[], !values.once, true);
+        output({ folder: sdk.projects.folders.list().find((folder) => folder.id === result.id) ?? { id: result.id } });
+      } else if (action === "folder-sync" && (args[1] === "on" || args[1] === "off")) output(await sdk.projects.folders.configure(args[0], args[1] === "on"));
+      else if (action === "folder-check") { await sdk.projects.folders.check(args[0]); output(await sdk.projects.folders.status()); }
+      else if (action === "folder-remove") output(await sdk.projects.folders.remove(args[0]));
+      else if (action === "import-read") output(await sdk.projects.imports.read(args[0]));
       else if (action === "import-stop") output(await sdk.projects.imports.cancel(args[0]));
       else if (action === "import-acknowledge" && args[1] && /^[1-9]\d*$/.test(args[1]) && Number.isSafeInteger(Number(args[1])) && values["confirm-review"]) output(await sdk.projects.imports.acknowledge(args[0], Number(args[1]), expectedRevision(), true));
       else if (action === "import-wait") {
@@ -1022,8 +1042,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (action !== "import" || !args[0] || !args[1]) throw new Error("Use skills sources/find/read ID --digest SHA, or import PROJECT_ID FILE. Imported capabilities start disabled.");
         output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));
       }
+    } else if (group === "dashboard" && action === "analytics") {
+      output(args[0] ? await sdk.analytics.session(args[0]) : await sdk.analytics.overview());
     } else if (group === "dashboard") {
-      if (action && !["work", "usage", "cost", "velocity"].includes(action)) throw new Error("Use dashboard work, usage, cost or velocity, with optional --filters JSON.");
+      if (action && !["work", "usage", "cost", "velocity"].includes(action)) throw new Error("Use dashboard work, usage, cost, velocity or analytics, with optional --filters JSON.");
       const filters: unknown = values.filters ? JSON.parse(values.filters) : {};
       if (!isRecord(filters) || Object.hasOwn(filters, "type")) throw new Error("Use a dashboard filter object with range and optional projectId.");
       const { DashboardQuerySchema } = await import("../../../packages/sdk/src/index.ts");
@@ -1069,9 +1091,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           const job = await sdk.voice.inspectModel(value);
           await waitForJob(job.id!, () => sdk.jobs.cancel(job.id!), "Model review", () => sdk.voice.inspection(job.id!));
           console.error(`Review the name, architecture and SHA-256 above, then run: moguri dictate model trust ${job.id}`);
-        } else if (step === "trust" && value) output(await sdk.voice.trustModel(value));
+        } else if (step === "discover") output(await sdk.voice.discoverModels(value));
+        else if (step === "trust" && value) output(await sdk.voice.trustModel(value));
         else if (step === "managed") output(await sdk.voice.useManagedModel());
-        else throw new Error("Use dictate model inspect /absolute/model.gguf, dictate model trust REVIEW_JOB_ID or dictate model managed.");
+        else throw new Error("Use dictate model discover [FILE_OR_FOLDER], dictate model inspect /absolute/model.gguf, dictate model trust REVIEW_JOB_ID or dictate model managed.");
       }
       else {
         if (!values.session) throw new Error("Choose --session SESSION_ID. Transcription never sends the prompt.");

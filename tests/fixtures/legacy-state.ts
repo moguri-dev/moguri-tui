@@ -236,7 +236,22 @@ export function removeClaudeAgentFixtureMarker(db: DatabaseSync, events: readonl
     event.event_type === "tool.completed" && event.payload.call.harness !== undefined)) {
     throw new Error("Generate genuine pre-108 history; actual Claude Agent sessions, harness tools and settings cannot be relabelled.");
   }
+  removeWorkspaceFoldersFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='claude_agent_harness_schema'");
+}
+export function removeWorkspaceFoldersFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type.startsWith("workspace_folder.") ||
+    event.event_type === "project.added" && event.payload.project.workspaceFolderId !== undefined ||
+    event.event_type === "project.configured" && (event.payload.configuration.values.repo.screenshots !== undefined ||
+      event.payload.configuration.values.repo.installers !== undefined || event.payload.configuration.values.repo.installerCommand !== undefined) ||
+    (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && event.payload.item.lifecycle !== undefined ||
+    event.event_type === "chat.title_recorded" && event.payload.title.purpose !== undefined ||
+    event.event_type === "settings.updated" && (event.payload.settings.git !== undefined || event.payload.settings.wrapUp !== undefined || event.payload.settings.shortcuts?.openApp !== undefined ||
+      event.payload.settings.chatTitles?.refresh !== undefined ||
+      event.payload.settings.retention?.archiveMerged !== undefined || event.payload.settings.retention?.archiveMergedAfterDays !== undefined))) {
+    throw new Error("Generate genuine pre-109 history; actual workspace folders, read-only folder projects, branch prefixes, merged-session archive settings, lifecycle turns/settings and title refreshes cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='workspace_folders_schema'");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||

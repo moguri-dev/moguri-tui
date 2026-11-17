@@ -31,7 +31,7 @@ export interface MilestoneCell {
 export const milestoneCellId = (cell: MilestoneCell) =>
   `${cell.env}/${cell.selection}/${cell.autonomy}/${cell.budget}/${cell.window}/${cell.effort}/${cell.input}`;
 
-export function requiredMilestoneCells(): MilestoneCell[] {
+export function fullMilestoneProduct(): MilestoneCell[] {
   const cells: MilestoneCell[] = [];
   for (const env of milestoneAxes.env)
     for (const selection of milestoneAxes.selection)
@@ -43,6 +43,13 @@ export function requiredMilestoneCells(): MilestoneCell[] {
                 cells.push({ env, selection, autonomy, budget, window, effort, input });
   return cells;
 }
+
+export const isManualKupoEffort = (cell: Pick<MilestoneCell, "selection" | "effort">) =>
+  cell.selection !== "fixed" && cell.effort !== "default";
+
+export const milestoneClientCells = (): MilestoneCell[] => milestoneAxes.env.flatMap((env) => milestoneAxes.selection.map((selection) => ({
+  env, selection, autonomy: "Manual", budget: "both", window: "half", effort: selection === "fixed" ? "high" : "default", input: "document",
+} as const)));
 
 export const milestoneBudget = (kind: MilestoneCell["budget"]): Controls["budget"] =>
   kind === "unlimited" ? { kind: "unlimited" } : {
