@@ -267,8 +267,8 @@ test("failed, stopped and unconfirmed results stay visible when ordinary tool ou
         settledToolCalls: new Set(["generated-settled-request"]), syntaxStyle, renderMarkdownNode: () => undefined, inspect: () => { inspection++; } })))));
     await frameUntil(setup, "Generated unknown outcome requires inspection.");
     const frame = setup.captureCharFrame();
-    assert.ok(frame.includes("Session / partial"));
-    assert.ok(frame.includes("Moguri / failed"), "a failed tool-request message must not disappear behind a compact result row");
+    assert.ok(frame.includes("Session / Partial result"));
+    assert.ok(frame.includes("Moguri / Failed"), "a failed tool-request message must not disappear behind a compact result row");
     assert.ok(frame.includes("Generated cleanup is unconfirmed"));
     assert.ok(frame.includes("Generated failed outcome requires inspection."));
     assert.ok(frame.includes("Generated stopped outcome requires inspection."));
