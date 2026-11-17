@@ -57,7 +57,8 @@ never proof of completion. [Session controls](docs/architecture/session-interact
 include ordered drag/drop, context-menu actions, serial held queues and explicit
 work/question/approval/completion indicators with verified draft/open/merged PR state.
 Unread names use subtle font weight rather than extra session-list dots.
-Center drops nest sessions or create named project folders; folder chats capture
+Center drops nest sessions, create named project folders or add a project to an
+existing group (groups never nest); folder chats capture
 all member repositories for explicit Local reads, edits and commands. Fuzzy
 session/settings search and compact settings controls share the
 [session reliability contract](docs/architecture/session-reliability.md).
