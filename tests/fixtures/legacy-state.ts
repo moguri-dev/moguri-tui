@@ -242,6 +242,8 @@ export function removeClaudeAgentFixtureMarker(db: DatabaseSync, events: readonl
 export function removeWorkspaceFoldersFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type.startsWith("workspace_folder.") ||
     event.event_type === "project.added" && event.payload.project.workspaceFolderId !== undefined ||
+    event.event_type === "project.configured" && (event.payload.configuration.values.repo.screenshots !== undefined ||
+      event.payload.configuration.values.repo.installers !== undefined || event.payload.configuration.values.repo.installerCommand !== undefined) ||
     event.event_type === "settings.updated" && (event.payload.settings.git !== undefined ||
       event.payload.settings.retention?.archiveMerged !== undefined || event.payload.settings.retention?.archiveMergedAfterDays !== undefined))) {
     throw new Error("Generate genuine pre-109 history; actual workspace folders, read-only folder projects, branch prefixes and merged-session archive settings cannot be relabelled.");
