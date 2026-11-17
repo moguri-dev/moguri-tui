@@ -241,8 +241,10 @@ export function removeClaudeAgentFixtureMarker(db: DatabaseSync, events: readonl
 }
 export function removeWorkspaceFoldersFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type.startsWith("workspace_folder.") ||
-    event.event_type === "project.added" && event.payload.project.workspaceFolderId !== undefined)) {
-    throw new Error("Generate genuine pre-109 history; actual workspace folders and read-only folder projects cannot be relabelled.");
+    event.event_type === "project.added" && event.payload.project.workspaceFolderId !== undefined ||
+    event.event_type === "settings.updated" && (event.payload.settings.git !== undefined ||
+      event.payload.settings.retention?.archiveMerged !== undefined || event.payload.settings.retention?.archiveMergedAfterDays !== undefined))) {
+    throw new Error("Generate genuine pre-109 history; actual workspace folders, read-only folder projects, branch prefixes and merged-session archive settings cannot be relabelled.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id='workspace_folders_schema'");
 }
