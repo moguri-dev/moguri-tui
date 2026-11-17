@@ -76,7 +76,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
 export interface GeneratedProviderOptions {
   httpFailure?: { status: number; message: string; remaining?: number; afterRequests?: number };
   modelId?: string;
-  respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> }; hold?: boolean; delayMs?: number };
+  respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> } | { name: string; args: Record<string, unknown> }[]; hold?: boolean; delayMs?: number };
   issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
   stateSql?: boolean;
   stateSqlStatements?: { sql: string; parameters?: (string | number | boolean | null)[] }[];
