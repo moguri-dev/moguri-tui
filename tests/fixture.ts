@@ -296,7 +296,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     await writeFile(join(project, "fixture.txt"), "generated original\n");
     const fixture = await fixtureProvider(options);
     resources.push(fixture.close);
-    const terminalSecrets = new Map<string, string>();
+    const terminalSecrets = new Map<string, string>(), telemetrySecrets = new Map<string, string>();
     const terminalSlot = (id: string) => { if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/.test(id)) throw new Error("Generated terminal credential must fit the explicit production secret-backend namespace."); return id; };
     const terminalVault = { read: async (id: string) => terminalSecrets.get(terminalSlot(id)) ?? null, write: async (id: string, value: string) => { terminalSecrets.set(terminalSlot(id), value); }, remove: async (id: string) => { terminalSecrets.delete(terminalSlot(id)); } };
     const program = options.platform?.terminal?.executable ? {} : { executable: process.execPath,
@@ -307,7 +307,9 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     }) }, github: { ...options.platform?.github, runProgram: options.platform?.github?.runProgram ?? (async (executable, args, request) => {
       if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture has no GitHub account. Personal authentication is forbidden.");
       return runProgram(executable, args, request);
-    }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
+    }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault },
+      telemetry: { vault: options.platform?.telemetry?.vault ?? { read: async (id: string) => telemetrySecrets.get(id) ?? null,
+        write: async (id: string, value: string) => { telemetrySecrets.set(id, value); }, remove: async (id: string) => { telemetrySecrets.delete(id); } } } };
     const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
     let restoreControlsJournal = () => {}, restoreJournal = () => {}, restoreSnapshot = () => {}, restoreCheckpoints = () => {};
     resources.push(async () => {

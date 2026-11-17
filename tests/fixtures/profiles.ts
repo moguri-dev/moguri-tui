@@ -22,7 +22,8 @@ export async function profileFixture(extra?: (profileId: string, directory: stri
       let values = vaults.get(id); if (!values) { values = new Map(); vaults.set(id, values); }
       const scoped = values;
       const overrides = extra?.(id, directory);
-      return { ...overrides, terminal: { defaultRoot: home, ...overrides?.terminal }, vault: { read: async (key: string) => scoped.get(key) ?? null, write: async (key: string, value: string) => { scoped.set(key, value); }, remove: async (key: string) => { scoped.delete(key); } } };
+      const vault = { read: async (key: string) => scoped.get(key) ?? null, write: async (key: string, value: string) => { scoped.set(key, value); }, remove: async (key: string) => { scoped.delete(key); } };
+      return { ...overrides, terminal: { defaultRoot: home, ...overrides?.terminal }, vault, telemetry: { vault } };
     },
   } };
   const service = await startService(options); generatedNodeSupervision(service);

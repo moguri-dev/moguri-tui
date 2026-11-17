@@ -193,6 +193,8 @@ moguri telemetry storage           Current profile key-backed ciphertext, not di
 moguri telemetry otlp status|review INPUT_JSON|apply REVIEW_JSON confirm-reviewed
 moguri stainless status|check      Stainless browser readiness; check launches a hidden throwaway instance
 moguri stainless open [URL] --session ID   Open a Local session preview in Stainless
+moguri telemetry otlp credential set ENDPOINT NAME   Credential header value from piped stdin only
+moguri telemetry otlp credential remove ENDPOINT NAME
 moguri repository preview|state --session ID
 moguri repository refresh --session ID --digest BINDING --revision N --confirm-review
 moguri repository clear --session ID --revision N --confirm-review
@@ -557,8 +559,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "telemetry") {
       if (action === "otlp") {
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("OTLP configuration belongs to the exact selected profile, not a session or usage filter.");
-        const { executeOtlpCommand } = await import("../../../packages/sdk/src/index.ts");
-        output(await executeOtlpCommand(sdk, args.join(" ")));
+        if (args[0] === "credential" && args[1] === "set" && args[2] && args[3] && args.length === 4) output(await sdk.telemetry.export.setCredential(args[2], args[3], await credential(4096)));
+        else {
+          const { executeOtlpCommand } = await import("../../../packages/sdk/src/index.ts");
+          output(await executeOtlpCommand(sdk, args.join(" ")));
+        }
       } else if (action === "storage") {
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("Storage is a current profile measurement, not a dated/project/model view. Select --profile ID instead.");
         output(await sdk.telemetry.storage());

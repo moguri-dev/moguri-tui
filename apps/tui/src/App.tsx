@@ -282,7 +282,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const githubOwner = useRef("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
-  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache" | "hosted-key" | "hosted-code">("mcp");
+  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache" | "hosted-key" | "hosted-code" | "otlp-header">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
   const planEditor = useRef<PlanEditorRequest | null>(null), planSaving = useRef(false);
@@ -707,6 +707,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (name === "/otlp") {
       if (held) throw new Error("OTLP settings require an explicit unheld user review. Held input was not executed or exported.");
       requireNavigation();
+      const credential = argument.match(/^credential set (\S+) (\S+)$/);
+      if (credential) { setTokenKind("otlp-header"); setTokenServer(JSON.stringify([credential[1], credential[2]])); setTokenValue(""); setMode("mcp-token"); return; }
       show(await executeOtlpCommand(client, argument));
       if (!session) setStartupCommand("");
       return;
@@ -919,7 +921,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
       if (key.name === "backspace") setTokenValue((value) => value.slice(0, -1));
-      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "cache") await client.cache.registries.setToken(tokenServer, tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "hosted-key") await client.models.hosted.setKey(tokenServer as "openrouter", tokenValue); else if (tokenKind === "hosted-code") await client.models.hosted.submitCode(tokenServer as "chatgpt", tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
+      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "cache") await client.cache.registries.setToken(tokenServer, tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "hosted-key") await client.models.hosted.setKey(tokenServer as "openrouter", tokenValue); else if (tokenKind === "hosted-code") await client.models.hosted.submitCode(tokenServer as "chatgpt", tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else if (tokenKind === "otlp-header") { const [endpoint, name] = JSON.parse(tokenServer) as [string, string]; await client.telemetry.export.setCredential(endpoint, name, tokenValue); } else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
@@ -1332,7 +1334,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.muted} height={2}>Tab switches the scrollable exact preview and choices. Review all fields. Esc exits without stopping the agent.</text>
         </box> :
         mode === "capability-output" ? <scrollbox key="command-output" flexGrow={1} minHeight={0} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
-        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "hosted-key" ? `${tokenServer} API key` : tokenKind === "hosted-code" ? `${tokenServer} sign-in redirect URL` : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
+        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "hosted-key" ? `${tokenServer} API key` : tokenKind === "hosted-code" ? `${tokenServer} sign-in redirect URL` : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : tokenKind === "otlp-header" ? `OTLP exporter header ${(JSON.parse(tokenServer) as string[])[1]} for ${(JSON.parse(tokenServer) as string[])[0]}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
           <ThemedInput focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "repository-import" ? <box flexGrow={1} flexDirection="column" padding={1}>
@@ -1432,7 +1434,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
 /session  /sessions  /work-items  /code-requests
 /sidebar open|close  /theme list  /theme crystal dark
 /new [global]  /open PATH  /models  /profiles  /settings
-/otlp status | review INPUT_JSON | apply REVIEW_JSON confirm-reviewed
+/otlp status | review INPUT_JSON | apply REVIEW_JSON confirm-reviewed | credential set|remove ENDPOINT NAME
 /stainless status | check | open [URL]
 /approve once  /question  /queue  /stop  /quit
 
