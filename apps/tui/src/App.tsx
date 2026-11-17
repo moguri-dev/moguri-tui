@@ -7,7 +7,7 @@ import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
 import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
-import { agentHarnessProduct, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
+import { agentHarnessProduct, describeActivityCall, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
@@ -187,6 +187,7 @@ export async function waitForCommandFrame(renderer: ReturnType<typeof useRendere
   } finally { renderer.off(CliRenderEvents.FRAME, observed); }
 }
 const label = (session: Session) => sessionTitle(session, 44);
+const NO_REGISTRY: Pick<Snapshot, "registry"> = { registry: [] };
 type Mode = "compose" | "project" | "sessions" | "models" | "queue" | "trace" | "command-results" | "help" | "approval" | "approval-choices" | "github-repositories" | "github-clone" | "github-items" | "github-detail" | "my-work" | "session-action" | "settings" | "themes" | "prompt-editor" | "settings-editor" | "project-editor" | "capability-output" | "runtime-review" | "mcp-token" | "issues" | "work-items" | "code-requests" | "issue-editor" | "board-editor" | "artifacts" | "artifact-editor" | "question" | "profiles" | "profile-editor" | "profile-recovery" | "plan-editor" | "continue-work" | "schedule" | "automations" | "kupo-mode" | "repository-import";
 const editorModes: Mode[] = ["prompt-editor", "settings-editor", "project-editor", "issue-editor", "board-editor", "artifact-editor", "profile-editor", "plan-editor"];
 type ArchiveReview = {
@@ -326,6 +327,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   useEffect(() => { setOtherQuestion(null); }, [client.profileId, pendingQuestion?.id, pendingQuestion?.revision]);
   const recommendation = pendingQuestion?.recommendation;
   const questionDetails = pendingQuestion ? `${pendingQuestion.question}${recommendation ? `\n\nModel recommends: ${recommendation.choice}\n${recommendation.reason}\nFrom ${recommendation.modelId}. Untrusted advice; you still decide.` : ""}` : "";
+  const approvalSummary = session?.pendingApproval ? describeActivityCall(session.pendingApproval.call, snapshot ?? NO_REGISTRY) : null;
+  const approvalSubject = approvalSummary?.subject && approvalSummary.subject !== session?.pendingApproval?.call.name ? `${approvalSummary.label}: ${approvalSummary.subject}\n\nArguments\n` : "";
   const approvalAdvice = session?.pendingApproval?.recommendationSource?.stepId === session?.pendingApproval?.stepId && session?.pendingApproval?.recommendationSource?.callId === session?.pendingApproval?.call.id ? session?.pendingApproval?.recommendation : undefined;
   const availableModels = snapshot?.provider.models.filter((model) => model.synthetic || !model.environments || model.environments.includes(session?.controls.env ?? "Local")) ?? [];
   const readinessModels = configuredReadinessModels(snapshot?.provider.catalogue, session?.controls.env ?? "Local");
@@ -1541,7 +1544,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             {!detailed && (session?.messages.length ?? 0) > 150 && <text fg={colors.muted}>Showing the latest 150 messages. F2 or /details reads the full retained conversation.</text>}
             {session?.messages.slice(detailed ? 0 : -150).map((message) => <TuiMessage key={`${message.id}:${detailed}`} message={message} detailed={detailed}
               activeTurnId={session.turnId} settledToolCalls={settledToolCalls} syntaxStyle={markdownStyle} renderMarkdownNode={renderMarkdownNode}
-              inspect={() => setFollowTranscript(false)} />)}
+              inspect={() => setFollowTranscript(false)} snapshot={snapshot ?? undefined} />)}
             {session && snapshot && Boolean(session.skillLoadSequence) && <TuiSkillLoads sdk={client} session={session} snapshot={snapshot} />}
             {editor && <TuiPendingInput editor={editor} />}
             {snapshot?.scheduledPrompts.filter((prompt) => prompt.sessionId === session?.id && ["scheduled", "blocked"].includes(prompt.status)).map((prompt) =>
@@ -1595,7 +1598,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             if (!option || !session.pendingApproval) return;
             const [scope, match] = String(option.value).split(":");
             void perform(async () => { await client.approvals.respond(session.id, session.pendingApproval!.id, true, scope === "once" ? undefined : parse(RememberApprovalSchema, { scope, match })); setMode("compose"); });
-          }} /> : <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>}
+          }} /> : <scrollbox flexGrow={1} focused={mode === "approval"}><text fg={colors.foreground}>{safe(`${approvalSubject}${JSON.stringify(session.pendingApproval.call.arguments, null, 2)}${approvalAdvice ? `\n\nModel advice (not approval): ${approvalAdvice}` : session.controls.autonomy === "Guided" ? "\n\nThe current solver supplied no explicit recommendation. You must decide." : ""}`)}</text></scrollbox>}
           <text fg={colors.attention} height={2} flexShrink={0}>{session.pendingApproval.call.name === "run_script" ? session.controls.env === "Sandbox" ? "Reviewed bytes / SendBox guest, not Local. Advice is not permission. " : "Exact reviewed bytes, unsandboxed Local. Agent advice is not permission. " : session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}{compact ? "\nCtrl+Y approve | Ctrl+D deny | Ctrl+V args" : "\n/approve once | Ctrl+D deny | Ctrl+V args | Ctrl+Y approve"}</text>
         </box>}
         {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1} height={compact ? 6 : recommendation ? 11 : 9} flexShrink={0}>
@@ -1640,22 +1643,23 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
     </box>
   </box></NavigationContext.Provider></ThemeContext.Provider>;
 }
-export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, syntaxStyle, renderMarkdownNode, inspect }: {
+export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, syntaxStyle, renderMarkdownNode, inspect, snapshot = NO_REGISTRY }: {
   message: PublicMessage; detailed: boolean; activeTurnId: string | null; settledToolCalls: ReadonlySet<string>;
-  syntaxStyle: SyntaxStyle; renderMarkdownNode: NonNullable<MarkdownOptions["renderNode"]>; inspect: () => void;
+  syntaxStyle: SyntaxStyle; renderMarkdownNode: NonNullable<MarkdownOptions["renderNode"]>; inspect: () => void; snapshot?: Pick<Snapshot, "registry">;
 }) {
   const colors = React.useContext(ThemeContext), [expanded, setExpanded] = useState(false);
   const documents = message.attachments?.filter((attachment) => attachment.kind === "document").map((attachment) =>
     <text key={attachment.id} fg={colors.accent}>{safe(`${attachment.path} [${attachmentStatus(attachment)}] ${attachment.id}`)}</text>);
   if (message.role === "tool") {
     const call = message.toolCalls?.[0], important = message.outcome !== "completed", open = detailed || expanded || important;
-    const value = call && [call.arguments.path, call.arguments.query, call.arguments.pattern].find((value): value is string => typeof value === "string");
-    const summary = value ? safe(value.split("\n")[0]!) : call && typeof call.arguments.command === "string" ? commandFamily(call.arguments.command) ?? "command" : `${Buffer.byteLength(message.text, "utf8")} bytes`;
+    const described = call ? describeActivityCall(call, snapshot) : null;
+    const value = described?.subject ?? (call && [call.arguments.path, call.arguments.query, call.arguments.pattern].find((value): value is string => typeof value === "string"));
+    const summary = value ? safe(value.split("\n")[0]!) : `${Buffer.byteLength(message.text, "utf8")} bytes`;
     return <box flexDirection="column" marginTop={important ? 1 : 0} flexShrink={0}>
       <box id={`tui-tool-${message.id}`} height={1} onMouseDown={(event) => {
         if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); inspect(); setExpanded((value) => !value);
       }}><text height={1} wrapMode="none" truncate fg={important ? colors.attention : colors.muted}>
-        {safe(`${open ? "v" : ">"} ${call?.name ?? "Tool"} / ${message.errorCode === "not_found" ? "Not Found" : outcomeLabel(message.outcome).label}  ${summary}${open ? "" : "  F2 details"}`)}
+        {safe(`${open ? "v" : ">"} ${described?.label ?? "Tool"} / ${message.errorCode === "not_found" ? "Not Found" : outcomeLabel(message.outcome).label}  ${summary}${open ? "" : "  F2 details"}`)}
       </text></box>
       {open && <text fg={important ? colors.attention : colors.muted}>{safe(message.text || "No text output.")}</text>}
       {documents}
@@ -1666,7 +1670,7 @@ export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, 
     const pending = message.toolCalls?.filter((call) => !settledToolCalls.has(call.id)) ?? [];
     if (!pending.length && !documents?.length) return null;
     return <box flexDirection="column" flexShrink={0}>
-      {pending.length > 0 && <text fg={colors.muted}>{safe(`${pending.map((call) => call.name).join(", ")} / ${outcomeLabel("pending").label}`)}</text>}
+      {pending.length > 0 && <text fg={colors.muted}>{safe(`${pending.map((call) => describeActivityCall(call, snapshot).label).join(", ")} / ${outcomeLabel("pending").label}`)}</text>}
       {documents}
     </box>;
   }
