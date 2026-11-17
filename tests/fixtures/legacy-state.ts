@@ -246,7 +246,7 @@ export function removeWorkspaceFoldersFixtureMarker(db: DatabaseSync, events: re
       event.payload.configuration.values.repo.installers !== undefined || event.payload.configuration.values.repo.installerCommand !== undefined) ||
     (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && event.payload.item.lifecycle !== undefined ||
     event.event_type === "chat.title_recorded" && event.payload.title.purpose !== undefined ||
-    event.event_type === "settings.updated" && (event.payload.settings.git !== undefined || event.payload.settings.wrapUp !== undefined ||
+    event.event_type === "settings.updated" && (event.payload.settings.git !== undefined || event.payload.settings.wrapUp !== undefined || event.payload.settings.shortcuts?.openApp !== undefined ||
       event.payload.settings.chatTitles?.refresh !== undefined ||
       event.payload.settings.retention?.archiveMerged !== undefined || event.payload.settings.retention?.archiveMergedAfterDays !== undefined))) {
     throw new Error("Generate genuine pre-109 history; actual workspace folders, read-only folder projects, branch prefixes, merged-session archive settings, lifecycle turns/settings and title refreshes cannot be relabelled.");
