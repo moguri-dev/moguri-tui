@@ -272,6 +272,7 @@ moguri skills import PROJECT_ID SKILL.md
 moguri skills sources|find [QUERY] [--session ID]
 moguri skills read ID --digest SHA [--session ID]  Refresh and check exact skill bytes
 moguri dashboard [work|usage|cost|velocity] [--filters JSON --project ID]
+moguri dashboard analytics [SESSION_ID]
 moguri plugins import PROJECT_ID manifest.json
 moguri mcp --session SESSION_ID    Native stdio MCP gateway
 moguri mcp tools SERVER [QUERY]    Bounded tool discovery
@@ -1041,8 +1042,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (action !== "import" || !args[0] || !args[1]) throw new Error("Use skills sources/find/read ID --digest SHA, or import PROJECT_ID FILE. Imported capabilities start disabled.");
         output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));
       }
+    } else if (group === "dashboard" && action === "analytics") {
+      output(args[0] ? await sdk.analytics.session(args[0]) : await sdk.analytics.overview());
     } else if (group === "dashboard") {
-      if (action && !["work", "usage", "cost", "velocity"].includes(action)) throw new Error("Use dashboard work, usage, cost or velocity, with optional --filters JSON.");
+      if (action && !["work", "usage", "cost", "velocity"].includes(action)) throw new Error("Use dashboard work, usage, cost, velocity or analytics, with optional --filters JSON.");
       const filters: unknown = values.filters ? JSON.parse(values.filters) : {};
       if (!isRecord(filters) || Object.hasOwn(filters, "type")) throw new Error("Use a dashboard filter object with range and optional projectId.");
       const { DashboardQuerySchema } = await import("../../../packages/sdk/src/index.ts");

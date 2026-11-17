@@ -60,7 +60,9 @@ all member repositories for explicit Local reads, edits and commands. Fuzzy
 session/settings search and compact settings controls share the
 [session reliability contract](docs/architecture/session-reliability.md).
 The [Dashboard](docs/setup.md#workspace-experience-and-skill-gateway) follows
-active sessions and opens their exact conversations. Project settings select
+active sessions and opens their exact conversations. Its
+[Analytics](docs/architecture/session-analytics.md) page draws running and
+recent turns on a zoomable lane timeline, kept in memory for an hour only. Project settings select
 registered projects; project-group menus fold only their member folders.
 **Settings / Repositories** accepts reviewed URL/bullet lists for bulk import, and
 [workspace folders](docs/setup.md#adding-a-workspace-folder): trust a folder such as
