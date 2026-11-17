@@ -273,6 +273,9 @@ moguri containment status|require-sandbox --confirm-review  Explicit global new-
 moguri skills import PROJECT_ID SKILL.md
 moguri skills sources|find [QUERY] [--session ID]
 moguri skills read ID --digest SHA [--session ID]  Refresh and check exact skill bytes
+moguri skills publishers                          Saved publisher keys and permanent blocks
+moguri skills publisher-save NAME KEY.pem --confirm-review  Save an Ed25519 publisher key in this profile
+moguri skills block key|artifact SHA REASON --confirm-review  Permanently block a key or one skill version
 moguri dashboard [work|usage|cost|velocity] [--filters JSON --project ID]
 moguri dashboard analytics [SESSION_ID]
 moguri plugins import PROJECT_ID manifest.json
@@ -1040,7 +1043,16 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else throw new Error("Use memory index/search/graph PROJECT_ID for Local data, or --session SESSION_ID.");
       }
     } else if (group === "skills" || group === "plugins") {
-      if (group === "skills" && ["inspect", "admit", "audit", "revoke"].includes(action ?? "")) {
+      if (group === "skills" && action === "publishers") {
+        const snapshot = sdk.getState().snapshot;
+        output({ publishers: snapshot?.skillPublishers ?? [], blocks: snapshot?.skillTrustBlocks ?? [] });
+      } else if (group === "skills" && action === "publisher-save" && args[0] && args[1]) {
+        if (!values["confirm-review"]) throw new Error("Saving a publisher key needs --confirm-review. A saved key verifies signatures; it doesn't prove who the publisher is.");
+        output(await sdk.skills.savePublisher(args[0], await readFile(args[1], "utf8")));
+      } else if (group === "skills" && action === "block" && (args[0] === "key" || args[0] === "artifact") && args[1] && args.length > 2) {
+        if (!values["confirm-review"]) throw new Error("Blocking is permanent. Add --confirm-review to block this key or skill version.");
+        output(await sdk.skills.block(args[0], args[1], args.slice(2).join(" ")));
+      } else if (group === "skills" && ["inspect", "admit", "audit", "revoke"].includes(action ?? "")) {
         if (!values.session) throw new Error("Choose --session ID for this actual source review/admission.");
         const result = await sdk.slash(values.session, `/skills ${[action, ...args].join(" ")}`, "cli");
         output(result.kind === "text" ? JSON.parse(result.text) : result);
