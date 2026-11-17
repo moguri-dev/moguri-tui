@@ -251,7 +251,17 @@ export function removeWorkspaceFoldersFixtureMarker(db: DatabaseSync, events: re
       event.payload.settings.retention?.archiveMerged !== undefined || event.payload.settings.retention?.archiveMergedAfterDays !== undefined))) {
     throw new Error("Generate genuine pre-109 history; actual workspace folders, read-only folder projects, branch prefixes, merged-session archive settings, lifecycle turns/settings and title refreshes cannot be relabelled.");
   }
+  removeSmartCompactionFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='workspace_folders_schema'");
+}
+export function removeSmartCompactionFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "settings.updated" && event.payload.settings.compaction !== undefined ||
+    event.event_type === "compaction.saved" && (event.payload.compaction.applyOnSuccess !== undefined || event.payload.compaction.automatic?.scope !== undefined ||
+      event.payload.compaction.automatic?.actor === "default-policy") ||
+    event.event_type === "context.changed" && event.payload.actor === "compaction-policy")) {
+    throw new Error("Generate genuine pre-110 history; actual smart compaction settings, default-policy or fixed-model automatic compactions and /compact applications cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='smart_compaction_schema'");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||

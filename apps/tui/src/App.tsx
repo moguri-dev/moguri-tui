@@ -6,9 +6,9 @@ import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type Cli
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessionPriority, progressBar, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { agentHarnessProduct, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
-import { continueWorkInput, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
 import { configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
@@ -722,6 +722,15 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       else throw new Error("No current chat. Use /new global, /open ABSOLUTE_PATH, /connect, /profiles, /theme, /settings or /help. Nothing was sent.");
       setStartupCommand(""); return;
     }
+    const shell = parseShellCommand(text);
+    if (shell !== null) {
+      // The user's own console input: no prompt, steer, queue item or model call.
+      if (held) throw new Error("! runs a command in this chat's terminal right away; it cannot be held or scheduled. Nothing was run.");
+      const ran = await client.terminal.run(session.id, shell);
+      if (editor.getState().text === text) { editor.edit(""); await editor.flush(); }
+      setNotice(`Ran in this chat's terminal${ran.root ? ` at ${ran.root}` : ""}. /terminals read ${ran.terminalId} shows its output; interactive prompts need the desktop Terminal.`);
+      return;
+    }
     if (!text.startsWith("/")) {
       if (!held && retry) {
         if (retryPending.current) return;
@@ -1026,8 +1035,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const prefix = attention ? attention.kind === "question" ? "? " : attention.kind === "done" ? "o " : "! " : "";
     const scope = snapshot.projects.find((project) => project.id === item.projectId)?.name ??
       (item.repositories ? `${item.repositories.length} repositories` : item.controls.env === "Local" && item.homeRoot ? "Home" : "No project");
-    return { name: `${item.pinned ? "* " : ""}${prefix}${safe(label(item))}`, subtitle: `${scope} / ${item.status}`,
-      description: `${scope} / ${item.status} / ID ${item.id}`, value: item.id };
+    const state = sessionStatusLabel(item.status);
+    return { name: `${item.pinned ? "* " : ""}${prefix}${safe(label(item))}`, state, scope,
+      description: `${scope} / ${state.label} / ID ${item.id}`, value: item.id };
   }) ?? [];
   const inlineControls = width - (sidebarVisible && !sidebarOnly ? 26 : 0) >= 90;
   const sessionStateVisible = session && (session.mode !== "agent" || session.pendingMode || session.queue.length > 0 || !["idle", "completed"].includes(session.status));
@@ -1059,7 +1069,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           backgroundColor={option.value === selectedId ? colors.panel : colors.sidebar}
           onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); void perform(async () => { await chooseSession(option.value); setNavigationFocus(false); if (sidebarOnly) setSidebar(false); }); }}>
           <text height={1} wrapMode="none" truncate fg={option.value === selectedId ? colors.selection : colors.foreground}>{option.value === selectedId ? "> " : "  "}{option.name}</text>
-          <text height={1} wrapMode="none" truncate fg={option.value === selectedId ? colors.selection : colors.muted}>{safe(option.subtitle)}</text>
+          <box height={1} flexDirection="row"><text height={1} flexShrink={0} wrapMode="none" fg={option.value === selectedId ? colors.selection :
+            option.state.tone === "failed" ? colors.error : ["attention", "partial", "unknown"].includes(option.state.tone) ? colors.attention : colors.muted}>{option.state.label}</text>
+            <text height={1} flexGrow={1} wrapMode="none" truncate fg={option.value === selectedId ? colors.selection : colors.muted}>{safe(` / ${option.scope}`)}</text></box>
         </box>)}{!options.length && <text fg={colors.muted}>{"No sessions yet.\n/new global\n/open PATH\n/connect"}</text>}</scrollbox>
         <text fg={colors.muted} height={2}>{"/new  /sessions\n/profiles  /sidebar"}</text>
       </box>
@@ -1611,7 +1623,8 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
             <text id="tui-status-env" width={inlineControls ? "50%" : "100%"} height={1} wrapMode="none" truncate fg={colors.muted}>{session ? `Env ${session.controls.env} | Model ${safe(session.controls.modelId ?? "not set (/models)")}` : "Env Local | Model not set"}</text>
             <text id="tui-status-budget" width={inlineControls ? "50%" : "100%"} height={1} wrapMode="none" truncate fg={colors.muted}>{`Autonomy level ${session?.controls.autonomy ?? "Manual"} | Budget ${session?.controls.budget.kind === "limited" ? "estimated cap" : "Unlimited"}${snapshot?.budgetPolicy.limit ? " / profile cap" : ""}`}</text>
           </box>
-          {sessionStateVisible && <text height={1} wrapMode="none" truncate fg={["failed", "partial"].includes(session.status) || session.toolRecovery?.turnId === session.turnId ? colors.attention : colors.muted}>{`${session.toolRecovery?.turnId === session.turnId ? "read-only recovery" : session.pendingMode ? `${session.pendingMode} pending` : session.mode} | ${snapshot?.managedWorkspaces.some((workspace) => workspace.id === session.workspaceId && workspace.status === "creating") ? "preparing worktree" : session.status}${session.queue.length ? ` | ${session.queue.length} queued` : ""}${session.kind === "side" ? " | main context per question" : ""}`}</text>}
+          {sessionStateVisible && <text height={1} wrapMode="none" truncate fg={sessionStatusLabel(session.status).tone === "failed" ? colors.error :
+            ["attention", "partial", "unknown"].includes(sessionStatusLabel(session.status).tone) || session.toolRecovery?.turnId === session.turnId ? colors.attention : colors.muted}>{`${session.toolRecovery?.turnId === session.turnId ? "Read-only recovery" : session.pendingMode ? `${sessionModeLabel(session.pendingMode)} pending` : sessionModeLabel(session.mode)} | ${snapshot?.managedWorkspaces.some((workspace) => workspace.id === session.workspaceId && workspace.status === "creating") ? "Preparing worktree" : sessionStatusLabel(session.status).label}${session.queue.length ? ` | ${session.queue.length} queued` : ""}${session.kind === "side" ? " | main context per question" : ""}`}</text>}
           {planVisible && <text height={1} wrapMode="none" truncate fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : `${taskProgress.progress?.checklist.completed}/${taskProgress.progress?.checklist.total}`} / estimate, 15s`)}</text>}
           {estimateVisible && <text height={1} wrapMode="none" truncate fg={colors.attention}>{safe(`Model estimate ${progressBar(estimateVisible.percent, 8)}${estimateVisible.stale ? " (stale)" : ""}${taskProgress.progress?.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>
@@ -1642,7 +1655,7 @@ export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, 
       <box id={`tui-tool-${message.id}`} height={1} onMouseDown={(event) => {
         if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); inspect(); setExpanded((value) => !value);
       }}><text height={1} wrapMode="none" truncate fg={important ? colors.attention : colors.muted}>
-        {safe(`${open ? "v" : ">"} ${call?.name ?? "Tool"} / ${message.errorCode === "not_found" ? "Not Found" : message.outcome ?? "result"}  ${summary}${open ? "" : "  F2 details"}`)}
+        {safe(`${open ? "v" : ">"} ${call?.name ?? "Tool"} / ${message.errorCode === "not_found" ? "Not Found" : outcomeLabel(message.outcome).label}  ${summary}${open ? "" : "  F2 details"}`)}
       </text></box>
       {open && <text fg={important ? colors.attention : colors.muted}>{safe(message.text || "No text output.")}</text>}
       {documents}
@@ -1653,11 +1666,11 @@ export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, 
     const pending = message.toolCalls?.filter((call) => !settledToolCalls.has(call.id)) ?? [];
     if (!pending.length && !documents?.length) return null;
     return <box flexDirection="column" flexShrink={0}>
-      {pending.length > 0 && <text fg={colors.muted}>{safe(`${pending.map((call) => call.name).join(", ")} / requested`)}</text>}
+      {pending.length > 0 && <text fg={colors.muted}>{safe(`${pending.map((call) => call.name).join(", ")} / ${outcomeLabel("pending").label}`)}</text>}
       {documents}
     </box>;
   }
-  const outcome = message.outcome && (message.role === "notice" || !["stop", "toolUse"].includes(message.outcome)) ? ` / ${message.outcome}` : "";
+  const outcome = message.outcome && (message.role === "notice" || !["stop", "toolUse"].includes(message.outcome)) ? ` / ${outcomeLabel(message.outcome).label}` : "";
   const frame: Pick<BoxOptions, "border" | "borderColor"> = message.role === "user" ? { border: ["left"], borderColor: colors.accent } : {};
   return <box flexDirection="column" marginTop={1} paddingLeft={message.role === "user" ? 1 : 0} {...frame} flexShrink={0}>
     <text height={1} fg={message.role === "user" ? colors.accent : message.role === "notice" ? colors.attention : colors.muted}>

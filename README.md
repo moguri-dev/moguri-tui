@@ -197,8 +197,9 @@ separate from exact shared role-effort and working-window controls. It selects
 only compatible actual roles within
 the selected boundary; Savings/Performance require reviewed evaluation and
 reference-price profiles, never guessed frontier classes. Bounded Cascade and
-Critique retain original role results, and explicit opt-in text compaction
-preserves readable history and source provenance. Finite automatic work uses
+Critique retain original role results, and text compaction (on by default,
+following the shared smart compaction setting) preserves readable history and
+source provenance. Finite automatic work uses
 complete all-role holds and selected-boundary finishing. The
 [owned transport contract](docs/architecture/owned-model-transports.md) keeps
 SSH/native bounded decisions and metadata finishing on their original parent;
@@ -588,8 +589,14 @@ tool-less Local/SSH model call through the same SDK. Previewing does not infer;
 generation, actual history/content review, apply/discard and original-context
 restore are separate actions. Complete recent turns, original encrypted history
 and drafts remain retained; rejected/unknown calls still count. Desktop exposes
-review under Model, and CLI/TUI share `/compact`. Images, automatic compaction
-and implicit kupo compactor selection are not supported.
+review under Model, and CLI/TUI share `/compact`. Images and implicit kupo
+compactor selection are not supported.
+
+**Smart compaction** is on by default: when a chat nears its model's working
+window (75%, or 200k tokens), Moguri summarizes older turns with that chat's
+model in one metered call and keeps going, with original history restorable.
+Type `/compact` to compact now. Built-in slash commands always win over a skill
+with the same name, and Moguri asks you to rename such skills.
 
 [**Kupo**](docs/architecture/automatic-kupo.md) is always in the model picker.
 Its automatic policy uses configured models: none blocks inference, one runs
@@ -701,7 +708,7 @@ requirements from deferred work.
 - Always choose either a fixed model or **kupo**, Moguri's HydraFusion-inspired synthetic/auto model. kupo routes across a configured mix of local and hosted models and selects single-model, cascade, or draft/critique/revision workflows.
 - Optional System One decision providers, including [TypeSafe AI's Jev](https://docs.typesafe.ai/introduction), work with kupo and fixed models for delegated decisions, tool approvals, and steering. [Laya is an evaluated, not yet implemented, alternative](docs/architecture/decisions.md#laya-optional-provider-evaluation) that users would install separately on their laptop or expose through an approved endpoint; it would not replace Jev automatically.
 - The chat composer, TUI, and CLI expose **Env**, **Model**, **Autonomy level**, and **Budget**. Starting defaults are Local, no model until provider login or local-model configuration, Manual, and Unlimited. Global, profile, and repo/project settings can supply different defaults.
-- Desktop has an Attach button and image paste; attachment triggers are `^` for a local file or folder, `:` for an active session, `#` for a GitHub issue or PR, and `@` for a named Local project file/folder or GitHub file. `!` remains a legacy session alias. TUI/CLI expose the same typed snapshots and review boundaries.
+- Desktop has an Attach button and image paste; attachment triggers are `^` for a local file or folder, `:` for an active session, `#` for a GitHub issue or PR, and `@` for a named Local project file/folder or GitHub file. A message starting with `!` (for example `!gh auth login --web`) runs that line in the chat's terminal at the project folder, or Home in a project-free chat, without any model call. TUI/CLI expose the same typed snapshots and review boundaries.
 - **Env** offers **Local**, **Sandbox** via SendBox, and **Remote** via SSH. Remote runs the agent and model calls on the configured machine. Global policy may allow only Sandbox or Remote; it blocks new Local turns while existing Local turns may finish. Neither SSH nor a label implies SendBox containment.
 - **Autonomy level** is independent of model choice and env: **Manual** (default), **Guided** (model recommends; user confirms), **Autopilot** (automatic tool/command approvals), and **Autopilot Max** (the same approvals plus qualified decision-model choices and steering). Hard denials, read-only mode, budgets and allowed-env policy remain final. See [session and GitHub workflows](docs/setup.md#session-approvals-and-github-workflows) for remembered grants, repository/PR/issue pickers and updater-token setup.
 - **Budget** defaults to unlimited. Users can cap cumulative session tokens, USD, or both when telemetry supports it. The UI warns that caps may interrupt work; kupo tries to checkpoint and commit accepted changes before exhaustion when Git policy and approvals permit it.
