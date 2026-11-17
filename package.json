@@ -131,6 +131,7 @@
     "spike:worktrees": "node scripts/worktree-spike.mjs",
     "spike:documents": "node --import tsx scripts/document-spike.mjs",
     "spike:otel": "node --import tsx scripts/otel-spike.ts",
+    "spike:stainless": "node --import tsx scripts/stainless-spike.ts",
     "spike:worker-image": "node scripts/prepare-worker-image.mjs --build",
     "prepare:sandbox": "npm run build && node scripts/prepare-sandbox-distribution.mjs",
     "start": "node scripts/launch.mjs tui",
