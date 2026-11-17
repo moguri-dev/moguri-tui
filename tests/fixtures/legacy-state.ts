@@ -261,7 +261,14 @@ export function removeSmartCompactionFixtureMarker(db: DatabaseSync, events: rea
     event.event_type === "context.changed" && event.payload.actor === "compaction-policy")) {
     throw new Error("Generate genuine pre-110 history; actual smart compaction settings, default-policy or fixed-model automatic compactions and /compact applications cannot be relabelled.");
   }
+  removeStainlessIntegrationFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='smart_compaction_schema'");
+}
+export function removeStainlessIntegrationFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "settings.updated" && event.payload.settings.integrations?.stainless !== undefined)) {
+    throw new Error("Generate genuine pre-111 history; actual Stainless integration settings cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='stainless_integration_schema'");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||

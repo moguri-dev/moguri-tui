@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
-import { executeOtlpCommand } from "../../../packages/sdk/src/index.ts";
+import { executeOtlpCommand, executeStainlessCommand } from "../../../packages/sdk/src/index.ts";
 import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
@@ -708,6 +708,14 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       if (held) throw new Error("OTLP settings require an explicit unheld user review. Held input was not executed or exported.");
       requireNavigation();
       show(await executeOtlpCommand(client, argument));
+      if (!session) setStartupCommand("");
+      return;
+    }
+    if (name === "/stainless") {
+      if (held) throw new Error("Stainless actions need an explicit unheld command. Held input was not executed or opened.");
+      requireNavigation();
+      const result = await executeStainlessCommand(client, argument, session?.id, session?.browserUrl);
+      show("summary" in result ? result.summary : `Opened ${result.opened} in Stainless.`);
       if (!session) setStartupCommand("");
       return;
     }
@@ -1425,6 +1433,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
 /sidebar open|close  /theme list  /theme crystal dark
 /new [global]  /open PATH  /models  /profiles  /settings
 /otlp status | review INPUT_JSON | apply REVIEW_JSON confirm-reviewed
+/stainless status | check | open [URL]
 /approve once  /question  /queue  /stop  /quit
 
 Click any navigation tab. Tab focuses navigation; Up/Down chooses a tab,
