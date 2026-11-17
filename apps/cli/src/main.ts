@@ -289,7 +289,7 @@ moguri mcp oauth-client SERVER     Read registered client JSON from piped stdin
 moguri mcp token SERVER            Read a bearer credential from piped stdin
 moguri dictate download --accept-license
 moguri dictate record|file WAV --session SESSION_ID
-moguri dictate model inspect /absolute/model.gguf | trust REVIEW_JOB_ID | managed
+moguri dictate model discover [FILE_OR_FOLDER] | inspect /absolute/model.gguf | trust REVIEW_JOB_ID | managed
 moguri agents run TEXT --session SESSION_ID
 moguri issues list|refresh PROJECT_ID
 moguri issues create PROJECT_ID issue.json
@@ -1088,9 +1088,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
           const job = await sdk.voice.inspectModel(value);
           await waitForJob(job.id!, () => sdk.jobs.cancel(job.id!), "Model review", () => sdk.voice.inspection(job.id!));
           console.error(`Review the name, architecture and SHA-256 above, then run: moguri dictate model trust ${job.id}`);
-        } else if (step === "trust" && value) output(await sdk.voice.trustModel(value));
+        } else if (step === "discover") output(await sdk.voice.discoverModels(value));
+        else if (step === "trust" && value) output(await sdk.voice.trustModel(value));
         else if (step === "managed") output(await sdk.voice.useManagedModel());
-        else throw new Error("Use dictate model inspect /absolute/model.gguf, dictate model trust REVIEW_JOB_ID or dictate model managed.");
+        else throw new Error("Use dictate model discover [FILE_OR_FOLDER], dictate model inspect /absolute/model.gguf, dictate model trust REVIEW_JOB_ID or dictate model managed.");
       }
       else {
         if (!values.session) throw new Error("Choose --session SESSION_ID. Transcription never sends the prompt.");
