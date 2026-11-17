@@ -798,7 +798,7 @@ requirements from deferred work.
   - [mbianchidev/sendbox](https://github.com/mbianchidev/sendbox) - native, first-release Sandbox env with scoped local VM execution; missing sandbox support never silently falls back to Local.
   - mbianchidev/porto - for handling local dev servers and docker stacks (via CLI pre-installed)
   - mbianchidev/sql not-so-lite - for local database management (via CLI pre-installed)
-  - (future) mbianchidev/stainless - agentic privacy driven browser, used for dev previews and for launching Playwright (via MCP and open with)
+  - mbianchidev/stainless - agentic privacy driven browser, optional and off by default: Open in Stainless for Local previews and owned headless Playwright batches ([contract](docs/architecture/stainless.md)); MCP integration waits on Stainless (#80)
 
 ## To evaluate
 

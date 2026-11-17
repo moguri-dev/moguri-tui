@@ -191,6 +191,8 @@ moguri budget dashboard --filters '{"range":{"kind":"days","days":30},"bucket":"
 moguri telemetry operations [--project ID --session ID --filters JSON]
 moguri telemetry storage           Current profile key-backed ciphertext, not disk usage
 moguri telemetry otlp status|review INPUT_JSON|apply REVIEW_JSON confirm-reviewed
+moguri stainless status|check      Stainless browser readiness; check launches a hidden throwaway instance
+moguri stainless open [URL] --session ID   Open a Local session preview in Stainless
 moguri repository preview|state --session ID
 moguri repository refresh --session ID --digest BINDING --revision N --confirm-review
 moguri repository clear --session ID --revision N --confirm-review
@@ -542,6 +544,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (!job) throw new Error("Choose an exact metadata refresh owned by that session.");
         output(await sdk.jobs.cancel(job.id));
       } else throw new Error("Use repository preview/state, refresh --digest BINDING --revision N --confirm-review, clear --revision N --confirm-review, or stop JOB_ID, with an explicit --session.");
+    } else if (group === "stainless") {
+      if (values.filters || values.project || values.folder || values.model || values.provider || values.role) throw new Error("Stainless takes status, check, or open [URL] with an explicit --session for open.");
+      if (action !== "open" && values.session) throw new Error("Stainless status and check belong to this profile, not a session.");
+      const { executeStainlessCommand } = await import("../../../packages/sdk/src/index.ts");
+      const session = values.session ? snapshot.sessions.find((session) => session.id === values.session) : undefined;
+      if (values.session && !session) throw new Error("Choose an existing session ID. Nothing was opened.");
+      output(await executeStainlessCommand(sdk, [action ?? "status", ...args].join(" "), session?.id, session?.browserUrl));
     } else if (group === "telemetry") {
       if (action === "otlp") {
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("OTLP configuration belongs to the exact selected profile, not a session or usage filter.");
