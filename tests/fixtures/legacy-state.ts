@@ -268,7 +268,18 @@ export function removeStainlessIntegrationFixtureMarker(db: DatabaseSync, events
   if (events.some((event) => event.event_type === "settings.updated" && event.payload.settings.integrations?.stainless !== undefined)) {
     throw new Error("Generate genuine pre-111 history; actual Stainless integration settings cannot be relabelled.");
   }
+  removeSourceTrustTelemetryFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='stainless_integration_schema'");
+}
+export function removeSourceTrustTelemetryFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "skill.publisher_saved" || event.event_type === "skill.trust_blocked" ||
+    event.event_type === "settings.updated" && event.payload.settings.scriptReview !== undefined ||
+    event.event_type === "skill.admission_recorded" && event.payload.admission.publisher.kind === "saved-ed25519" ||
+    event.event_type === "telemetry.export_configured" && (event.payload.configuration.disclosureVersion !== 1 ||
+      event.payload.configuration.logs !== undefined || event.payload.configuration.headers !== undefined))) {
+    throw new Error("Generate genuine pre-112 history; actual publisher keys/blocks, scanner risk acceptance, saved-key admissions and OTLP log/credential configuration cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('skill_publisher_trust_schema','otlp_signals_credentials_schema')");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
