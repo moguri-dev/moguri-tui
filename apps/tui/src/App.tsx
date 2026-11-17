@@ -1676,13 +1676,16 @@ export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, 
   }
   const outcome = message.outcome && (message.role === "notice" || !["stop", "toolUse"].includes(message.outcome)) ? ` / ${outcomeLabel(message.outcome).label}` : "";
   const frame: Pick<BoxOptions, "border" | "borderColor"> = message.role === "user" ? { border: ["left"], borderColor: colors.accent } : {};
+  // Notices follow the shared tone: failures read as errors, stopped or completed notices stay neutral, the rest need attention.
+  const tone = outcomeLabel(message.outcome).tone;
+  const noticeColor = tone === "failed" ? colors.error : ["completed", "stopped", "neutral"].includes(tone) ? colors.foreground : colors.attention;
   return <box flexDirection="column" marginTop={1} paddingLeft={message.role === "user" ? 1 : 0} {...frame} flexShrink={0}>
-    <text height={1} fg={message.role === "user" ? colors.accent : message.role === "notice" ? colors.attention : colors.muted}>
+    <text height={1} fg={message.role === "user" ? colors.accent : message.role === "notice" ? noticeColor : colors.muted}>
       <strong>{message.role === "user" ? "You" : message.role === "assistant" ? "Moguri" : "Session"}</strong>{safe(outcome)}
     </text>
     {message.role === "assistant" && message.text ? <markdown id={`tui-prose-${message.id}`} width="100%" internalBlockMode="top-level" content={safe(message.text)} syntaxStyle={syntaxStyle} fg={colors.foreground}
       conceal streaming={!message.outcome && activeTurnId === message.turnId} renderNode={renderMarkdownNode}
-      tableOptions={{ style: "columns", borders: false, cellPaddingY: 0 }} /> : <text fg={message.role === "notice" ? colors.attention : colors.foreground}>{safe(message.text || "No text output.")}</text>}
+      tableOptions={{ style: "columns", borders: false, cellPaddingY: 0 }} /> : <text fg={message.role === "notice" ? noticeColor : colors.foreground}>{safe(message.text || "No text output.")}</text>}
     {detailed && message.toolCalls?.length ? <text fg={colors.muted}>{safe(JSON.stringify(message.toolCalls, null, 2))}</text> : null}
     {detailed && message.reasoning && <text fg={colors.muted}>{safe(`Provider-exposed reasoning:\n${message.reasoning}`)}</text>}
     {documents}

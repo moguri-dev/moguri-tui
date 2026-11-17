@@ -166,6 +166,7 @@ test("completed tool output stays compact until actual mouse or keyboard inspect
     }
     await setup.flush();
     assert.ok(!setup.captureCharFrame().includes(marker));
+    assert.ok(setup.captureCharFrame().includes("Read file / Completed  fixture.txt"), "tool rows use the shared activity label and subject");
     await saveFrame(setup, "chat-120x40");
     const target = setup.renderer.root.findDescendantById(`tui-tool-${result.id}`);
     assert.ok(target instanceof Renderable);
@@ -183,6 +184,23 @@ test("completed tool output stays compact until actual mouse or keyboard inspect
     setup.resize(52, 24);
     await frameUntil(setup, 'const layout = "compact";');
     await saveFrame(setup, "chat-52x24");
+  } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
+});
+
+test("a compact approval leads with the shared label and command before its exact arguments", { skip: process.platform !== "darwin" }, async () => {
+  const fixture = await setupFixture({ toolCall: { name: "run_command", args: { command: "printf GENERATED_COMPACT_SUBJECT", timeoutMs: 2000 } } });
+  await fixture.configure(); await fixture.send("Generated compact approval request.");
+  await waitFor(() => fixture.session().pendingApproval);
+  const sdk = await new MoguriSdk(fixture.service.connection).ready();
+  const setup = await createTestRenderer({ width: 52, height: 24, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client: sdk })));
+    await frameUntil(setup, "Approval required: run_command");
+    await frameUntil(setup, "Run command: printf GENERATED_COMPACT_SUBJECT");
+    assert.ok(setup.captureCharFrame().includes("Run command / Pending"));
+    assert.ok(setup.captureCharFrame().includes("Ctrl+Y approve | Ctrl+D deny | Ctrl+V args"));
+    assert.deepEqual(fixture.session().pendingApproval?.call.arguments, { command: "printf GENERATED_COMPACT_SUBJECT", timeoutMs: 2000 });
+    assert.equal(fixture.requests.length, 1);
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
