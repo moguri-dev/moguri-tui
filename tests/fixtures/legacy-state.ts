@@ -276,11 +276,13 @@ export function removeSourceTrustTelemetryFixtureMarkers(db: DatabaseSync, event
   if (events.some((event) => event.event_type === "skill.publisher_saved" || event.event_type === "skill.trust_blocked" ||
     event.event_type === "tool.background_completed" || event.event_type === "tool.completed" && event.payload.outcome === "background" ||
     (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && prWorkflowItem(event.payload.item) ||
-    event.event_type === "settings.updated" && event.payload.settings.scriptReview !== undefined ||
+    event.event_type === "settings.updated" && (event.payload.settings.scriptReview !== undefined || event.payload.settings.retention?.archiveBranchCleanup !== undefined) ||
+    event.event_type === "workspace.saved" && (event.payload.workspace.volume !== undefined || event.payload.workspace.parked !== undefined || event.payload.workspace.cleanup !== undefined) ||
+    event.event_type === "application.virtual_disk_saved" ||
     event.event_type === "skill.admission_recorded" && event.payload.admission.publisher.kind === "saved-ed25519" ||
     event.event_type === "telemetry.export_configured" && (event.payload.configuration.disclosureVersion !== 1 ||
       event.payload.configuration.logs !== undefined || event.payload.configuration.headers !== undefined))) {
-    throw new Error("Generate genuine pre-112 history; actual publisher keys/blocks, scanner risk acceptance, saved-key admissions, OTLP log/credential configuration, steer-backgrounded commands and pull request follow-up workflows cannot be relabelled.");
+    throw new Error("Generate genuine pre-112 history; actual publisher keys/blocks, scanner risk acceptance, saved-key admissions, OTLP log/credential configuration, steer-backgrounded commands, pull request follow-up workflows, archive worktree cleanup and the virtual disk cannot be relabelled.");
   }
   db.exec("DELETE FROM retention_metadata WHERE id IN ('skill_publisher_trust_schema','otlp_signals_credentials_schema','background_command_schema')");
 }

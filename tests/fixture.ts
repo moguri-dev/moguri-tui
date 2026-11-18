@@ -10,6 +10,7 @@ import { isRecord, MoguriError, type ProviderState, type Session } from "../pack
 import { runProgram } from "../apps/service/src/program.ts";
 import type { TaskProgressInput } from "../packages/protocol/src/progress.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
+import { hdiutilDriver, type VirtualDiskOptions } from "../apps/service/src/virtual-disk.ts";
 import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
 import { kupoThinkingMinimumOutput, qualifiedKupoThinking, supportedThinking } from "../apps/service/src/model-controls.ts";
 import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
@@ -278,7 +279,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
     },
   };
 }
-export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; legacyTurnCheckpointJournal?: boolean; nodePrimitives?: boolean } = {}) {
+export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; legacyTurnCheckpointJournal?: boolean; nodePrimitives?: boolean; virtualDisk?: VirtualDiskOptions } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project"), home = join(directory, "home");
   const resources: Array<() => void | Promise<void>> = [];
@@ -310,7 +311,13 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault },
       telemetry: { vault: options.platform?.telemetry?.vault ?? { read: async (id: string) => telemetrySecrets.get(id) ?? null,
         write: async (id: string, value: string) => { telemetrySecrets.set(id, value); }, remove: async (id: string) => { telemetrySecrets.delete(id); } } } };
-    const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
+    // A generated virtual disk stays mounted after the service stops (by design), so the fixture unmounts it before removing its folder.
+    resources.push(async () => {
+      const mount = join(directory, "state", "virtual-disk", "volume");
+      if (!hdiutilDriver.mounted(mount)) return;
+      await hdiutilDriver.detach(mount, AbortSignal.timeout(120_000)).catch(() => runProgram("/usr/bin/hdiutil", ["detach", "-force", mount], { cwd: "/", signal: AbortSignal.timeout(60_000), label: "Generated virtual disk cleanup" }));
+    });
+    const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY, virtualDisk: options.virtualDisk });
     let restoreControlsJournal = () => {}, restoreJournal = () => {}, restoreSnapshot = () => {}, restoreCheckpoints = () => {};
     resources.push(async () => {
       try { await service.close(); } finally { restoreJournal(); restoreControlsJournal(); restoreCheckpoints(); restoreSnapshot(); }

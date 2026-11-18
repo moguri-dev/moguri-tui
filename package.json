@@ -133,6 +133,7 @@
     "spike:otel": "node --import tsx scripts/otel-spike.ts",
     "spike:stainless": "node --import tsx scripts/stainless-spike.ts",
     "spike:otel-overhead": "node --import tsx scripts/otel-overhead.ts",
+    "spike:virtual-disk": "node --import tsx scripts/virtual-disk-spike.ts",
     "spike:worker-image": "node scripts/prepare-worker-image.mjs --build",
     "prepare:sandbox": "npm run build && node scripts/prepare-sandbox-distribution.mjs",
     "start": "node scripts/launch.mjs tui",
