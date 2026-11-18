@@ -303,6 +303,19 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const retry = session && snapshot ? retryFailure(session, snapshot.modelFailures) : undefined, retryPending = useRef(false);
   githubOwner.current = JSON.stringify([client.profileId, session?.id, session?.projectId, session?.workspaceId, session?.controls.env]);
   const taskProgress = useTaskProgress(client, session, status === "connected");
+  const diskId = session?.workspaceId ? snapshot?.managedWorkspaces.find((workspace) => workspace.id === session.workspaceId)?.volume?.diskId : undefined;
+  const diskPausedNotice = useRef(false);
+  useEffect(() => {
+    if (!diskId || status !== "connected") return;
+    let active = true;
+    void client.application.disk.status().then(({ disk }) => {
+      if (!active) return;
+      const paused = disk.disk?.id === diskId && Boolean(disk.disk.pressure?.paused), shown = diskPausedNotice.current;
+      diskPausedNotice.current = paused;
+      if (paused && !shown) setNotice("Moguri's virtual disk is full, so this chat is paused before its next model call. Archive or delete sessions, or use /runtime disk-size GB; work resumes on its own.");
+    }, () => undefined);
+    return () => { active = false; };
+  }, [client, diskId, snapshot, status, setNotice]);
   useEffect(() => {
     if (mode !== "kupo-mode" || !session) return;
     let active = true;

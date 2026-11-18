@@ -249,6 +249,7 @@ moguri service restart|stop|info   Explicit owned-service lifecycle
 moguri runtime [status|power-retry]  Actual data directory and owned idle-sleep status
 moguri storage status|preview PATH  Review all-profile store and retained resource roots
 moguri storage move PATH --digest SHA --confirm-write  Quiesce, copy and retire; restart clients explicitly
+moguri storage disk status|size GB|off  Optional fixed-size virtual disk for new session worktrees
 moguri updates status|history|read ID|check|cancel ID
 moguri updates token|clear-token     Separate private-release PAT through piped stdin only
 moguri updates install-preview ID  Exact owned app/backup review; native install needs desktop confirmation
@@ -433,7 +434,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if ((action === "token" || action === "clear-token") && !args.length) { await sdk.application.updates.setToken(action === "token" ? await credential(512) : null); output({ configured: action === "token" }); }
       else throw new Error("Use updates status, history, read/check/cancel, token/clear-token or install-preview ID. The separate PAT must use stdin; no token, application replacement or restart is inferred from model output.");
     } else if (group === "storage") {
-      if ((!action || action === "status") && !args.length) output(await sdk.application.storage.status());
+      if (action === "disk") {
+        const [operation = "status", value] = args, revision = async () => (await sdk.application.disk.status()).disk.disk?.revision ?? 0;
+        if (operation === "status" && !value) output(await sdk.application.disk.status());
+        else if (operation === "size" && value && /^[1-9][0-9]{0,3}$/.test(value)) output(await sdk.application.disk.configure(Number(value), await revision()));
+        else if (operation === "off" && !value) output(await sdk.application.disk.configure(null, await revision()));
+        else throw new Error("Use storage disk status, size GB (creates or resizes it) or off. Turning it off needs no worktrees on it; resizing needs no running work on it.");
+      } else if ((!action || action === "status") && !args.length) output(await sdk.application.storage.status());
       else if (action === "preview" && args.length === 1) output(await sdk.application.storage.preview(args[0]!));
       else if (action === "move" && args.length === 1 && values.digest && values["confirm-write"]) {
         const storage = (await sdk.application.storage.status()).storage;
