@@ -312,7 +312,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       if (!active) return;
       const paused = disk.disk?.id === diskId && Boolean(disk.disk.pressure?.paused), shown = diskPausedNotice.current;
       diskPausedNotice.current = paused;
-      if (paused && !shown) setNotice("Moguri's virtual disk is full, so this chat is paused before its next model call. Archive or delete sessions, or use /runtime disk-size GB; work resumes on its own.");
+      if (paused && !shown) setNotice("Moguri's virtual disk is full, so this chat is paused before its next model call. Archive sessions (their clean, pushed worktrees are removed) or use /runtime disk-size GB; work resumes on its own.");
     }, () => undefined);
     return () => { active = false; };
   }, [client, diskId, snapshot, status, setNotice]);
