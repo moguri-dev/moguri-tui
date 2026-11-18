@@ -1491,6 +1491,7 @@ Existing shortcut aliases remain available for compatibility.
 /steer text | /interrupt text | /stop | /resume
 /queue | /edit ID text | /remove ID | /reorder ID ID ...
 /queue-turn ID converts an unapplied steer into a new turn
+/send-now ID steers a queued prompt into the running turn, or runs it next
 /archive | /restore | /new | /open PATH | /sessions
 /trace | /details | /reload-draft | /keep-draft
 /policy all | /policy protected
