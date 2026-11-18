@@ -25,7 +25,7 @@ export async function main(argv: string[]): Promise<void> {
     help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" }, workspace: { type: "string" }, profile: { type: "string" }, color: { type: "string" },
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
-    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, "forward-access": { type: "boolean" }, children: { type: "string" }, digest: { type: "string" }, binding: { type: "string" },
+    "confirm-remove": { type: "boolean" }, "confirm-running": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, "forward-access": { type: "boolean" }, children: { type: "string" }, digest: { type: "string" }, binding: { type: "string" },
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" }, "trust-folder": { type: "boolean" }, once: { type: "boolean" }, include: { type: "string" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
@@ -193,6 +193,8 @@ moguri telemetry storage           Current profile key-backed ciphertext, not di
 moguri telemetry otlp status|review INPUT_JSON|apply REVIEW_JSON confirm-reviewed
 moguri stainless status|check      Stainless browser readiness; check launches a hidden throwaway instance
 moguri stainless open [URL] --session ID   Open a Local session preview in Stainless
+moguri telemetry otlp credential set ENDPOINT NAME   Credential header value from piped stdin only
+moguri telemetry otlp credential remove ENDPOINT NAME
 moguri repository preview|state --session ID
 moguri repository refresh --session ID --digest BINDING --revision N --confirm-review
 moguri repository clear --session ID --revision N --confirm-review
@@ -204,7 +206,7 @@ moguri project removal-preview ID
 moguri project export-artifacts ID --output ABSOLUTE_NEW_JSON_PATH
 moguri project materialize-preview ID [--workspace ID] [--branch NEW_LOCAL_BRANCH]
 moguri project materialize-artifacts ID --digest REVIEW_SHA --confirm-write [--workspace ID] [--branch NEW_LOCAL_BRANCH]
-moguri project remove ID --revision N --confirm-remove --artifacts retain|delete|export|materialize --digest SET_SHA [--exported-digest EXPORT_SHA|--materialization-id JOB_ID]
+moguri project remove ID --revision N --confirm-remove --artifacts retain|delete|export|materialize --digest SET_SHA [--exported-digest EXPORT_SHA|--materialization-id JOB_ID] [--confirm-running]
 moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
@@ -224,18 +226,19 @@ moguri session spawn side|agent [NAME] --session ID
 moguri session organize changes.json --session ID --revision N
 moguri session model-settings options.json --session ID --revision N
 moguri session context --session ID
-moguri session archive|restore|stop|resume|retry --session ID [--children archive|detach]
+moguri session archive|restore|stop|resume|retry --session ID [--children archive|detach] [--confirm-running]
 moguri session kupo-mode balanced|savings|performance --session ID
 moguri scheduled list|create TIMING_JSON_FILE|send-now ID|cancel ID [--session ID]
-moguri session delete --session ID --revision N --confirm-remove [--children delete|detach]
+moguri session delete --session ID --revision N --confirm-remove [--children delete|detach] [--confirm-running]
   Child-tree actions can also use the saved Settings / Retention preference. Deletion preserves ordinary artifacts and Git resources.
+  Archiving or deleting a running session (or one with running subsessions) stops its work and always needs --confirm-running.
 moguri session from-pr URL|from-issue ID --project ID
 moguri project get|sources|diff|porto|repositories ID
 moguri project add PATH              Register an existing local folder
 moguri project clone URL PATH --confirm-write  Clone into a new folder; partial files are preserved
 moguri project set ID settings.json --revision N
 moguri project relocate ID PATH --revision N
-moguri project remove ID --revision N --confirm-remove
+moguri project remove ID --revision N --confirm-remove [--confirm-running]
 moguri project defaults ID BRANCH --revision N --confirm-push
 moguri project import-mcp ID --revision N --confirm-review --digest SHA256
 moguri queue list|copy [ID]|run ID|remove ID --session ID
@@ -246,6 +249,7 @@ moguri service restart|stop|info   Explicit owned-service lifecycle
 moguri runtime [status|power-retry]  Actual data directory and owned idle-sleep status
 moguri storage status|preview PATH  Review all-profile store and retained resource roots
 moguri storage move PATH --digest SHA --confirm-write  Quiesce, copy and retire; restart clients explicitly
+moguri storage disk status|size GB|off  Optional fixed-size virtual disk for new session worktrees
 moguri updates status|history|read ID|check|cancel ID
 moguri updates token|clear-token     Separate private-release PAT through piped stdin only
 moguri updates install-preview ID  Exact owned app/backup review; native install needs desktop confirmation
@@ -273,6 +277,9 @@ moguri containment status|require-sandbox --confirm-review  Explicit global new-
 moguri skills import PROJECT_ID SKILL.md
 moguri skills sources|find [QUERY] [--session ID]
 moguri skills read ID --digest SHA [--session ID]  Refresh and check exact skill bytes
+moguri skills publishers                          Saved publisher keys and permanent blocks
+moguri skills publisher-save NAME KEY.pem --confirm-review  Save an Ed25519 publisher key in this profile
+moguri skills block key|artifact SHA REASON --confirm-review  Permanently block a key or one skill version
 moguri dashboard [work|usage|cost|velocity] [--filters JSON --project ID]
 moguri dashboard analytics [SESSION_ID]
 moguri plugins import PROJECT_ID manifest.json
@@ -427,7 +434,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if ((action === "token" || action === "clear-token") && !args.length) { await sdk.application.updates.setToken(action === "token" ? await credential(512) : null); output({ configured: action === "token" }); }
       else throw new Error("Use updates status, history, read/check/cancel, token/clear-token or install-preview ID. The separate PAT must use stdin; no token, application replacement or restart is inferred from model output.");
     } else if (group === "storage") {
-      if ((!action || action === "status") && !args.length) output(await sdk.application.storage.status());
+      if (action === "disk") {
+        const [operation = "status", value] = args, revision = async () => (await sdk.application.disk.status()).disk.disk?.revision ?? 0;
+        if (operation === "status" && !value) output(await sdk.application.disk.status());
+        else if (operation === "size" && value && /^[1-9][0-9]{0,3}$/.test(value)) output(await sdk.application.disk.configure(Number(value), await revision()));
+        else if (operation === "off" && !value) output(await sdk.application.disk.configure(null, await revision()));
+        else throw new Error("Use storage disk status, size GB (creates or resizes it) or off. Turning it off needs no worktrees on it; resizing needs no running work on it.");
+      } else if ((!action || action === "status") && !args.length) output(await sdk.application.storage.status());
       else if (action === "preview" && args.length === 1) output(await sdk.application.storage.preview(args[0]!));
       else if (action === "move" && args.length === 1 && values.digest && values["confirm-write"]) {
         const storage = (await sdk.application.storage.status()).storage;
@@ -554,8 +567,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "telemetry") {
       if (action === "otlp") {
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("OTLP configuration belongs to the exact selected profile, not a session or usage filter.");
-        const { executeOtlpCommand } = await import("../../../packages/sdk/src/index.ts");
-        output(await executeOtlpCommand(sdk, args.join(" ")));
+        if (args[0] === "credential" && args[1] === "set" && args[2] && args[3] && args.length === 4) output(await sdk.telemetry.export.setCredential(args[2], args[3], await credential(4096)));
+        else {
+          const { executeOtlpCommand } = await import("../../../packages/sdk/src/index.ts");
+          output(await executeOtlpCommand(sdk, args.join(" ")));
+        }
       } else if (action === "storage") {
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("Storage is a current profile measurement, not a dated/project/model view. Select --profile ID instead.");
         output(await sdk.telemetry.storage());
@@ -829,12 +845,12 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (action === "kupo-mode" && args[0]) output(await sdk.sessions.kupoMode(values.session, parse(KupoModeSchema, args[0])));
         else if (action === "delete" && values["confirm-remove"]) {
           if (!snapshot.sessions.some((session) => session.id === values.session)) throw new Error("Choose an existing session for deletion.");
-          output(await sdk.sessions.delete(values.session, true, expectedRevision(), childrenReview(values.session, "delete")));
+          output(await sdk.sessions.delete(values.session, true, expectedRevision(), childrenReview(values.session, "delete"), values["confirm-running"] ? { confirmRunning: true } : {}));
         }
         else if (action === "archive") {
           if (!snapshot.sessions.some((session) => session.id === values.session)) throw new Error("Choose an existing session to archive.");
           output(await sdk.command({ type: "session.archive", sessionId: values.session, expectedRevision: expectedRevision(),
-            ...(childrenReview(values.session, "archive") ? { children: childrenReview(values.session, "archive") } : {}) }));
+            ...(childrenReview(values.session, "archive") ? { children: childrenReview(values.session, "archive") } : {}), ...(values["confirm-running"] ? { confirmRunning: true as const } : {}) }));
         }
         else if (action && ["restore", "stop", "resume"].includes(action)) output(await sdk.command({ type: `session.${action}` as "session.restore" | "session.stop" | "session.resume", sessionId: values.session }));
         else throw new Error("Use session rename/mode/spawn/organize/archive/restore/stop/resume/delete. Deletion needs --confirm-remove and the observed --revision; child actions need --children or a saved disposition.");
@@ -900,7 +916,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "relocate" && args[1]) output(await sdk.projects.relocate(args[0], args[1], expectedRevision()));
       else if (action === "remove" && values["confirm-remove"]) {
         const artifacts = values.artifacts ? parse(ProjectArtifactChoiceSchema, { action: values.artifacts, expectedDigest: values.digest, ...(values["exported-digest"] ? { exportedDigest: values["exported-digest"] } : {}), ...(values["materialization-id"] ? { materializationId: values["materialization-id"] } : {}) }) : undefined;
-        output(await sdk.projects.remove(args[0], true, expectedRevision(), artifacts));
+        output(await sdk.projects.remove(args[0], true, expectedRevision(), artifacts, values["confirm-running"] ? { confirmRunning: true } : {}));
       }
       else if (action === "import-mcp" && values["confirm-review"] && values.digest) output(await sdk.projects.importMcp(args[0], expectedRevision(), true, values.digest));
       else if (action === "defaults" && args[1] && values["confirm-push"]) {
@@ -1040,7 +1056,16 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else throw new Error("Use memory index/search/graph PROJECT_ID for Local data, or --session SESSION_ID.");
       }
     } else if (group === "skills" || group === "plugins") {
-      if (group === "skills" && ["inspect", "admit", "audit", "revoke"].includes(action ?? "")) {
+      if (group === "skills" && action === "publishers") {
+        const snapshot = sdk.getState().snapshot;
+        output({ publishers: snapshot?.skillPublishers ?? [], blocks: snapshot?.skillTrustBlocks ?? [] });
+      } else if (group === "skills" && action === "publisher-save" && args[0] && args[1]) {
+        if (!values["confirm-review"]) throw new Error("Saving a publisher key needs --confirm-review. A saved key verifies signatures; it doesn't prove who the publisher is.");
+        output(await sdk.skills.savePublisher(args[0], await readFile(args[1], "utf8")));
+      } else if (group === "skills" && action === "block" && (args[0] === "key" || args[0] === "artifact") && args[1] && args.length > 2) {
+        if (!values["confirm-review"]) throw new Error("Blocking is permanent. Add --confirm-review to block this key or skill version.");
+        output(await sdk.skills.block(args[0], args[1], args.slice(2).join(" ")));
+      } else if (group === "skills" && ["inspect", "admit", "audit", "revoke"].includes(action ?? "")) {
         if (!values.session) throw new Error("Choose --session ID for this actual source review/admission.");
         const result = await sdk.slash(values.session, `/skills ${[action, ...args].join(" ")}`, "cli");
         output(result.kind === "text" ? JSON.parse(result.text) : result);
@@ -1120,6 +1145,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
 }
 if (import.meta.main) {
   try { await main(process.argv.slice(2)); }
-  catch (error) { console.error(error instanceof Error ? error.message : "Moguri command failed."); process.exitCode = 1; }
+  catch (error) {
+    const running = error instanceof Error && "code" in error && error.code === "session_running";
+    console.error(error instanceof Error ? `${error.message}${running ? " Rerun with --confirm-running to stop it and continue." : ""}` : "Moguri command failed."); process.exitCode = 1;
+  }
 }
 export { defaultSettings };

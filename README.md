@@ -13,7 +13,8 @@ file operations with script/unlisted-website approvals, persistent drafts and qu
 Queue/Steer/Interrupt delivery, stopping owned process groups, restart recovery,
 archival/restoration, and basic per-call accounting.
 Optional [metadata-only OTLP export](docs/architecture/otlp-export.md) projects
-existing execution/accounting records into traces and canonical gauges.
+existing execution/accounting records into traces, canonical gauges and opt-in
+correlated diagnostic logs, with keychain-only credential headers.
 It is off by default, profile-isolated and explicitly reviewed; no prompts,
 tool content, terminal data or private names are exported.
 Ordinary active-turn input now uses shared live delivery, while first-topic

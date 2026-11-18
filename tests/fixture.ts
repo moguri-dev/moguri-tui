@@ -10,6 +10,7 @@ import { isRecord, MoguriError, type ProviderState, type Session } from "../pack
 import { runProgram } from "../apps/service/src/program.ts";
 import type { TaskProgressInput } from "../packages/protocol/src/progress.ts";
 import type { PlatformOptions } from "../apps/service/src/platform.ts";
+import { hdiutilDriver, type VirtualDiskOptions } from "../apps/service/src/virtual-disk.ts";
 import type { GithubAction, LinearWorkflowInput } from "../packages/protocol/src/index.ts";
 import { kupoThinkingMinimumOutput, qualifiedKupoThinking, supportedThinking } from "../apps/service/src/model-controls.ts";
 import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
@@ -76,7 +77,7 @@ export async function waitFor<T>(read: () => T | null | undefined | false, timeo
 export interface GeneratedProviderOptions {
   httpFailure?: { status: number; message: string; remaining?: number; afterRequests?: number };
   modelId?: string;
-  respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> }; hold?: boolean; delayMs?: number };
+  respond?: (request: Record<string, unknown>, index: number) => { text?: string; tool?: { name: string; args: Record<string, unknown> } | { name: string; args: Record<string, unknown> }[]; hold?: boolean; delayMs?: number };
   issueCreation?: { service: "github"; input: Extract<GithubAction, { kind: "github.issue.create" }> } | { service: "linear"; input: Extract<LinearWorkflowInput, { action: "issue.create" }> };
   stateSql?: boolean;
   stateSqlStatements?: { sql: string; parameters?: (string | number | boolean | null)[] }[];
@@ -278,7 +279,7 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
     },
   };
 }
-export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; legacyTurnCheckpointJournal?: boolean; nodePrimitives?: boolean } = {}) {
+export async function setupFixture(options: GeneratedProviderOptions & { workerPath?: string; platform?: PlatformOptions; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; legacyTurnCheckpointJournal?: boolean; nodePrimitives?: boolean; virtualDisk?: VirtualDiskOptions } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "moguri-generated-"));
   const project = join(directory, "project"), home = join(directory, "home");
   const resources: Array<() => void | Promise<void>> = [];
@@ -296,7 +297,7 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     await writeFile(join(project, "fixture.txt"), "generated original\n");
     const fixture = await fixtureProvider(options);
     resources.push(fixture.close);
-    const terminalSecrets = new Map<string, string>();
+    const terminalSecrets = new Map<string, string>(), telemetrySecrets = new Map<string, string>();
     const terminalSlot = (id: string) => { if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$/.test(id)) throw new Error("Generated terminal credential must fit the explicit production secret-backend namespace."); return id; };
     const terminalVault = { read: async (id: string) => terminalSecrets.get(terminalSlot(id)) ?? null, write: async (id: string, value: string) => { terminalSecrets.set(terminalSlot(id), value); }, remove: async (id: string) => { terminalSecrets.delete(terminalSlot(id)); } };
     const program = options.platform?.terminal?.executable ? {} : { executable: process.execPath,
@@ -307,8 +308,16 @@ export async function setupFixture(options: GeneratedProviderOptions & { workerP
     }) }, github: { ...options.platform?.github, runProgram: options.platform?.github?.runProgram ?? (async (executable, args, request) => {
       if (executable === "gh") throw new MoguriError("program_unavailable", "Generated fixture has no GitHub account. Personal authentication is forbidden.");
       return runProgram(executable, args, request);
-    }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault } };
-    const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY });
+    }) }, terminal: { ...program, defaultRoot: home, ...options.platform?.terminal, vault: options.platform?.terminal?.vault ?? terminalVault },
+      telemetry: { vault: options.platform?.telemetry?.vault ?? { read: async (id: string) => telemetrySecrets.get(id) ?? null,
+        write: async (id: string, value: string) => { telemetrySecrets.set(id, value); }, remove: async (id: string) => { telemetrySecrets.delete(id); } } } };
+    // A generated virtual disk stays mounted after the service stops (by design), so the fixture unmounts it before removing its folder.
+    resources.push(async () => {
+      const mount = join(directory, "state", "virtual-disk", "volume");
+      if (!hdiutilDriver.mounted(mount)) return;
+      await hdiutilDriver.detach(mount, AbortSignal.timeout(120_000)).catch(() => runProgram("/usr/bin/hdiutil", ["detach", "-force", mount], { cwd: "/", signal: AbortSignal.timeout(60_000), label: "Generated virtual disk cleanup" }));
+    });
+    const service = await startService({ stateDir: join(directory, "state"), provider: fixture.provider, workerPath: options.workerPath, platform, retentionKey: GENERATED_RETENTION_KEY, virtualDisk: options.virtualDisk });
     let restoreControlsJournal = () => {}, restoreJournal = () => {}, restoreSnapshot = () => {}, restoreCheckpoints = () => {};
     resources.push(async () => {
       try { await service.close(); } finally { restoreJournal(); restoreControlsJournal(); restoreCheckpoints(); restoreSnapshot(); }

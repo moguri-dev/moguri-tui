@@ -42,6 +42,25 @@ test("the built CLI shares explicit OTLP review and apply without a model or ses
   } finally { sdk.disconnect(); await fixture.close(); }
 });
 
+test("credential values never travel in shared commands; the CLI reads them from piped stdin into this profile's secret backend", async () => {
+  const fixture = await setupFixture(), sdk = await new sdkModule.MoguriSdk(fixture.service.connection).ready(), endpoint = "http://127.0.0.1:4318";
+  const run = (args: string[], input?: string) => new Promise<string>((done, fail) => {
+    const child = execFile(process.execPath, [resolve("dist/cli.mjs"), "telemetry", "otlp", ...args],
+      { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") }, timeout: 10_000 }, (error, stdout, stderr) => error ? fail(new Error(stderr || error.message)) : done(stdout));
+    child.stdin?.end(input ?? "");
+  });
+  try {
+    await sdk.telemetry.export.apply((await sdk.telemetry.export.review({ enabled: false, endpoint, samplingRatio: 1, headers: ["authorization"] })).review);
+    await assert.rejects(sdkModule.executeOtlpCommand(sdk, `credential set ${endpoint} authorization GENERATED_PRIVATE_COMMAND_SECRET`), /never go in a command line/);
+    await run(["credential", "set", endpoint, "authorization"], "Bearer GENERATED_PRIVATE_STDIN_SECRET\n");
+    assert.deepEqual((await sdk.telemetry.export.status()).headers, [{ name: "authorization", stored: true }]);
+    await sdkModule.executeOtlpCommand(sdk, `credential remove ${endpoint} authorization`);
+    assert.deepEqual((await sdk.telemetry.export.status()).headers, [{ name: "authorization", stored: false }]);
+    assert.equal(JSON.stringify(fixture.service.controller.events(0)).includes("GENERATED_PRIVATE"), false);
+    assert.equal(fixture.requests.length, 0);
+  } finally { sdk.disconnect(); await fixture.close(); }
+});
+
 test("the actual empty TUI reviews metadata export without creating a chat, choosing a model or enabling it", { skip: process.platform !== "darwin" }, async () => {
   const fixture = await setupFixture(), client = await new sdkModule.MoguriSdk(fixture.service.connection).ready();
   await client.sessions.delete(fixture.sessionId, true);

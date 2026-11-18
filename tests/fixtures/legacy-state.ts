@@ -7,6 +7,7 @@ import type { ControlPlane } from "../../apps/service/src/controller.ts";
 import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
 import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "../../packages/protocol/src/milestone-models.ts";
 import { hasGithubPrCiHistory } from "../../packages/protocol/src/github-workflows.ts";
+import { prWorkflowItem } from "../../packages/protocol/src/pr-actions.ts";
 import { hasMyWorkHistory } from "../../packages/protocol/src/my-work.ts";
 import { hasBackgroundServiceHistory } from "../../packages/protocol/src/application.ts";
 import { hasScriptInboxHistory, hasNativeScriptHistory } from "../../packages/protocol/src/script-reviews.ts";
@@ -268,7 +269,22 @@ export function removeStainlessIntegrationFixtureMarker(db: DatabaseSync, events
   if (events.some((event) => event.event_type === "settings.updated" && event.payload.settings.integrations?.stainless !== undefined)) {
     throw new Error("Generate genuine pre-111 history; actual Stainless integration settings cannot be relabelled.");
   }
+  removeSourceTrustTelemetryFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='stainless_integration_schema'");
+}
+export function removeSourceTrustTelemetryFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "skill.publisher_saved" || event.event_type === "skill.trust_blocked" ||
+    event.event_type === "tool.background_completed" || event.event_type === "tool.completed" && event.payload.outcome === "background" ||
+    (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && prWorkflowItem(event.payload.item) ||
+    event.event_type === "settings.updated" && (event.payload.settings.scriptReview !== undefined || event.payload.settings.retention?.archiveBranchCleanup !== undefined) ||
+    event.event_type === "workspace.saved" && (event.payload.workspace.volume !== undefined || event.payload.workspace.parked !== undefined || event.payload.workspace.cleanup !== undefined) ||
+    event.event_type === "application.virtual_disk_saved" ||
+    event.event_type === "skill.admission_recorded" && event.payload.admission.publisher.kind === "saved-ed25519" ||
+    event.event_type === "telemetry.export_configured" && (event.payload.configuration.disclosureVersion !== 1 ||
+      event.payload.configuration.logs !== undefined || event.payload.configuration.headers !== undefined))) {
+    throw new Error("Generate genuine pre-112 history; actual publisher keys/blocks, scanner risk acceptance, saved-key admissions, OTLP log/credential configuration, steer-backgrounded commands, pull request follow-up workflows, archive worktree cleanup and the virtual disk cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('skill_publisher_trust_schema','otlp_signals_credentials_schema','background_command_schema')");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||

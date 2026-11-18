@@ -6,7 +6,7 @@ import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type Cli
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, runningSessionNames, runningSessions, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { agentHarnessProduct, describeActivityCall, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
@@ -195,6 +195,8 @@ type ArchiveReview = {
   children: Pick<Session, "id" | "title" | "parentSessionId" | "kind">[];
   expected: ReturnType<typeof sessionChildBindings>;
   canDetach: boolean;
+  /** Sessions in the tree whose work archiving stops; the user always confirms these, whatever the saved preference. */
+  running: Pick<Session, "id" | "title">[];
 };
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
@@ -282,7 +284,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const githubOwner = useRef("");
   const [tokenServer, setTokenServer] = useState("");
   const [tokenValue, setTokenValue] = useState("");
-  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache" | "hosted-key" | "hosted-code">("mcp");
+  const [tokenKind, setTokenKind] = useState<"mcp" | "linear" | "model" | "remote-model" | "cache" | "hosted-key" | "hosted-code" | "otlp-header">("mcp");
   const issueEditor = useRef<{ id: string | null; revision: number }>({ id: null, revision: 0 });
   const artifactEditor = useRef<ArtifactEditorRequest | null>(null);
   const planEditor = useRef<PlanEditorRequest | null>(null), planSaving = useRef(false);
@@ -301,6 +303,19 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const retry = session && snapshot ? retryFailure(session, snapshot.modelFailures) : undefined, retryPending = useRef(false);
   githubOwner.current = JSON.stringify([client.profileId, session?.id, session?.projectId, session?.workspaceId, session?.controls.env]);
   const taskProgress = useTaskProgress(client, session, status === "connected");
+  const diskId = session?.workspaceId ? snapshot?.managedWorkspaces.find((workspace) => workspace.id === session.workspaceId)?.volume?.diskId : undefined;
+  const diskPausedNotice = useRef(false);
+  useEffect(() => {
+    if (!diskId || status !== "connected") return;
+    let active = true;
+    void client.application.disk.status().then(({ disk }) => {
+      if (!active) return;
+      const paused = disk.disk?.id === diskId && Boolean(disk.disk.pressure?.paused), shown = diskPausedNotice.current;
+      diskPausedNotice.current = paused;
+      if (paused && !shown) setNotice("Moguri's virtual disk is full, so this chat is paused before its next model call. Archive sessions (their clean, pushed worktrees are removed) or use /runtime disk-size GB; work resumes on its own.");
+    }, () => undefined);
+    return () => { active = false; };
+  }, [client, diskId, snapshot, status, setNotice]);
   useEffect(() => {
     if (mode !== "kupo-mode" || !session) return;
     let active = true;
@@ -463,7 +478,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     }
     check();
     await client.command({ type: "session.archive", sessionId: review.session.id, expectedRevision: review.session.revision,
-      children: { action, expected: review.expected } });
+      ...(review.expected.length ? { children: { action, expected: review.expected } } : {}), ...(review.running.length ? { confirmRunning: true as const } : {}) });
     if (queuedArchive.current?.context.sessionId === review.session.id) queuedArchive.current.settle({ outcome: "completed" });
     setArchiveReview(null); setMode("compose");
   };
@@ -471,18 +486,19 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const state = client.getState(), parent = state.snapshot?.sessions.find((value) => value.id === target.id);
     if (!parent || !state.snapshot) throw new Error("The original session is no longer available.");
     const tree = sessionSubtree(state.snapshot.sessions, parent.id), expected = sessionChildBindings(state.snapshot.sessions, parent.id);
-    if (!expected.length) {
+    const running = runningSessions(state.snapshot.sessions, state.snapshot.jobs, [parent.id]).map(({ id, title }) => ({ id, title }));
+    if (!expected.length && !running.length) {
       await client.command({ type: "session.archive", sessionId: parent.id, expectedRevision: parent.revision });
       return;
     }
     const children = tree.slice(1).map(({ id, title, parentSessionId, kind }) => ({ id, title, parentSessionId, kind }));
     const canDetach = !children.some((child) => child.parentSessionId === parent.id && child.kind === "subagent");
     const preference = state.snapshot.settings.values.retention.archiveChildren ?? "ask";
-    if (preference === "archive" || preference === "detach" && canDetach) {
-      await applyArchiveChoice({ session: parent, children, expected, canDetach }, preference, false);
+    if (!running.length && (preference === "archive" || preference === "detach" && canDetach)) {
+      await applyArchiveChoice({ session: parent, children, expected, canDetach, running }, preference, false);
       return;
     }
-    setArchiveReview({ session: parent, children, expected, canDetach });
+    setArchiveReview({ session: parent, children, expected, canDetach, running });
     setMode("session-action");
   };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
@@ -707,6 +723,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     if (name === "/otlp") {
       if (held) throw new Error("OTLP settings require an explicit unheld user review. Held input was not executed or exported.");
       requireNavigation();
+      const credential = argument.match(/^credential set (\S+) (\S+)$/);
+      if (credential) { setTokenKind("otlp-header"); setTokenServer(JSON.stringify([credential[1], credential[2]])); setTokenValue(""); setMode("mcp-token"); return; }
       show(await executeOtlpCommand(client, argument));
       if (!session) setStartupCommand("");
       return;
@@ -919,7 +937,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       key.preventDefault(); key.stopPropagation();
       if (key.name === "escape" || key.ctrl && key.name === "c") { setTokenValue(""); setMode("settings"); return; }
       if (key.name === "backspace") setTokenValue((value) => value.slice(0, -1));
-      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "cache") await client.cache.registries.setToken(tokenServer, tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "hosted-key") await client.models.hosted.setKey(tokenServer as "openrouter", tokenValue); else if (tokenKind === "hosted-code") await client.models.hosted.submitCode(tokenServer as "chatgpt", tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
+      else if (key.name === "return" && tokenValue) void perform(async () => { if (tokenKind === "linear") await client.linear.setToken(tokenValue); else if (tokenKind === "cache") await client.cache.registries.setToken(tokenServer, tokenValue); else if (tokenKind === "model") await client.models.setToken(tokenServer, tokenValue); else if (tokenKind === "hosted-key") await client.models.hosted.setKey(tokenServer as "openrouter", tokenValue); else if (tokenKind === "hosted-code") await client.models.hosted.submitCode(tokenServer as "chatgpt", tokenValue); else if (tokenKind === "remote-model") await client.remote.setToken(tokenServer, tokenValue); else if (tokenKind === "otlp-header") { const [endpoint, name] = JSON.parse(tokenServer) as [string, string]; await client.telemetry.export.setCredential(endpoint, name, tokenValue); } else await client.mcp.setToken(tokenServer, tokenValue, session?.id); setTokenValue(""); setMode("settings"); });
       else if (!key.ctrl && !key.meta && key.sequence.length === 1 && key.sequence >= " ") setTokenValue((value) => (value + key.sequence).slice(0, 32768));
       return;
     }
@@ -1167,12 +1185,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <scrollbox focused={!githubBusy} flexGrow={1}><text fg={colors.foreground}>{safe(`${githubSelection?.item.state}\n\n${githubSelection?.item.body ?? ""}\n\nController source workspace: ${githubSelection?.binding.root.root}\nSource SHA-256: ${githubSelection?.digest}`)}</text></scrollbox>
           <text fg={colors.attention} height={3}>Ctrl+N starts a session with this exact source as an unsent draft. Ctrl+L links it here. Ctrl+B opens GitHub. No checkout or inference is started. Esc returns.</text></box> :
         mode === "session-action" && archiveReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
-          <text fg={colors.accent} height={2}>Archive {safe(archiveReview.session.title)} and review its subsessions</text>
-          <text fg={colors.muted} height={3}>{safe([...archiveReview.children.slice(0, 12).map((child) =>
+          <text fg={colors.accent} height={2}>Archive {safe(archiveReview.session.title)}{archiveReview.children.length ? " and review its subsessions" : ""}</text>
+          {archiveReview.running.length > 0 && <text fg={colors.error} height={2}>{safe(`${runningSessionNames(archiveReview.running)} ${archiveReview.running.length === 1 ? "is" : "are"} still running. Archiving stops ${archiveReview.running.length === 1 ? "its" : "their"} current work. You always confirm this, even with saved preferences.`)}</text>}
+          {archiveReview.children.length > 0 && <text fg={colors.muted} height={3}>{safe([...archiveReview.children.slice(0, 12).map((child) =>
             `${child.parentSessionId === archiveReview.session.id ? "" : "  nested: "}${child.title}`),
-          ...(archiveReview.children.length > 12 ? [`... and ${archiveReview.children.length - 12} more`] : [])].join("\n"))}</text>
-          <text fg={colors.attention} height={3}>Cascade archives this exact tree. Detach retains direct child sessions and their nested hierarchy after settling owned work. Model-owned subagents cannot be detached. Esc cancels.</text>
-          <ThemedSelect focused={!archivePending} flexGrow={1} options={[
+          ...(archiveReview.children.length > 12 ? [`... and ${archiveReview.children.length - 12} more`] : [])].join("\n"))}</text>}
+          {archiveReview.children.length > 0 && <text fg={colors.attention} height={3}>Cascade archives this exact tree. Detach retains direct child sessions and their nested hierarchy after settling owned work. Model-owned subagents cannot be detached. Esc cancels.</text>}
+          <ThemedSelect focused={!archivePending} flexGrow={1} options={!archiveReview.children.length ? [
+            { name: "Stop running work and archive", description: "Stop this session's current work, then archive it. History and drafts are kept.", value: "archive" },
+            { name: "Cancel", description: "No session action; the work keeps running.", value: "cancel" },
+          ] : [
             { name: "Archive all attached subsessions", description: "Settle owned work and archive every descendant in the reviewed tree.", value: "archive" },
             ...(archiveReview.canDetach ? [{ name: "Detach direct children", description: "Settle owned work, preserve the sessions, and keep nested sessions attached.", value: "detach" }] : []),
             { name: "Archive all and don't ask me again", description: "Save this profile's archive-child choice.", value: "archive:remember" },
@@ -1332,7 +1354,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <text fg={colors.muted} height={2}>Tab switches the scrollable exact preview and choices. Review all fields. Esc exits without stopping the agent.</text>
         </box> :
         mode === "capability-output" ? <scrollbox key="command-output" flexGrow={1} minHeight={0} focused><text fg={colors.foreground}>{safe(capabilityOutput)}</text></scrollbox> :
-        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "hosted-key" ? `${tokenServer} API key` : tokenKind === "hosted-code" ? `${tokenServer} sign-in redirect URL` : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
+        mode === "mcp-token" ? <box flexDirection="column" flexGrow={1} paddingTop={2}><text fg={colors.accent}>{tokenKind === "linear" ? "Linear personal API key" : tokenKind === "hosted-key" ? `${tokenServer} API key` : tokenKind === "hosted-code" ? `${tokenServer} sign-in redirect URL` : tokenKind === "cache" ? `Private registry credential for ${tokenServer}` : tokenKind === "model" ? `Local model credential for ${tokenServer}` : tokenKind === "otlp-header" ? `OTLP exporter header ${(JSON.parse(tokenServer) as string[])[1]} for ${(JSON.parse(tokenServer) as string[])[0]}` : `MCP credential for ${tokenServer}`}</text><text fg={colors.muted}>This masked input is not a draft or model message. Enter stores it in the OS keychain; Esc discards it.</text><text fg={colors.foreground}>{"*".repeat(Math.min(tokenValue.length, 60))}</text></box> :
         mode === "project" ? <box flexDirection="column" paddingTop={2} gap={1}><text fg={colors.accent}>Open a local project directory</text><text fg={colors.muted}>Local execution is not sandboxed. Tools follow the selected autonomy and hard policy.</text>
           <ThemedInput focused value={projectPath} onInput={setProjectPath} placeholder="/absolute/path/to/project" onSubmit={() => void perform(() => openProject(projectPath))} /></box> :
         mode === "repository-import" ? <box flexGrow={1} flexDirection="column" padding={1}>
@@ -1432,7 +1454,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
 /session  /sessions  /work-items  /code-requests
 /sidebar open|close  /theme list  /theme crystal dark
 /new [global]  /open PATH  /models  /profiles  /settings
-/otlp status | review INPUT_JSON | apply REVIEW_JSON confirm-reviewed
+/otlp status | review INPUT_JSON | apply REVIEW_JSON confirm-reviewed | credential set|remove ENDPOINT NAME
 /stainless status | check | open [URL]
 /approve once  /question  /queue  /stop  /quit
 
@@ -1469,6 +1491,7 @@ Existing shortcut aliases remain available for compatibility.
 /steer text | /interrupt text | /stop | /resume
 /queue | /edit ID text | /remove ID | /reorder ID ID ...
 /queue-turn ID converts an unapplied steer into a new turn
+/send-now ID steers a queued prompt into the running turn, or runs it next
 /archive | /restore | /new | /open PATH | /sessions
 /trace | /details | /reload-draft | /keep-draft
 /policy all | /policy protected
