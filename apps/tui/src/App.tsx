@@ -6,7 +6,7 @@ import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type Cli
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
+import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, runningSessionNames, runningSessions, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
 import { agentHarnessProduct, describeActivityCall, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
 import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
@@ -195,6 +195,8 @@ type ArchiveReview = {
   children: Pick<Session, "id" | "title" | "parentSessionId" | "kind">[];
   expected: ReturnType<typeof sessionChildBindings>;
   canDetach: boolean;
+  /** Sessions in the tree whose work archiving stops; the user always confirms these, whatever the saved preference. */
+  running: Pick<Session, "id" | "title">[];
 };
 export interface TuiNativeActions { browser: (url: string) => Promise<void>; file: (path: string) => Promise<void>; copy: (text: string) => Promise<void>; saveExport?: (path: string, document: ArtifactExport) => Promise<{ path: string; digest: string }> }
 
@@ -463,7 +465,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     }
     check();
     await client.command({ type: "session.archive", sessionId: review.session.id, expectedRevision: review.session.revision,
-      children: { action, expected: review.expected } });
+      ...(review.expected.length ? { children: { action, expected: review.expected } } : {}), ...(review.running.length ? { confirmRunning: true as const } : {}) });
     if (queuedArchive.current?.context.sessionId === review.session.id) queuedArchive.current.settle({ outcome: "completed" });
     setArchiveReview(null); setMode("compose");
   };
@@ -471,18 +473,19 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
     const state = client.getState(), parent = state.snapshot?.sessions.find((value) => value.id === target.id);
     if (!parent || !state.snapshot) throw new Error("The original session is no longer available.");
     const tree = sessionSubtree(state.snapshot.sessions, parent.id), expected = sessionChildBindings(state.snapshot.sessions, parent.id);
-    if (!expected.length) {
+    const running = runningSessions(state.snapshot.sessions, state.snapshot.jobs, [parent.id]).map(({ id, title }) => ({ id, title }));
+    if (!expected.length && !running.length) {
       await client.command({ type: "session.archive", sessionId: parent.id, expectedRevision: parent.revision });
       return;
     }
     const children = tree.slice(1).map(({ id, title, parentSessionId, kind }) => ({ id, title, parentSessionId, kind }));
     const canDetach = !children.some((child) => child.parentSessionId === parent.id && child.kind === "subagent");
     const preference = state.snapshot.settings.values.retention.archiveChildren ?? "ask";
-    if (preference === "archive" || preference === "detach" && canDetach) {
-      await applyArchiveChoice({ session: parent, children, expected, canDetach }, preference, false);
+    if (!running.length && (preference === "archive" || preference === "detach" && canDetach)) {
+      await applyArchiveChoice({ session: parent, children, expected, canDetach, running }, preference, false);
       return;
     }
-    setArchiveReview({ session: parent, children, expected, canDetach });
+    setArchiveReview({ session: parent, children, expected, canDetach, running });
     setMode("session-action");
   };
   const show = (value: unknown) => { setCapabilityOutput(typeof value === "string" ? value : JSON.stringify(value, null, 2)); setMode("capability-output"); };
@@ -1169,12 +1172,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           <scrollbox focused={!githubBusy} flexGrow={1}><text fg={colors.foreground}>{safe(`${githubSelection?.item.state}\n\n${githubSelection?.item.body ?? ""}\n\nController source workspace: ${githubSelection?.binding.root.root}\nSource SHA-256: ${githubSelection?.digest}`)}</text></scrollbox>
           <text fg={colors.attention} height={3}>Ctrl+N starts a session with this exact source as an unsent draft. Ctrl+L links it here. Ctrl+B opens GitHub. No checkout or inference is started. Esc returns.</text></box> :
         mode === "session-action" && archiveReview ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
-          <text fg={colors.accent} height={2}>Archive {safe(archiveReview.session.title)} and review its subsessions</text>
-          <text fg={colors.muted} height={3}>{safe([...archiveReview.children.slice(0, 12).map((child) =>
+          <text fg={colors.accent} height={2}>Archive {safe(archiveReview.session.title)}{archiveReview.children.length ? " and review its subsessions" : ""}</text>
+          {archiveReview.running.length > 0 && <text fg={colors.error} height={2}>{safe(`${runningSessionNames(archiveReview.running)} ${archiveReview.running.length === 1 ? "is" : "are"} still running. Archiving stops ${archiveReview.running.length === 1 ? "its" : "their"} current work. You always confirm this, even with saved preferences.`)}</text>}
+          {archiveReview.children.length > 0 && <text fg={colors.muted} height={3}>{safe([...archiveReview.children.slice(0, 12).map((child) =>
             `${child.parentSessionId === archiveReview.session.id ? "" : "  nested: "}${child.title}`),
-          ...(archiveReview.children.length > 12 ? [`... and ${archiveReview.children.length - 12} more`] : [])].join("\n"))}</text>
-          <text fg={colors.attention} height={3}>Cascade archives this exact tree. Detach retains direct child sessions and their nested hierarchy after settling owned work. Model-owned subagents cannot be detached. Esc cancels.</text>
-          <ThemedSelect focused={!archivePending} flexGrow={1} options={[
+          ...(archiveReview.children.length > 12 ? [`... and ${archiveReview.children.length - 12} more`] : [])].join("\n"))}</text>}
+          {archiveReview.children.length > 0 && <text fg={colors.attention} height={3}>Cascade archives this exact tree. Detach retains direct child sessions and their nested hierarchy after settling owned work. Model-owned subagents cannot be detached. Esc cancels.</text>}
+          <ThemedSelect focused={!archivePending} flexGrow={1} options={!archiveReview.children.length ? [
+            { name: "Stop running work and archive", description: "Stop this session's current work, then archive it. History and drafts are kept.", value: "archive" },
+            { name: "Cancel", description: "No session action; the work keeps running.", value: "cancel" },
+          ] : [
             { name: "Archive all attached subsessions", description: "Settle owned work and archive every descendant in the reviewed tree.", value: "archive" },
             ...(archiveReview.canDetach ? [{ name: "Detach direct children", description: "Settle owned work, preserve the sessions, and keep nested sessions attached.", value: "detach" }] : []),
             { name: "Archive all and don't ask me again", description: "Save this profile's archive-child choice.", value: "archive:remember" },

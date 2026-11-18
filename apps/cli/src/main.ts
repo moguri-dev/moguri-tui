@@ -25,7 +25,7 @@ export async function main(argv: string[]): Promise<void> {
     help: { type: "boolean" }, session: { type: "string" }, project: { type: "string" }, workspace: { type: "string" }, profile: { type: "string" }, color: { type: "string" },
     "acknowledge-prompt-risk": { type: "boolean" }, "accept-license": { type: "boolean" }, json: { type: "boolean" },
     "accept-dependency-metadata": { type: "boolean" }, "run-scripts": { type: "boolean" }, revision: { type: "string" },
-    "confirm-remove": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, "forward-access": { type: "boolean" }, children: { type: "string" }, digest: { type: "string" }, binding: { type: "string" },
+    "confirm-remove": { type: "boolean" }, "confirm-running": { type: "boolean" }, "confirm-push": { type: "boolean" }, "confirm-review": { type: "boolean" }, "forward-access": { type: "boolean" }, children: { type: "string" }, digest: { type: "string" }, binding: { type: "string" },
     "all-projects": { type: "boolean" }, "acknowledge-config-risk": { type: "boolean" }, "trust-folder": { type: "boolean" }, once: { type: "boolean" }, include: { type: "string" },
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
@@ -206,7 +206,7 @@ moguri project removal-preview ID
 moguri project export-artifacts ID --output ABSOLUTE_NEW_JSON_PATH
 moguri project materialize-preview ID [--workspace ID] [--branch NEW_LOCAL_BRANCH]
 moguri project materialize-artifacts ID --digest REVIEW_SHA --confirm-write [--workspace ID] [--branch NEW_LOCAL_BRANCH]
-moguri project remove ID --revision N --confirm-remove --artifacts retain|delete|export|materialize --digest SET_SHA [--exported-digest EXPORT_SHA|--materialization-id JOB_ID]
+moguri project remove ID --revision N --confirm-remove --artifacts retain|delete|export|materialize --digest SET_SHA [--exported-digest EXPORT_SHA|--materialization-id JOB_ID] [--confirm-running]
 moguri metachat [REQUEST] [--session ID|--project ID]
 moguri suggestions preview|generate --session ID [--all-projects] [--digest SHA256]
 moguri configuration propose FILE --session ID
@@ -226,18 +226,19 @@ moguri session spawn side|agent [NAME] --session ID
 moguri session organize changes.json --session ID --revision N
 moguri session model-settings options.json --session ID --revision N
 moguri session context --session ID
-moguri session archive|restore|stop|resume|retry --session ID [--children archive|detach]
+moguri session archive|restore|stop|resume|retry --session ID [--children archive|detach] [--confirm-running]
 moguri session kupo-mode balanced|savings|performance --session ID
 moguri scheduled list|create TIMING_JSON_FILE|send-now ID|cancel ID [--session ID]
-moguri session delete --session ID --revision N --confirm-remove [--children delete|detach]
+moguri session delete --session ID --revision N --confirm-remove [--children delete|detach] [--confirm-running]
   Child-tree actions can also use the saved Settings / Retention preference. Deletion preserves ordinary artifacts and Git resources.
+  Archiving or deleting a running session (or one with running subsessions) stops its work and always needs --confirm-running.
 moguri session from-pr URL|from-issue ID --project ID
 moguri project get|sources|diff|porto|repositories ID
 moguri project add PATH              Register an existing local folder
 moguri project clone URL PATH --confirm-write  Clone into a new folder; partial files are preserved
 moguri project set ID settings.json --revision N
 moguri project relocate ID PATH --revision N
-moguri project remove ID --revision N --confirm-remove
+moguri project remove ID --revision N --confirm-remove [--confirm-running]
 moguri project defaults ID BRANCH --revision N --confirm-push
 moguri project import-mcp ID --revision N --confirm-review --digest SHA256
 moguri queue list|copy [ID]|run ID|remove ID --session ID
@@ -837,12 +838,12 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         else if (action === "kupo-mode" && args[0]) output(await sdk.sessions.kupoMode(values.session, parse(KupoModeSchema, args[0])));
         else if (action === "delete" && values["confirm-remove"]) {
           if (!snapshot.sessions.some((session) => session.id === values.session)) throw new Error("Choose an existing session for deletion.");
-          output(await sdk.sessions.delete(values.session, true, expectedRevision(), childrenReview(values.session, "delete")));
+          output(await sdk.sessions.delete(values.session, true, expectedRevision(), childrenReview(values.session, "delete"), values["confirm-running"] ? { confirmRunning: true } : {}));
         }
         else if (action === "archive") {
           if (!snapshot.sessions.some((session) => session.id === values.session)) throw new Error("Choose an existing session to archive.");
           output(await sdk.command({ type: "session.archive", sessionId: values.session, expectedRevision: expectedRevision(),
-            ...(childrenReview(values.session, "archive") ? { children: childrenReview(values.session, "archive") } : {}) }));
+            ...(childrenReview(values.session, "archive") ? { children: childrenReview(values.session, "archive") } : {}), ...(values["confirm-running"] ? { confirmRunning: true as const } : {}) }));
         }
         else if (action && ["restore", "stop", "resume"].includes(action)) output(await sdk.command({ type: `session.${action}` as "session.restore" | "session.stop" | "session.resume", sessionId: values.session }));
         else throw new Error("Use session rename/mode/spawn/organize/archive/restore/stop/resume/delete. Deletion needs --confirm-remove and the observed --revision; child actions need --children or a saved disposition.");
@@ -908,7 +909,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "relocate" && args[1]) output(await sdk.projects.relocate(args[0], args[1], expectedRevision()));
       else if (action === "remove" && values["confirm-remove"]) {
         const artifacts = values.artifacts ? parse(ProjectArtifactChoiceSchema, { action: values.artifacts, expectedDigest: values.digest, ...(values["exported-digest"] ? { exportedDigest: values["exported-digest"] } : {}), ...(values["materialization-id"] ? { materializationId: values["materialization-id"] } : {}) }) : undefined;
-        output(await sdk.projects.remove(args[0], true, expectedRevision(), artifacts));
+        output(await sdk.projects.remove(args[0], true, expectedRevision(), artifacts, values["confirm-running"] ? { confirmRunning: true } : {}));
       }
       else if (action === "import-mcp" && values["confirm-review"] && values.digest) output(await sdk.projects.importMcp(args[0], expectedRevision(), true, values.digest));
       else if (action === "defaults" && args[1] && values["confirm-push"]) {
@@ -1137,6 +1138,9 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
 }
 if (import.meta.main) {
   try { await main(process.argv.slice(2)); }
-  catch (error) { console.error(error instanceof Error ? error.message : "Moguri command failed."); process.exitCode = 1; }
+  catch (error) {
+    const running = error instanceof Error && "code" in error && error.code === "session_running";
+    console.error(error instanceof Error ? `${error.message}${running ? " Rerun with --confirm-running to stop it and continue." : ""}` : "Moguri command failed."); process.exitCode = 1;
+  }
 }
 export { defaultSettings };

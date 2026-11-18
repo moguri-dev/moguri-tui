@@ -76,6 +76,33 @@ test("TUI /archive asks how to handle subsessions and remembers the selected cas
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
+test("TUI /archive always warns before stopping a running subsession, even with a saved cascade choice", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  await fixture.configure();
+  const settings = client.settings.get()!;
+  await client.settings.update({ ...settings.values, retention: { ...settings.values.retention, archiveChildren: "archive" } }, settings.revision);
+  const child = await client.sessions.spawn(fixture.sessionId, "agent", "Generated running child");
+  const running = () => fixture.service.controller.snapshot().sessions.find((session) => session.id === child.id)!;
+  await fixture.service.controller.dispatch(envelope({ type: "draft.save", sessionId: child.id!, expectedRevision: running().draft.revision, text: "generated slow task", attachments: [] }));
+  await fixture.service.controller.dispatch(envelope({ type: "message.send", sessionId: child.id!, expectedRevision: running().draft.revision, delivery: "queue" }));
+  await waitFor(() => running().turnId && fixture.requests.length === 1, 10_000);
+  const setup = await createTestRenderer({ width: 140, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + 8000;
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI running archive did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("/archive"); setup.mockInput.pressEnter();
+    await frameUntil('"Generated running child" is still running');
+    assert.ok(running().turnId, "the saved cascade choice did not archive running work without asking");
+    await frameUntil("Archive all attached subsessions"); setup.mockInput.pressEnter();
+    await waitFor(() => running().status === "archived" && !running().turnId, 10_000);
+    assert.equal(fixture.session().status, "archived");
+  } finally { await closeTui(root, setup, client, () => fixture.close()); }
+});
+
 test("actual TUI model dropdown selects default automatic Kupo and runs its sole model without a classifier", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
   const fixture = await setupFixture({ responseMode: "text", maxOutputTokens: 128 }), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 150, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
