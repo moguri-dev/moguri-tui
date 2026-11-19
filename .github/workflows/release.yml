@@ -1,0 +1,36 @@
+name: Release
+# Triggered by the annotated vX.Y.Z tag that scripts/release.sh pushes after uploading a draft release built from that
+# commit. This workflow never builds: it re-verifies the draft's exact assets and is the only step that publishes it.
+# See docs/releasing.md.
+on:
+  push:
+    tags: ['v*']
+permissions: {}
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify-and-publish:
+    name: Verify and publish
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --no-fund --no-progress
+      - name: Audit dependencies at the tagged commit
+        run: npm audit --audit-level=moderate
+      - name: Verify and publish the draft release
+        run: node scripts/release/publish.mjs --tag "$TAG" --dir "$RUNNER_TEMP/release-assets"
