@@ -174,6 +174,7 @@ moguri terminal owner-acknowledge OWNER_ID --confirm-review  No cleanup proof is
 moguri terminal input ID            Piped UTF-8 input only; no automatic replay
 moguri terminal acknowledge ID --confirm-review  Only after actual process inspection
 moguri artifact list|read ID|history ID
+moguri artifact library [--project ID]  Build outputs and agent-written files (no --project: project-free chats)
 moguri artifact create DOCUMENT.json [--session ID|--project ID]
 moguri artifact update ID CHANGES.json --revision N
 moguri artifact source SOURCE_ID --session ID [--source-type message|tool]
@@ -277,6 +278,8 @@ moguri containment status|require-sandbox --confirm-review  Explicit global new-
 moguri skills import PROJECT_ID SKILL.md
 moguri skills sources|find [QUERY] [--session ID]
 moguri skills read ID --digest SHA [--session ID]  Refresh and check exact skill bytes
+moguri skills install ID --digest SHA [--project ID]  Install a source skill disabled (no --project: every project)
+moguri toolsets                                   Built-in agent toolsets and foundational scripts
 moguri skills publishers                          Saved publisher keys and permanent blocks
 moguri skills publisher-save NAME KEY.pem --confirm-review  Save an Ed25519 publisher key in this profile
 moguri skills block key|artifact SHA REASON --confirm-review  Permanently block a key or one skill version
@@ -478,6 +481,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else throw new Error("Use activity list [SEQUENCE ID], activity turn ID or activity read ID arguments|output [UTF8_OFFSET] with --session ID.");
     } else if (group === "status") {
       output({ protocolVersion: snapshot.protocolVersion, profileId: snapshot.profileId, projects: snapshot.projects, sessions: snapshot.sessions.slice().sort(compareSessionOrder).map(({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned }) => ({ id, projectId, title, status, mode, parentSessionId, order, groupId, pinned })) });
+    } else if (group === "toolsets") {
+      output(await sdk.tools.toolsets());
     } else if (["firewall", "home", "tools", "tool", "tool-result", "state", "watch", "coordinate"].includes(group)) {
       if (!values.session) throw new Error("Choose --session ID. No previous project/root or session authority is inherited.");
       const value = await sdk.slash(values.session, `/${group}${action ? ` ${[action, ...args].join(" ")}` : ""}`, "cli");
@@ -684,6 +689,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else throw new Error("Use candidate eligibility --session ID; role-proposal SEQUENCE_ID; generate-preview/generate INPUT.json --session SOURCE --workspace STAGE [--digest SHA --confirm-cost], generated/generation-wait/generation-stop ID; or list/read, preview/stage PATCH.json [--role-sequence ID], apply-preview/apply, reject/stop/wait. Creation needs an explicit Git project; staging and application require separate exact reviews.");
     } else if (group === "artifact") {
       if (action === "list") output(snapshot.artifacts);
+      else if (action === "library") output(await sdk.artifacts.library(values.project ?? null));
       else if (action === "create" && args[0]) {
         if (values.session && values.project) throw new Error("Choose an origin --session or explicit --project scope, not both.");
         const document = parse(ArtifactDraftSchema, JSON.parse(await readFile(args[0], "utf8")));
@@ -1072,6 +1078,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else if (group === "skills" && action === "sources") output(sdk.settings.get()?.values.skillSources ?? []);
       else if (group === "skills" && action === "find") output(await sdk.skills.find(args.join(" "), { ...(values.session ? { sessionId: values.session } : {}) }));
       else if (group === "skills" && action === "read" && args[0] && values.digest) output(await sdk.skills.read(args[0], values.digest, values.session));
+      else if (group === "skills" && action === "install" && args[0] && values.digest) output(await sdk.skills.install(values.project ?? null, args[0], values.digest));
       else {
         if (action !== "import" || !args[0] || !args[1]) throw new Error("Use skills sources/find/read ID --digest SHA, or import PROJECT_ID FILE. Imported capabilities start disabled.");
         output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));
