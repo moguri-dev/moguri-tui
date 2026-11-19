@@ -1,7 +1,7 @@
 # Repository State
 
 - This repository contains a macOS development alpha that completes Milestone 1 (see `docs/remaining-milestone-gaps.md`); it is not a signed, notarized public release. `docs/setup.md` identifies implemented behavior and unavailable capabilities. Never describe the wider roadmap as implemented.
-- `docs/implementation.md` is the canonical implementation specification. `README.md` retains the product feature inventory; `docs/architecture/decisions.md` is authoritative for the selected stack. Reconcile documentation with executable code/config once those exist.
+- `docs/implementation.md` is the canonical implementation specification. `docs/vision.md` retains the product feature inventory and `docs/features.md` records implemented capabilities; `README.md` stays a short landing page linking to `docs/README.md`. `docs/architecture/decisions.md` is authoritative for the selected stack. Reconcile documentation with executable code/config once those exist.
 - Moguri is built from zero with borrowed libraries; it does not fork OpenCode or Pi. The stack is Node.js 26, OpenTUI + React, Electron + React, and a Moguri-owned worker loop using maintained `@earendil-works/pi-ai`. D06 explicitly permits Node/PTY supervision for this checkpoint; Rust helpers remain unvalidated. Change decisions in `docs/architecture/decisions.md`.
 - Before adding Moguri features, follow Phase 0: run the validation spikes listed in `docs/architecture/decisions.md` and record each pass or fail result with measurements under `docs/`.
 
@@ -70,6 +70,8 @@
 - CI runs only for pushes to `main`. Do not trigger it on pull requests or working branches; run required verification locally.
 - Focused checks use `node --import tsx --test tests/<name>.test.ts`; combine related selectors in one invocation. `npm test` includes the native TUI interaction test and the covering-array milestone matrix; the 10,080-cell full product is opt-in `npm run test:matrix` (D38). Electron tests run hidden, use generated fixtures, and never open the real GitHub authorization page.
 - `npm start -- --project /absolute/path` starts the built TUI; `npm run desktop` starts Electron. `npm run package:mac` builds development macOS arm64 artifacts. Never open an app/browser or complete personal authorization on the user's behalf.
+- Releases follow `docs/releasing.md`: only `scripts/release.sh VERSION` (preview with `--dry-run`) bumps versions, merges the `release: VERSION` PR, tags and drives `.github/workflows/release.yml`, which verifies and publishes the locally built draft. Never hand-create release tags, drafts or version bumps. `npm run build` must keep emitting `dist/THIRD_PARTY_NOTICES.md`; MIT covers only Moguri's own code (`docs/third-party.md`).
+- Developer setup, layout and checks: `docs/development.md`. Contributor policy: `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `ACCESSIBILITY.md`.
 - Node emits an experimental FFI warning for OpenTUI. Linux CI checks the portable foundation but skips macOS-only agent/UI execution; it is not proof of Linux release readiness.
 
 # Issue and Roadmap Tracking
