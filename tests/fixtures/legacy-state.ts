@@ -284,7 +284,15 @@ export function removeSourceTrustTelemetryFixtureMarkers(db: DatabaseSync, event
       event.payload.configuration.logs !== undefined || event.payload.configuration.headers !== undefined))) {
     throw new Error("Generate genuine pre-112 history; actual publisher keys/blocks, scanner risk acceptance, saved-key admissions, OTLP log/credential configuration, steer-backgrounded commands, pull request follow-up workflows, archive worktree cleanup and the virtual disk cannot be relabelled.");
   }
+  removeToolSuggestionAutomationFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('skill_publisher_trust_schema','otlp_signals_credentials_schema','background_command_schema')");
+}
+export function removeToolSuggestionAutomationFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "settings.updated" && event.payload.settings.automations !== undefined ||
+    event.event_type === "attention.raised" && event.payload.attention.reason === "tool-suggestion")) {
+    throw new Error("Generate genuine pre-113 history; actual automation settings and repeated-task tool suggestions cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='tool_suggestion_automation_schema'");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
