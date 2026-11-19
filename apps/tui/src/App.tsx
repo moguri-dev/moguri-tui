@@ -11,7 +11,7 @@ import { agentHarnessProduct, describeActivityCall, hostedProvider, approvalProj
 import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
-import { configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming } from "../../../packages/sdk/src/index.ts";
+import { configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming, type Automation, type AutomationRun, describeAutomationSchedule } from "../../../packages/sdk/src/index.ts";
 import { MyWorkFiltersSchema, type MyWorkEntry, type MyWorkFilters, type MyWorkResponse, type Snapshot } from "../../../packages/sdk/src/index.ts";
 type MoguriClient = MoguriSdk;
 
@@ -1251,7 +1251,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         </box> :
         mode === "schedule" && session && editor ? <TuiScheduleDialog sdk={client} editor={editor} initial={scheduleInitial}
           lock={(pending) => { schedulePending.current = pending; }} close={() => setMode("compose")} /> :
-        mode === "automations" ? <TuiScheduledPrompts sdk={client} prompts={snapshot?.scheduledPrompts ?? []} run={perform} /> :
+        mode === "automations" ? <TuiScheduledPrompts sdk={client} prompts={snapshot?.scheduledPrompts ?? []} automations={snapshot?.automations ?? []} runs={snapshot?.automationRuns ?? []} run={perform} /> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={compact ? 4 : 10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
@@ -1799,18 +1799,38 @@ function TuiScheduleDialog({ sdk, editor, initial, lock, close }: { sdk: MoguriS
         onSelect={(_, option) => { const timing = choices.find((timing) => timing.at === option?.value); if (timing) void act("schedule", false, timing); }} />}
   </box>;
 }
-function TuiScheduledPrompts({ sdk, prompts, run }: { sdk: MoguriSdk; prompts: ScheduledPrompt[]; run: (operation: () => Promise<unknown>) => Promise<void> }) {
+function TuiScheduledPrompts({ sdk, prompts, automations, runs, run }: { sdk: MoguriSdk; prompts: ScheduledPrompt[]; automations: Automation[]; runs: AutomationRun[]; run: (operation: () => Promise<unknown>) => Promise<void> }) {
   const colors = React.useContext(ThemeContext), [busy, setBusy] = useState(false), pending = useRef(false);
   const entries = prompts.filter((prompt) => ["scheduled", "blocked", "queued"].includes(prompt.status));
+  const recurring = automations.map((automation) => {
+    const last = runs.find((value) => value.automationId === automation.id);
+    return `${automation.name} / ${automation.status === "active" ? "Active" : "Paused"} / ${describeAutomationSchedule(automation.schedule)}` +
+      `${automation.status === "active" && automation.nextAt ? ` / next ${new Date(automation.nextAt).toLocaleString()}` : ""}${last ? ` / last run ${last.status}` : ""}`;
+  });
+  const options = [...entries.flatMap((prompt) => [
+    { name: `Send now / ${safe(prompt.text.split("\n")[0]!.slice(0, 60))}`, value: `send:${prompt.id}`, description: `${new Date(prompt.dueAt).toLocaleString()} / ${prompt.status} / ${prompt.id}` },
+    { name: `Cancel / ${safe(prompt.text.split("\n")[0]!.slice(0, 60))}`, value: `cancel:${prompt.id}`, description: prompt.diagnostic ?? "Cancel before admission; never stop another turn" },
+  ]), ...automations.flatMap((automation) => [
+    { name: `Run now / ${safe(automation.name.slice(0, 60))}`, value: `run:${automation.id}`, description: "Starts a new chat in its project with its captured controls" },
+    { name: `${automation.status === "active" ? "Pause" : "Turn on"} / ${safe(automation.name.slice(0, 60))}`, value: `${automation.status === "active" ? "pause" : "enable"}:${automation.id}`,
+      description: automation.status === "active" ? "Stop future runs; an active run continues" : "Run at its scheduled times from now on" },
+  ])];
   return <box flexDirection="column" flexGrow={1} padding={1}><text fg={colors.accent} height={2}>Automations / Scheduled prompts</text>
-    <text fg={colors.muted}>Automations cover actions, not just prompts. Currently: one-time prompts only; other actions unavailable.</text>
+    <text fg={colors.muted}>{recurring.length ? safe(`Recurring automations (each run starts a new chat; /automations for runs and details):\n${recurring.join("\n")}`) :
+      "No recurring automations. Create them in the desktop app or with moguri automations create WORKFLOW_FILE."}</text>
     <text fg={colors.muted} height={3}>One-time unsent prompts in this profile. Enter sends/cancels the exact input. Your current composer is not consumed.</text>
-    {!entries.length ? <text fg={colors.muted}>No scheduled prompts. Cmd/Ctrl+Enter in an idle chat opens scheduling.</text> :
-      <ThemedSelect focused={!busy} flexGrow={1} options={entries.flatMap((prompt) => [
-        { name: `Send now / ${safe(prompt.text.split("\n")[0]!.slice(0, 60))}`, value: `send:${prompt.id}`, description: `${new Date(prompt.dueAt).toLocaleString()} / ${prompt.status} / ${prompt.id}` },
-        { name: `Cancel / ${safe(prompt.text.split("\n")[0]!.slice(0, 60))}`, value: `cancel:${prompt.id}`, description: prompt.diagnostic ?? "Cancel before admission; never stop another turn" },
-      ])} onSelect={(_, option) => { if (!option || pending.current) return; const [action, id] = String(option.value).split(":"), prompt = entries.find((entry) => entry.id === id); if (!prompt) return;
-        pending.current = true; setBusy(true); void run(async () => { try { if (action === "send") await sdk.scheduledPrompts.sendNow(prompt.id, prompt.revision); else await sdk.scheduledPrompts.cancel(prompt.id, prompt.revision); } finally { pending.current = false; setBusy(false); } });
+    {!entries.length && <text fg={colors.muted}>No scheduled prompts. Cmd/Ctrl+Enter in an idle chat opens scheduling.</text>}
+    {options.length > 0 &&
+      <ThemedSelect focused={!busy} flexGrow={1} options={options} onSelect={(_, option) => {
+        if (!option || pending.current) return;
+        const [action, id] = String(option.value).split(":"), prompt = entries.find((entry) => entry.id === id), automation = automations.find((entry) => entry.id === id);
+        if (!prompt && !automation) return;
+        pending.current = true; setBusy(true); void run(async () => { try {
+          if (prompt) { if (action === "send") await sdk.scheduledPrompts.sendNow(prompt.id, prompt.revision); else await sdk.scheduledPrompts.cancel(prompt.id, prompt.revision); }
+          else if (action === "run") await sdk.automations.runNow(automation!.id, automation!.revision);
+          else if (action === "pause") await sdk.automations.pause(automation!.id, automation!.revision);
+          else await sdk.automations.enable(automation!.id, automation!.revision);
+        } finally { pending.current = false; setBusy(false); } });
       }} />}
   </box>;
 }
