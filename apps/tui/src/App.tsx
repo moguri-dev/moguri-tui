@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
-import { executeOtlpCommand, executeStainlessCommand } from "../../../packages/sdk/src/index.ts";
+import { executeOtlpCommand, executeStainlessCommand, effectivePrAutomation, PR_AUTOMATION_LABELS, prAutomationDefaults, prAutomationExceptions, prAutomationSourceLabel } from "../../../packages/sdk/src/index.ts";
 import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
@@ -1274,6 +1274,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
             { name: "Integration order: MCP via Gateway, MCP direct, REST, CLI", value: "tool-preferences" },
             { name: "All shared settings (JSON): dark theme, guardrails, memory, MCP, optional modes", value: "json" },
             { name: "Project settings (JSON): repo, folders, scripts, preview port, instructions and MCP", value: "project" },
+            { name: "Pull request automation: effective flags, repository exceptions and this chat's retries", value: "pr-automation" },
             { name: "View effective committed system prompt", value: "preview" },
             { name: "Index current repository locally", value: "index" },
             { name: "Read repository import/symbol graph", value: "graph" },
@@ -1291,6 +1292,16 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
               case "prompt": openSettingsEditor(true); break;
               case "json": openSettingsEditor(false); break;
               case "project": await openProjectEditor(); break;
+              case "pr-automation": {
+                if (!snapshot) throw new Error("Connect before reading pull request automation.");
+                const configuration = project ? snapshot.projectConfigurations.find((value) => value.projectId === project.id)?.values : undefined;
+                show({ defaults: prAutomationDefaults(snapshot.settings.values),
+                  repository: configuration ? Object.values(effectivePrAutomation(snapshot.settings.values, configuration)).map((flag) => `${PR_AUTOMATION_LABELS[flag.flag]}: ${prAutomationSourceLabel(flag)}`) : "Open a project to see its effective values.",
+                  exceptions: prAutomationExceptions(snapshot.settings.values, snapshot.projectConfigurations),
+                  records: session ? client.prAutomation.records(session.id) : [],
+                  edit: "Change defaults under prAutomation in All shared settings (JSON) and overrides under repo.ciRetry / repo.conflictResolution in Project settings (JSON). Remove an override to inherit." });
+                break;
+              }
               case "preview": show(await client.prompt.preview(session?.id)); break;
               case "index": if (!project) throw new Error("Open a project first."); show(await client.memory.index(project.id, session?.workspaceId ?? undefined)); break;
               case "graph": if (!project) throw new Error("Open a project first."); show(await client.memory.graph(project.id, "", session?.workspaceId ?? undefined)); break;
