@@ -17,7 +17,7 @@ import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../p
 import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "../../../packages/sdk/src/index.ts";
 import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
 import { queuedSlash } from "./queued-commands.ts";
-import { KupoModeSchema, ScheduledTimingSchema, parseAutomationWorkflow } from "../../../packages/sdk/src/index.ts";
+import { KupoModeSchema, ScheduledTimingSchema, parseAutomationWorkflow, executeInterruptedCommand } from "../../../packages/sdk/src/index.ts";
 import { parse as parseYaml } from "yaml";
 import { AttentionFiltersSchema, MyWorkFiltersSchema, ProjectWorkspaceModeSchema } from "../../../packages/sdk/src/index.ts";
 
@@ -230,6 +230,8 @@ moguri session context --session ID
 moguri session archive|restore|stop|resume|retry --session ID [--children archive|detach] [--confirm-running]
 moguri session kupo-mode balanced|savings|performance --session ID
 moguri scheduled list|create TIMING_JSON_FILE|send-now ID|cancel ID [--session ID]
+moguri interrupted [list|continue ID|continue all|dismiss ID|always|ask]
+  Chats a quit, restart or crash interrupted. Continue checks where the agent left off first; nothing is repeated.
 moguri automations list [--project ID] | runs [ID]
 moguri automations create WORKFLOW_FILE --project ID [--paused]   YAML/JSON: name, schedule, steps (- prompt: / - script:), controls
 moguri automations update ID WORKFLOW_FILE | enable ID | pause ID | run ID | stop RUN_ID | delete ID [--stop-running]
@@ -826,6 +828,8 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else if (action === "send-now" && args[0]) output(await sdk.scheduledPrompts.sendNow(args[0]));
       else if (action === "cancel" && args[0]) output(await sdk.scheduledPrompts.cancel(args[0]));
       else throw new Error("Use scheduled list, create TIMING_JSON_FILE --session ID, send-now ID or cancel ID. Creation consumes only the exact existing saved draft.");
+    } else if (group === "interrupted") {
+      console.log(await executeInterruptedCommand(sdk, [action ?? "list", ...args].join(" ")));
     } else if (group === "automations") {
       const workflow = async (path: string) => {
         const file = await stat(path);

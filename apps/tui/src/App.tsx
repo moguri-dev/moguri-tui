@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
-import { executeAutomationsCommand, executeOtlpCommand, executeStainlessCommand, effectivePrAutomation, PR_AUTOMATION_LABELS, prAutomationDefaults, prAutomationExceptions, prAutomationSourceLabel } from "../../../packages/sdk/src/index.ts";
+import { executeAutomationsCommand, executeInterruptedCommand, interruptedSessions, executeOtlpCommand, executeStainlessCommand, effectivePrAutomation, PR_AUTOMATION_LABELS, prAutomationDefaults, prAutomationExceptions, prAutomationSourceLabel } from "../../../packages/sdk/src/index.ts";
 import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
@@ -244,6 +244,15 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const activeTab: TuiTab = mode === "sessions" ? "sessions" : mode === "work-items" || mode === "issues" ? "work-items" : mode === "code-requests" ? "code-requests" : mode === "my-work" ? "my-work" : mode === "automations" ? "automations" : "session";
   const [notice, storeNotice] = useState<{ id: number; text: string; error: boolean } | null>(null), noticeSequence = useRef(0);
   const setNotice = React.useCallback((text: string, error = false) => storeNotice(text ? { id: ++noticeSequence.current, text, error } : null), []);
+  const announcedInterruptions = useRef(new Set<string>());
+  useEffect(() => {
+    // After a restart, point at interrupted chats once per interruption unless the profile continues them automatically (D50).
+    if (!snapshot || snapshot.settings.values.interactions.continueInterrupted === "always") return;
+    const fresh = interruptedSessions(snapshot.sessions).filter((value) => !announcedInterruptions.current.has(`${value.id}:${value.interruption!.at}`));
+    if (!fresh.length) return;
+    for (const value of fresh) announcedInterruptions.current.add(`${value.id}:${value.interruption!.at}`);
+    setNotice(`${fresh.length} chat${fresh.length === 1 ? " was" : "s were"} interrupted when Moguri stopped. /interrupted lists them; /interrupted continue all continues them; /interrupted always stops asking.`);
+  }, [snapshot, setNotice]);
   const [skillHelp, setSkillHelp] = useState<{ profileId: string; text: string } | null>(null);
   const [continueReview, setContinueReview] = useState<ContinueWorkReview | null>(null);
   const queuedContinue = useRef<{ context: CommandViewContext; pending: boolean; cancelling?: boolean; settle(outcome: CommandViewOutcome): void } | null>(null);
@@ -734,6 +743,13 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       requireNavigation();
       const result = await executeStainlessCommand(client, argument, session?.id, session?.browserUrl);
       show("summary" in result ? result.summary : `Opened ${result.opened} in Stainless.`);
+      if (!session) setStartupCommand("");
+      return;
+    }
+    if (name === "/interrupted") {
+      if (held) throw new Error("Continuing interrupted chats needs an explicit unheld command. Held input was not executed.");
+      requireNavigation();
+      show(await executeInterruptedCommand(client, argument));
       if (!session) setStartupCommand("");
       return;
     }
@@ -1475,6 +1491,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
 /otlp status | review INPUT_JSON | apply REVIEW_JSON confirm-reviewed | credential set|remove ENDPOINT NAME
 /stainless status | check | open [URL]
 /automations [list | runs ID | enable ID | pause ID | run ID | stop RUN_ID | delete ID [stop-running]]
+/interrupted [list | continue ID | continue all | dismiss ID | always | ask]
 /approve once  /question  /queue  /stop  /quit
 
 Click any navigation tab. Tab focuses navigation; Up/Down chooses a tab,

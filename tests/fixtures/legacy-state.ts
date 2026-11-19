@@ -301,7 +301,11 @@ export function removeAutomationsFixtureMarker(db: DatabaseSync, events: readonl
     event.event_type === "repository.script_reserved" && event.payload.attempt.automation !== undefined)) {
     throw new Error("Generate genuine pre-114 history; actual automations, their runs and automation-owned steps cannot be relabelled.");
   }
-  db.exec("DELETE FROM retention_metadata WHERE id='automations_schema'");
+  if (events.some((event) => event.event_type === "session.interruption_recorded" ||
+    event.event_type === "settings.updated" && event.payload.settings.interactions?.continueInterrupted !== undefined)) {
+    throw new Error("Generate genuine pre-114 history; actual interrupted-chat records and the continue-interrupted setting cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('automations_schema','interrupted_sessions_schema')");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
