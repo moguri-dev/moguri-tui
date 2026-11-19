@@ -2,6 +2,7 @@
   "name": "moguri",
   "version": "0.32.0-alpha.1",
   "private": true,
+  "license": "MIT",
   "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
   "exports": {
