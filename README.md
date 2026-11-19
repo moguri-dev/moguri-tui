@@ -104,6 +104,11 @@ Automations / Scheduled prompts group, with one-at-most queue admission.
 Local and SSH continuation are qualified. A rolled-back native workspace keeps
 its explicit inspection/preparation gate instead of automatic root substitution.
 
+Closing or quitting the desktop app saves unsent drafts and open queued-prompt
+edits first. Chats a quit, restart or crash interrupted can be
+[continued](docs/architecture/interrupted-sessions.md) one by one, all at once,
+or automatically after every restart.
+
 [Automations](docs/architecture/automations.md) run a prompt or a declarative
 workflow of prompts and repository-trusted scripts once, every N minutes, daily
 or on chosen weekdays. Each run starts a new chat in its project with captured
