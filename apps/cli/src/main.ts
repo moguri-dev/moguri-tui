@@ -17,7 +17,8 @@ import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../p
 import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "../../../packages/sdk/src/index.ts";
 import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
 import { queuedSlash } from "./queued-commands.ts";
-import { KupoModeSchema, ScheduledTimingSchema } from "../../../packages/sdk/src/index.ts";
+import { KupoModeSchema, ScheduledTimingSchema, parseAutomationWorkflow } from "../../../packages/sdk/src/index.ts";
+import { parse as parseYaml } from "yaml";
 import { AttentionFiltersSchema, MyWorkFiltersSchema, ProjectWorkspaceModeSchema } from "../../../packages/sdk/src/index.ts";
 
 export async function main(argv: string[]): Promise<void> {
@@ -35,7 +36,7 @@ export async function main(argv: string[]): Promise<void> {
     confirmations: { type: "string" }, registry: { type: "string" },
     "capture-id": { type: "string" }, root: { type: "string" }, hold: { type: "boolean" }, repository: { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
-    "workspace-mode": { type: "string" },
+    "workspace-mode": { type: "string" }, paused: { type: "boolean" }, "stop-running": { type: "boolean" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -229,6 +230,10 @@ moguri session context --session ID
 moguri session archive|restore|stop|resume|retry --session ID [--children archive|detach] [--confirm-running]
 moguri session kupo-mode balanced|savings|performance --session ID
 moguri scheduled list|create TIMING_JSON_FILE|send-now ID|cancel ID [--session ID]
+moguri automations list [--project ID] | runs [ID]
+moguri automations create WORKFLOW_FILE --project ID [--paused]   YAML/JSON: name, schedule, steps (- prompt: / - script:), controls
+moguri automations update ID WORKFLOW_FILE | enable ID | pause ID | run ID | stop RUN_ID | delete ID [--stop-running]
+  Each run starts a new chat in the project. Script steps run repository-trusted scripts Local only, under normal approval.
 moguri session delete --session ID --revision N --confirm-remove [--children delete|detach] [--confirm-running]
   Child-tree actions can also use the saved Settings / Retention preference. Deletion preserves ordinary artifacts and Git resources.
   Archiving or deleting a running session (or one with running subsessions) stops its work and always needs --confirm-running.
@@ -821,6 +826,26 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       } else if (action === "send-now" && args[0]) output(await sdk.scheduledPrompts.sendNow(args[0]));
       else if (action === "cancel" && args[0]) output(await sdk.scheduledPrompts.cancel(args[0]));
       else throw new Error("Use scheduled list, create TIMING_JSON_FILE --session ID, send-now ID or cancel ID. Creation consumes only the exact existing saved draft.");
+    } else if (group === "automations") {
+      const workflow = async (path: string) => {
+        const file = await stat(path);
+        if (!file.isFile() || file.size > 256 * 1024) throw new Error("Choose a workflow file of at most 256 KiB. Nothing was saved.");
+        return parseAutomationWorkflow(parseYaml(await readFile(path, "utf8")));
+      };
+      if (action === "list" || !action) output(sdk.automations.list(values.project));
+      else if (action === "runs") output(sdk.automations.runs(args[0]));
+      else if (action === "create" && args[0] && values.project) {
+        const { definition, controls } = await workflow(args[0]);
+        output(await sdk.automations.create(values.project, definition, { enabled: !values.paused, ...(controls ? { controls } : {}) }));
+      } else if (action === "update" && args[0] && args[1]) {
+        const { definition, controls } = await workflow(args[1]);
+        output(await sdk.automations.update(args[0], definition, controls));
+      } else if (action === "enable" && args[0]) output(await sdk.automations.enable(args[0]));
+      else if (action === "pause" && args[0]) output(await sdk.automations.pause(args[0]));
+      else if (action === "run" && args[0]) output(await sdk.automations.runNow(args[0]));
+      else if (action === "stop" && args[0]) output(await sdk.automations.stopRun(args[0]));
+      else if (action === "delete" && args[0]) output(await sdk.automations.delete(args[0], { stopRunning: values["stop-running"] }));
+      else throw new Error("Use automations list, runs [ID], create WORKFLOW_FILE --project ID [--paused], update ID WORKFLOW_FILE, enable ID, pause ID, run ID, stop RUN_ID or delete ID [--stop-running].");
     } else if (group === "session") {
       if (action === "create") {
         let overrides: ControlDefaults | undefined;

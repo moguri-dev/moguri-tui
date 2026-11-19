@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
-import { executeOtlpCommand, executeStainlessCommand, effectivePrAutomation, PR_AUTOMATION_LABELS, prAutomationDefaults, prAutomationExceptions, prAutomationSourceLabel } from "../../../packages/sdk/src/index.ts";
+import { executeAutomationsCommand, executeOtlpCommand, executeStainlessCommand, effectivePrAutomation, PR_AUTOMATION_LABELS, prAutomationDefaults, prAutomationExceptions, prAutomationSourceLabel } from "../../../packages/sdk/src/index.ts";
 import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
@@ -737,6 +737,13 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       if (!session) setStartupCommand("");
       return;
     }
+    if (name === "/automations") {
+      if (held) throw new Error("Automation actions need an explicit unheld command. Held input was not executed.");
+      requireNavigation();
+      show(await executeAutomationsCommand(client, argument));
+      if (!session) setStartupCommand("");
+      return;
+    }
     if (!session || !editor) {
       if (name === "/new" && (!argument || argument === "global")) await newSession(true);
       else if (name === "/open" && argument) await openProject(argument);
@@ -1467,6 +1474,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
 /new [global]  /open PATH  /models  /profiles  /settings
 /otlp status | review INPUT_JSON | apply REVIEW_JSON confirm-reviewed | credential set|remove ENDPOINT NAME
 /stainless status | check | open [URL]
+/automations [list | runs ID | enable ID | pause ID | run ID | stop RUN_ID | delete ID [stop-running]]
 /approve once  /question  /queue  /stop  /quit
 
 Click any navigation tab. Tab focuses navigation; Up/Down chooses a tab,
