@@ -31,12 +31,12 @@ export async function main(argv: string[]): Promise<void> {
     controls: { type: "string" }, stdio: { type: "boolean" }, foreground: { type: "boolean" },
     output: { type: "string" }, artifacts: { type: "string" }, "exported-digest": { type: "string" }, "source-type": { type: "string" },
     "confirm-write": { type: "boolean" }, "confirm-cost": { type: "boolean" }, generation: { type: "string" }, "role-sequence": { type: "string" }, branch: { type: "string" }, "materialization-id": { type: "string" },
-    "confirm-stage-and-test": { type: "boolean" },
+    "confirm-stage-and-test": { type: "boolean" }, "package-digest": { type: "string" },
     "confirm-git": { type: "boolean" },
     confirmations: { type: "string" }, registry: { type: "string" },
     "capture-id": { type: "string" }, root: { type: "string" }, hold: { type: "boolean" }, repository: { type: "string" },
     model: { type: "string" }, provider: { type: "string" }, role: { type: "string" }, folder: { type: "string" }, filters: { type: "string" },
-    "workspace-mode": { type: "string" }, paused: { type: "boolean" }, "stop-running": { type: "boolean" },
+    "workspace-mode": { type: "string" }, paused: { type: "boolean" }, "stop-running": { type: "boolean" }, "no-project": { type: "boolean" },
   } });
   const [group = "tui", action, ...args] = positionals;
   if (values.help || group === "help") {
@@ -233,8 +233,8 @@ moguri session kupo-mode balanced|savings|performance|dynamic --session ID
 moguri scheduled list|create TIMING_JSON_FILE|send-now ID|cancel ID [--session ID]
 moguri interrupted [list|continue ID|continue all|dismiss ID|always|ask]
   Chats a quit, restart or crash interrupted. Continue checks where the agent left off first; nothing is repeated.
-moguri automations list [--project ID] | runs [ID]
-moguri automations create WORKFLOW_FILE --project ID [--paused]   YAML/JSON: name, schedule, steps (- prompt: / - script:), controls
+moguri automations list [--project ID | --no-project] | runs [ID]
+moguri automations create WORKFLOW_FILE (--project ID | --no-project) [--paused]   YAML/JSON: name, schedule, steps (- prompt: / - script:), controls
 moguri automations update ID WORKFLOW_FILE | enable ID | pause ID | run ID | stop RUN_ID | delete ID [--stop-running]
   Each run starts a new chat in the project. Script steps run repository-trusted scripts Local only, under normal approval.
 moguri session delete --session ID --revision N --confirm-remove [--children delete|detach] [--confirm-running]
@@ -286,6 +286,9 @@ moguri skills import PROJECT_ID SKILL.md
 moguri skills sources|find [QUERY] [--session ID]
 moguri skills read ID --digest SHA [--session ID]  Refresh and check exact skill bytes
 moguri skills install ID --digest SHA [--project ID]  Install a source skill disabled (no --project: every project)
+moguri skills list                                All skills by personal repository, marketplace, folder, plugin and project
+moguri skills on|off SOURCE_ID PATH               Turn one source skill on or off (a marketplace skill needs trust first)
+moguri skills trust SOURCE_ID PATH --digest SHA --package-digest SHA --confirm-review  Trust one exact marketplace skill
 moguri toolsets                                   Built-in agent toolsets and foundational scripts
 moguri skills publishers                          Saved publisher keys and permanent blocks
 moguri skills publisher-save NAME KEY.pem --confirm-review  Save an Ed25519 publisher key in this profile
@@ -842,11 +845,12 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (!file.isFile() || file.size > 256 * 1024) throw new Error("Choose a workflow file of at most 256 KiB. Nothing was saved.");
         return parseAutomationWorkflow(parseYaml(await readFile(path, "utf8")));
       };
-      if (action === "list" || !action) output(sdk.automations.list(values.project));
+      if (values.project && values["no-project"]) throw new Error("Choose either --project ID or --no-project. Nothing was changed.");
+      if (action === "list" || !action) output(sdk.automations.list(values["no-project"] ? null : values.project));
       else if (action === "runs") output(sdk.automations.runs(args[0]));
-      else if (action === "create" && args[0] && values.project) {
+      else if (action === "create" && args[0] && (values.project || values["no-project"])) {
         const { definition, controls } = await workflow(args[0]);
-        output(await sdk.automations.create(values.project, definition, { enabled: !values.paused, ...(controls ? { controls } : {}) }));
+        output(await sdk.automations.create(values["no-project"] ? null : values.project!, definition, { enabled: !values.paused, ...(controls ? { controls } : {}) }));
       } else if (action === "update" && args[0] && args[1]) {
         const { definition, controls } = await workflow(args[1]);
         output(await sdk.automations.update(args[0], definition, controls));
@@ -855,7 +859,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "run" && args[0]) output(await sdk.automations.runNow(args[0]));
       else if (action === "stop" && args[0]) output(await sdk.automations.stopRun(args[0]));
       else if (action === "delete" && args[0]) output(await sdk.automations.delete(args[0], { stopRunning: values["stop-running"] }));
-      else throw new Error("Use automations list, runs [ID], create WORKFLOW_FILE --project ID [--paused], update ID WORKFLOW_FILE, enable ID, pause ID, run ID, stop RUN_ID or delete ID [--stop-running].");
+      else throw new Error("Use automations list, runs [ID], create WORKFLOW_FILE (--project ID | --no-project) [--paused], update ID WORKFLOW_FILE, enable ID, pause ID, run ID, stop RUN_ID or delete ID [--stop-running].");
     } else if (group === "session") {
       if (action === "create") {
         let overrides: ControlDefaults | undefined;
@@ -1108,6 +1112,12 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (group === "skills" && action === "find") output(await sdk.skills.find(args.join(" "), { ...(values.session ? { sessionId: values.session } : {}) }));
       else if (group === "skills" && action === "read" && args[0] && values.digest) output(await sdk.skills.read(args[0], values.digest, values.session));
       else if (group === "skills" && action === "install" && args[0] && values.digest) output(await sdk.skills.install(values.project ?? null, args[0], values.digest));
+      else if (group === "skills" && action === "list") output(await sdk.skills.list());
+      else if (group === "skills" && (action === "on" || action === "off") && args[0] && args[1]) output(await sdk.skills.setEnabled(args[0], args[1], action === "on"));
+      else if (group === "skills" && action === "trust" && args[0] && args[1] && values.digest && values["package-digest"]) {
+        if (!values["confirm-review"]) throw new Error("Trusting lets every chat load this exact skill version. Read it first, then add --confirm-review; trusting grants no tools.");
+        output(await sdk.skills.trust(args[0], args[1], values.digest, values["package-digest"]));
+      }
       else {
         if (action !== "import" || !args[0] || !args[1]) throw new Error("Use skills sources/find/read ID --digest SHA, or import PROJECT_ID FILE. Imported capabilities start disabled.");
         output(group === "skills" ? await sdk.capabilities.importSkill(args[0], args[1]) : await sdk.capabilities.importPlugin(args[0], args[1]));

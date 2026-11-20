@@ -19,7 +19,7 @@ export function milestoneResponder(configuration: {
         text: JSON.stringify({ pattern: "single", modelId: configuration.solverId, confidence: 1,
           reason: "GENERATED_MATRIX_ROUTER_REASON_NOT_SOLVER_CONTEXT" }),
       };
-      if (system.includes("Choose the least complex eligible Kupo workflow")) return { text: JSON.stringify({
+      if (system.includes("Choose the most appropriate eligible Kupo workflow")) return { text: JSON.stringify({
         pattern: configuration.selection, modelId: configuration.solverId, complexity: "moderate", taskKind: "substantive", confidence: 1,
         reason: "GENERATED_MATRIX_ROUTER_REASON_NOT_SOLVER_CONTEXT",
         ...(configuration.selection === "cascade" ? { escalationId: request.model } : { criticId: request.model }),

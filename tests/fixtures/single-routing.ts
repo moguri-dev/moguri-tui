@@ -10,11 +10,12 @@ import type { RemoteTarget } from "../../packages/sdk/src/index.ts";
 
 export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean; platform?: PlatformOptions; legacy?: boolean;
   remoteTarget?: { target: RemoteTarget; workspace: string }; legacySessionControlsJournal?: boolean; imageInput?: boolean; toolInput?: boolean;
-  reasoningRoles?: boolean } = {}) {
+  reasoningRoles?: boolean; modelId?: string; thirdModelId?: string } = {}) {
   const remote = configuration.env === "Remote";
   const secrets = new Map<string, string>(), generatedVault = { read: async (id: string) => secrets.get(id) ?? null, write: async (id: string, value: string) => { secrets.set(id, value); }, remove: async (id: string) => { secrets.delete(id); } };
   const vault = configuration.platform?.remote?.vault ?? generatedVault;
   const options: GeneratedProviderOptions & { platform?: PlatformOptions; workerPath?: string; legacySessionControlsJournal?: boolean } = { maxOutputTokens: 128, exposeModels: true, responseMode: "text",
+    ...(configuration.modelId ? { modelId: configuration.modelId } : {}),
     ...(configuration.reasoningRoles ? { reasoning: true, contextWindow: 32768, thinkingLevelMap: { xhigh: "xhigh", max: "max" } } : {}),
     ...(configuration.imageInput !== undefined ? { imageInput: configuration.imageInput } : {}), ...(configuration.toolInput !== undefined ? { toolInput: configuration.toolInput } : {}),
     legacySessionControlsJournal: configuration.legacySessionControlsJournal,
@@ -23,7 +24,10 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
     ...(configuration.reasoningRoles ? { reasoning: true, contextWindow: 32768, thinkingLevelMap: { xhigh: "xhigh", max: "max" } } : {}),
     ...(configuration.imageInput !== undefined ? { imageInput: configuration.imageInput } : {}), ...(configuration.toolInput !== undefined ? { toolInput: configuration.toolInput } : {}) };
   if (!remote && configuration.legacy !== false) options.workerPath = fileURLToPath(new URL("./legacy-worker-83.ts", import.meta.url));
-  const fixture = await setupFixture(options), solver = await fixtureProvider(solverOptions);
+  // An optional third generated local endpoint, for example a lab-named Council reviewer (Local only).
+  const thirdOptions: GeneratedProviderOptions | undefined = configuration.thirdModelId ? { modelId: configuration.thirdModelId, maxOutputTokens: 128, exposeModels: true,
+    replyText: "Generated third model answer." } : undefined;
+  const fixture = await setupFixture(options), solver = await fixtureProvider(solverOptions), third = thirdOptions ? await fixtureProvider(thirdOptions) : undefined;
   const sdk = await new MoguriSdk(fixture.service.connection).ready();
   let ssh: Awaited<ReturnType<typeof createSshTarget>> | undefined, workspace: string | null = null;
   const close = async () => {
@@ -34,7 +38,7 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
       }
     } finally {
       sdk.disconnect();
-      try { await fixture.service.close(); } finally { try { await ssh?.close(); } finally { try { await fixture.close(); } finally { await solver.close(); } } }
+      try { await fixture.service.close(); } finally { try { await ssh?.close(); } finally { try { await fixture.close(); } finally { try { await solver.close(); } finally { await third?.close(); } } } }
     }
   };
   try {
@@ -56,7 +60,8 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
         await mkdir(targetRoot); await mkdir(workspace); await writeFile(join(workspace, "fixture.txt"), "Generated actual routed SSH source.\n");
         ssh = await createSshTarget(targetRoot); settings.remote = { ...ssh.target, models: configuration.reasoningRoles ? [] : [endpoint] };
       }
-    } else settings.localModels = configuration.reasoningRoles ? [] : [endpoint];
+    } else settings.localModels = configuration.reasoningRoles ? [] : [endpoint, ...third ? [{ id: "generated-routed-third", name: "Generated routed third", enabled: true,
+      baseUrl: `${third.baseUrl}/v1`, auth: "none" as const, models: [{ id: third.modelId, name: "Generated routed third", contextWindow: 16384, maxTokens: 128, imageInput: false }] }] : []];
     await sdk.settings.update(settings, sdk.settings.get()!.revision);
     if (remote) {
       await sdk.remote.probe();
@@ -65,14 +70,16 @@ export async function routedFixture(configuration: { env?: "Local" | "Remote"; c
     }
     await sdk.models.refresh();
     const model = sdk.getState().snapshot!.provider.models.find((model) => configuration.reasoningRoles ? model.id === solver.modelId :
-      model.source === "local" && Boolean(model.id.startsWith("remote.")) === remote);
+      model.source === "local" && Boolean(model.id.startsWith("remote.")) === remote && (!third || model.apiModelId === solver.modelId));
+    const thirdModel = third && sdk.getState().snapshot!.provider.models.find((model) => model.source === "local" && model.apiModelId === third.modelId);
+    if (third && !thirdModel) throw new Error("The generated third model was not discovered.");
     if (!model) throw new Error("The generated routed solver was not discovered in its explicit environment.");
     const configured = structuredClone(sdk.settings.get()!.values);
     configured.notifications = settings.notifications;
     configured.kupo = { enabled: true, workflow: "single", classifierModelId: fixture.modelId, approvedModelIds: [model.id], allowHosted: true, minimumConfidence: 0.9 };
     options.replyText = JSON.stringify({ pattern: "single", modelId: model.id, confidence: 0.95, reason: "Generated classifier advice, never user instructions or permissions." });
     if (configuration.configured !== false) await sdk.settings.update(configured, sdk.settings.get()!.revision);
-    return { ...fixture, sdk, solver, options, solverOptions, solverId: model.id, workspace,
+    return { ...fixture, sdk, solver, options, solverOptions, solverId: model.id, workspace, third, thirdOptions, thirdId: thirdModel?.id,
       select: () => configuration.legacy !== false && sdk.settings.get()?.values.kupo.workflow !== "single" ? appendLegacyKupoSelection(sdk, fixture.service.controller, fixture.sessionId, remote ? "Remote" : "Local") :
         sdk.sessions.configure(fixture.sessionId, { ...fixture.session().controls, env: remote ? "Remote" : "Local", modelId: KUPO_MODEL_ID }, undefined, false),
       close };

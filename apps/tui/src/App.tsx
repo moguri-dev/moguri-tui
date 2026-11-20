@@ -1407,7 +1407,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           }} />}
         </box> :
         mode === "kupo-mode" ? <box flexGrow={1} flexDirection="column" padding={1}><text fg={colors.accent} height={2}>Kupo modes / actual effort is model-selected</text>
-          <text fg={colors.muted} height={4}>Balanced uses any qualified model. Savings/Performance class models by published API price or a reviewed profile. Dynamic picks a mode per request. Performance never drops below xhigh. Context is always the selected model's qualified maximum. No permission or source acceptance is delegated here.</text>
+          <text fg={colors.muted} height={4}>Balanced uses any qualified model. Savings/Performance class models by published API price or a reviewed profile. Dynamic picks a mode per request. Workflows: Single, Cascade, Critique and Council. Performance uses xhigh/max where a model has them, otherwise High, never lower. Context is always the selected model's qualified maximum. No permission or source acceptance is delegated here.</text>
           {kupoOptionError && <text fg={colors.error} height={3}>{safe(kupoOptionError)}</text>}
           {!kupoOptions.length ? <text fg={colors.muted}>Reading shared mode readiness...</text> : <ThemedSelect focused={!kupoSaving} flexGrow={1}
             options={kupoModes.map((mode) => {
@@ -1541,6 +1541,7 @@ Existing shortcut aliases remain available for compatibility.
 /prompt | /prompt view | /prompt reset
 /memory index|graph|search TEXT|remember CONVENTION
 /skills import SKILL.md | /plugins import manifest.json
+/skills list | /skills on|off SOURCE PATH | /skills trust SOURCE PATH SHA PACKAGE_SHA
 /capabilities | /capability view|enable|disable ID
 /proposal view ID | /proposal approve|reject ID SHA256
 /mcp servers | /mcp tools SERVER QUERY | /mcp auth SERVER
@@ -1828,13 +1829,13 @@ function TuiScheduledPrompts({ sdk, prompts, automations, runs, run }: { sdk: Mo
     { name: `Send now / ${safe(prompt.text.split("\n")[0]!.slice(0, 60))}`, value: `send:${prompt.id}`, description: `${new Date(prompt.dueAt).toLocaleString()} / ${prompt.status} / ${prompt.id}` },
     { name: `Cancel / ${safe(prompt.text.split("\n")[0]!.slice(0, 60))}`, value: `cancel:${prompt.id}`, description: prompt.diagnostic ?? "Cancel before admission; never stop another turn" },
   ]), ...automations.flatMap((automation) => [
-    { name: `Run now / ${safe(automation.name.slice(0, 60))}`, value: `run:${automation.id}`, description: "Starts a new chat in its project with its captured controls" },
+    { name: `Run now / ${safe(automation.name.slice(0, 60))}`, value: `run:${automation.id}`, description: automation.projectId === null ? "Starts a new project-free chat with its captured controls" : "Starts a new chat in its project with its captured controls" },
     { name: `${automation.status === "active" ? "Pause" : "Turn on"} / ${safe(automation.name.slice(0, 60))}`, value: `${automation.status === "active" ? "pause" : "enable"}:${automation.id}`,
       description: automation.status === "active" ? "Stop future runs; an active run continues" : "Run at its scheduled times from now on" },
   ])];
   return <box flexDirection="column" flexGrow={1} padding={1}><text fg={colors.accent} height={2}>Automations / Scheduled prompts</text>
     <text fg={colors.muted}>{recurring.length ? safe(`Recurring automations (each run starts a new chat; /automations for runs and details):\n${recurring.join("\n")}`) :
-      "No recurring automations. Create them in the desktop app or with moguri automations create WORKFLOW_FILE."}</text>
+      "No recurring automations. Create them in the desktop app or with moguri automations create WORKFLOW_FILE (--project ID or --no-project)."}</text>
     <text fg={colors.muted} height={3}>One-time unsent prompts in this profile. Enter sends/cancels the exact input. Your current composer is not consumed.</text>
     {!entries.length && <text fg={colors.muted}>No scheduled prompts. Cmd/Ctrl+Enter in an idle chat opens scheduling.</text>}
     {options.length > 0 &&
