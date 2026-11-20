@@ -109,6 +109,19 @@ An optional recurring check suggests script tools for requests you repeat.
 Local and SSH continuation are qualified. A rolled-back native workspace keeps
 its explicit inspection/preparation gate instead of automatic root substitution.
 
+Closing or quitting the desktop app saves unsent drafts and open queued-prompt
+edits first. Chats a quit, restart or crash interrupted can be
+[continued](docs/architecture/interrupted-sessions.md) one by one, all at once,
+or automatically after every restart.
+
+[Automations](docs/architecture/automations.md) run a prompt or a declarative
+workflow of prompts and repository-trusted scripts once, every N minutes, daily
+or on chosen weekdays. Each run starts a new chat in its project with captured
+controls; script steps run without a model call under normal approval. Missed
+times run once, overlapping times are skipped, and restarts never replay a step.
+Desktop, TUI (`/automations`, F9) and CLI (`moguri automations`, YAML/JSON
+workflow files) share the same state.
+
 The owner-requested [protocol-41 platform extension](docs/architecture/platform-workflows.md)
 adds **Sky/Terra/Glacier knowledge**, reviewed lifecycle hooks and immutable
 repository-backed marketplace bundles. Imports/updates/rollbacks stay disabled;
@@ -315,7 +328,7 @@ Model generation still requires exact source review.
 Alerts have a dismissible X without clearing the underlying work or draft.
 Read-only Kanban sync retains its exact source across presentation updates;
 see the [alert and observation contract](docs/architecture/alerts-kanban-sync.md).
-Automations remain unimplemented. Work item links the project's Kanban cards or
+Automations holds recurring automations and one-time scheduled prompts. Work item links the project's Kanban cards or
 GitHub issues; session PRs open in Code change. Copilot connection status stays in Settings,
 not the left sidebar.
 

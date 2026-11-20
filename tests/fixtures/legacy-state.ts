@@ -300,7 +300,20 @@ export function removeToolSuggestionAutomationFixtureMarker(db: DatabaseSync, ev
     event.event_type === "attention.raised" && event.payload.attention.reason === "tool-suggestion")) {
     throw new Error("Generate genuine pre-114 history; actual automation settings and repeated-task tool suggestions cannot be relabelled.");
   }
+  removeAutomationsFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='tool_suggestion_automation_schema'");
+}
+export function removeAutomationsFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "automation.recorded" || event.event_type === "automation.run_recorded" ||
+    (event.event_type === "queue.enqueued" || event.event_type === "turn.started") && event.payload.item.automation !== undefined ||
+    event.event_type === "repository.script_reserved" && event.payload.attempt.automation !== undefined)) {
+    throw new Error("Generate genuine pre-115 history; actual automations, their runs and automation-owned steps cannot be relabelled.");
+  }
+  if (events.some((event) => event.event_type === "session.interruption_recorded" ||
+    event.event_type === "settings.updated" && event.payload.settings.interactions?.continueInterrupted !== undefined)) {
+    throw new Error("Generate genuine pre-115 history; actual interrupted-chat records and the continue-interrupted setting cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('automations_schema','interrupted_sessions_schema')");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
