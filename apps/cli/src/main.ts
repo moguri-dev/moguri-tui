@@ -252,7 +252,7 @@ moguri storage status|preview PATH  Review all-profile store and retained resour
 moguri storage move PATH --digest SHA --confirm-write  Quiesce, copy and retire; restart clients explicitly
 moguri storage disk status|size GB|off  Optional fixed-size virtual disk for new session worktrees
 moguri updates status|history|read ID|check|cancel ID
-moguri updates token|clear-token     Separate private-release PAT through piped stdin only
+moguri updates token|clear-token     Optional read-only release token through piped stdin only
 moguri updates install-preview ID  Exact owned app/backup review; native install needs desktop confirmation
 moguri notification-sounds list|read ID  Profile-owned audio metadata, no playback
 moguri notification-sounds import FILE.wav --confirm-write  Explicit bounded snapshot
