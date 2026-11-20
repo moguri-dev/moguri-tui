@@ -1407,7 +1407,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
           }} />}
         </box> :
         mode === "kupo-mode" ? <box flexGrow={1} flexDirection="column" padding={1}><text fg={colors.accent} height={2}>Kupo modes / actual effort is model-selected</text>
-          <text fg={colors.muted} height={4}>Balanced uses declared capabilities. Savings/Performance require reviewed evaluation and reference-price profiles. Performance never drops below xhigh. Context is always the selected model's qualified maximum. No permission or source acceptance is delegated here.</text>
+          <text fg={colors.muted} height={4}>Balanced uses any qualified model. Savings/Performance class models by published API price or a reviewed profile. Dynamic picks a mode per request. Performance never drops below xhigh. Context is always the selected model's qualified maximum. No permission or source acceptance is delegated here.</text>
           {kupoOptionError && <text fg={colors.error} height={3}>{safe(kupoOptionError)}</text>}
           {!kupoOptions.length ? <text fg={colors.muted}>Reading shared mode readiness...</text> : <ThemedSelect focused={!kupoSaving} flexGrow={1}
             options={kupoModes.map((mode) => {

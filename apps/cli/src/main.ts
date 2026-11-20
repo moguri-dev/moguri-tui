@@ -229,7 +229,7 @@ moguri session organize changes.json --session ID --revision N
 moguri session model-settings options.json --session ID --revision N
 moguri session context --session ID
 moguri session archive|restore|stop|resume|retry --session ID [--children archive|detach] [--confirm-running]
-moguri session kupo-mode balanced|savings|performance --session ID
+moguri session kupo-mode balanced|savings|performance|dynamic --session ID
 moguri scheduled list|create TIMING_JSON_FILE|send-now ID|cancel ID [--session ID]
 moguri interrupted [list|continue ID|continue all|dismiss ID|always|ask]
   Chats a quit, restart or crash interrupted. Continue checks where the agent left off first; nothing is repeated.
