@@ -1,8 +1,42 @@
 # Reused components and licenses
 
-Moguri is original application code, not an OpenCode or Pi fork. Versions are
-pinned in `package.json` and `package-lock.json`; upstream license and copyright
-notices remain in installed and packaged dependencies.
+Moguri is original application code, not an OpenCode or Pi fork. Its own code
+is licensed under the [MIT License](../LICENSE.md). Versions are pinned in
+`package.json` and `package-lock.json`; upstream license and copyright notices
+remain in installed and packaged dependencies.
+
+## Licensing of release artifacts
+
+The MIT License covers Moguri's own source. It does not relicense any
+dependency, bundled component or service Moguri connects to.
+
+- Packages that ship unbundled in the app's `node_modules` keep their own
+  license files in place.
+- `npm run build` writes `dist/THIRD_PARTY_NOTICES.md`, which reproduces the
+  license files of every package the esbuild and Vite builds bundle into
+  Moguri's JavaScript. The packaged app ships it next to `LICENSE.md` under
+  `Moguri.app/Contents/Resources/app/`, and packaging fails without them.
+- The notices file lists bundled components without an OSI-approved license
+  first. Today that is only `@anthropic-ai/claude-agent-sdk`: proprietary,
+  "© Anthropic PBC. All rights reserved", and governed by
+  [Anthropic's legal agreements](https://code.claude.com/docs/en/legal-and-compliance).
+  It is excluded from Moguri's MIT License.
+- Like other MIT-licensed agent GUIs that integrate Claude Code, Moguri ships
+  only the SDK's JavaScript. The SDK's optional platform packages that carry
+  Claude Code executables are replaced by an empty stub through `package.json`
+  `overrides`, so no Claude Code binary is installed or redistributed. Claude
+  Agent launches the user's own Claude Code, which the user authenticates
+  themselves.
+- The native speech runtimes under `dist/native` keep their upstream notices,
+  and the packaged SendBox installer ships `SendBox.LICENSE` and
+  `AppleContainerization.LICENSE` under `Contents/Resources/moguri-native`.
+
+Redistributing the proprietary SDK inside public releases was a maintainer
+decision on 2026-11-19, pending legal review. If that review rejects it,
+remove the Claude Agent `sdk` transport from release builds rather than
+relicensing it.
+
+## Components
 
 | Component | License | Use |
 | --- | --- | --- |
