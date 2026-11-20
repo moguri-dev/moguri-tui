@@ -44,6 +44,7 @@ relicensing it.
 | `@earendil-works/pi-ai` | MIT | GitHub Copilot, OpenRouter, Anthropic API, OpenAI API and Sign in with ChatGPT authentication, catalogues and model transport |
 | OpenTUI core and React renderer | MIT | Native terminal rendering |
 | React and React DOM | MIT | Shared state hooks and desktop UI |
+| Lucide (`lucide-react` 1.77.0) | ISC | Desktop interface icons |
 | Electron | MIT plus Chromium/Node notices | Isolated desktop shell |
 | TypeBox | MIT | Public command and private worker validation |
 | `ws` | MIT | Authenticated local event transport |
