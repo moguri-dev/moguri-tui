@@ -101,10 +101,13 @@ share the same service and SDK. Transient model failures use current-profile
 The primary button retries the original eligible failure without sending a new
 draft. Idle scheduling offers local-time controls, unsent ghost prompts and an
 Automations / Scheduled prompts group, with one-at-most queue admission.
-[Skills and Artifacts tabs](docs/architecture/skills-tools-artifacts.md) sit next
+[Customize and Artifacts tabs](docs/architecture/skills-tools-artifacts.md) sit next
 to Automations: toggle installed skills, install skills from configured
 repositories, browse the agent's toolsets, write or ask the agent for script
-tools, and find each project's builds, files, images and links with their chat.
+tools for every chat, and find each project's builds, files, images and links
+with their chat. Agents get typed GitHub reads (tags, releases, annotations,
+contents, settings, rules) and reviewed `github_write` (comments, threads,
+releases, settings; draft PRs only).
 An optional recurring check suggests script tools for requests you repeat.
 Local and SSH continuation are qualified. A rolled-back native workspace keeps
 its explicit inspection/preparation gate instead of automatic root substitution.
