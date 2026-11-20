@@ -246,7 +246,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
   const setNotice = React.useCallback((text: string, error = false) => storeNotice(text ? { id: ++noticeSequence.current, text, error } : null), []);
   const announcedInterruptions = useRef(new Set<string>());
   useEffect(() => {
-    // After a restart, point at interrupted chats once per interruption unless the profile continues them automatically (D50).
+    // After a restart, point at interrupted chats once per interruption unless the profile continues them automatically (D51).
     if (!snapshot || snapshot.settings.values.interactions.continueInterrupted === "always") return;
     const fresh = interruptedSessions(snapshot.sessions).filter((value) => !announcedInterruptions.current.has(`${value.id}:${value.interruption!.at}`));
     if (!fresh.length) return;
