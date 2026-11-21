@@ -85,8 +85,8 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
     const repositoryLabels: GeneratedLabel[] = [{ id: 901, name: "generated-label", color: "0e8a16", description: "Generated label" },
       { id: 902, name: "generated-bug", color: "d73a4a", description: "Generated bug report" }, { id: 903, name: "generated-docs", color: "0075ca", description: null }];
     const assignable = ["generated-owner", "generated-reviewer", "generated-teammate"].map((login, index) => ({ id: 42 + index, login, type: "User", html_url: `https://github.com/${login}` }));
-    const events = new Map<number, Record<string, unknown>[]>();
-    let eventId = 9100;
+    const events = new Map<number, Record<string, unknown>[]>(), reviewComments = new Map<number, Record<string, unknown>[]>();
+    let eventId = 9100, reviewCommentDrift = false;
     const recordEvent = (number: number, event: string, subject: Record<string, unknown> = {}) => {
       const list = events.get(number) ?? []; events.set(number, list);
       list.push({ id: ++eventId, event, actor: { login: "generated-owner" }, created_at: new Date(Date.UTC(2026, 0, 3, 0, 0, eventId - 9100)).toISOString(), ...subject });
@@ -179,6 +179,9 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
         data = all.slice((requestedPage - 1) * perPage, requestedPage * perPage); nextPage = requestedPage * perPage < all.length;
       }
       else if (/^repos\/generated-owner\/fixture\/issues\/\d+\/timeline\?/.test(path)) data = requestedPage === 1 ? timeline(Number(path.split("/")[4])) : [];
+      else if (/^repos\/generated-owner\/fixture\/contents\/generated\.ts\?ref=[a-f0-9]{40}$/.test(path)) data = { type: "file", name: "generated.ts", path: "generated.ts",
+        sha: "1".repeat(40), encoding: "base64", content: Buffer.from("new generated line\ngenerated second line\ngenerated third line\n").toString("base64"),
+        html_url: "https://github.com/generated-owner/fixture/blob/generated-feature/generated.ts" };
       else if (path.startsWith("repos/generated-owner/fixture/labels?")) data = requestedPage === 1 ? repositoryLabels : [];
       else if (path.startsWith("repos/generated-owner/fixture/assignees?")) data = requestedPage === 1 ? assignable : [];
       else if (method === "PUT" && /^repos\/generated-owner\/fixture\/issues\/\d+\/labels$/.test(path)) {
@@ -193,6 +196,19 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
         for (const label of selected.labels) if (!before.has(label.name.toLowerCase())) recordEvent(selected.number, "labeled", { label: { name: label.name, color: label.color } });
         for (const name of before) if (!after.has(name)) recordEvent(selected.number, "unlabeled", { label: { name, color: null } });
         data = selected.labels;
+      }
+      else if (method === "POST" && /^repos\/generated-owner\/fixture\/pulls\/\d+\/comments$/.test(path)) {
+        const selected = pulls.find((item) => item.number === Number(path.split("/")[4]));
+        const line = Number(fields.line), startLine = fields.start_line === undefined ? null : Number(fields.start_line);
+        if (!selected || selected.state !== "open" || fields.commit_id !== selected.head.sha || !fields.path || !fields.body || !Number.isSafeInteger(line) ||
+          !["LEFT", "RIGHT"].includes(fields.side ?? "") || (startLine === null) !== (fields.start_side === undefined)) return "HTTP/2.0 422 Unprocessable Entity\r\n\r\n{}";
+        const list = reviewComments.get(selected.number) ?? [], id = 8300 + [...reviewComments.values()].flat().length + 1;
+        reviewComments.set(selected.number, list);
+        const comment = { id, body: fields.body, path: fields.path, line: reviewCommentDrift ? line + 1 : line, side: fields.side, start_line: startLine, start_side: fields.start_side ?? null,
+          commit_id: fields.commit_id, original_commit_id: fields.commit_id, user: { login: "generated-owner" }, created_at: "2026-01-04T00:00:00Z", updated_at: "2026-01-04T00:00:00Z",
+          pull_request_url: `https://api.github.com/repos/${repository.full_name}/pulls/${selected.number}`, html_url: `${selected.html_url}#discussion_r${id}` };
+        list.push(comment); recordEvent(selected.number, "line-commented", { comments: [comment] });
+        data = comment;
       }
       else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/requested_reviewers$/.test(path) && (method === "POST" || method === "DELETE")) {
         const selected = pulls.find((item) => item.number === Number(path.split("/")[4]))!, requested = arrays.reviewers ?? [];
@@ -247,7 +263,8 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       else if (/\/commits\/[a-f0-9]+\/status\?/.test(path)) data = { sha: head, statuses: requestedPage === 1 ? ci.statuses ?? [] : [], total_count: ci.statusCount !== undefined ? ci.statusCount : ci.statuses?.length ?? 0 };
       else if (/^repos\/generated-owner\/fixture\/commits\/[a-f0-9]+$/.test(path)) data = { sha: head };
       else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/comments\?/.test(path)) data = [{ id: 83, body: "Generated inline review comment.", path: "generated.ts", line: 1,
-        state: "COMMENTED", user: { login: "generated-reviewer" }, html_url: "https://github.com/generated-owner/fixture/pull/11#discussion_r83" }];
+        state: "COMMENTED", user: { login: "generated-reviewer" }, html_url: "https://github.com/generated-owner/fixture/pull/11#discussion_r83" },
+        ...requestedPage === 1 ? reviewComments.get(Number(path.split("/")[4])) ?? [] : []];
       else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/reviews\?/.test(path)) data = [{ id: 84, body: "Generated approved review.", state: "APPROVED", user: { login: "generated-reviewer" } }];
       else if (path === "graphql") data = { data: { repository: { nameWithOwner: repository.full_name, pullRequest: { number: Number(fields.number ?? 11), headRefOid: head,
         reviewThreads: { nodes: [{ id: "GENERATED_THREAD", isResolved: false, isOutdated: false, comments: { nodes: [{ databaseId: 83, body: "Generated unresolved thread.", updatedAt: "2026-01-01T00:00:00Z", author: { login: "generated-reviewer" } }] } }],
@@ -317,5 +334,6 @@ process.exit(result.status ?? 67);
       setSearch: (value: typeof search) => { Object.assign(search, value); },
       closePull: (number: number) => { const selected = pulls.find((pull) => pull.number === number); if (!selected) throw new Error("Generated PR is absent."); selected.state = "closed"; },
       changeSource: () => { changedBody = true; }, changeAccount: (id: number) => { accountId = id; }, writes: () => ({ issues: issueWrites, pulls: prWrites }),
+      reviewComments: (number: number) => structuredClone(reviewComments.get(number) ?? []), driftReviewComments: () => { reviewCommentDrift = true; },
       workItem: (number: number): (ReturnType<typeof issue> & Partial<GeneratedPull>) | undefined => structuredClone(workItem(number)), timeline: (number: number) => structuredClone(timeline(number)) };
 }

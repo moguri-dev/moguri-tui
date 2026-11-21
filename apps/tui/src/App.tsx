@@ -1004,7 +1004,9 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (key.name === "n") { const created = await client.github.startSession(githubSelection.scope, githubSelection.source, githubSelection.digest); await chooseSession(created.id!); }
         else if (key.name === "l") {
           if (!session) throw new Error("The destination session was removed.");
-          await client.sessions.organize(session.id, githubSelection.source.kind === "pull" ? { prUrl: githubSelection.item.url } : { workItemUrl: githubSelection.item.url });
+          // Associated PRs stay fixed (D65): another PR is added to the session's associations instead of replacing its link.
+          if (githubSelection.source.kind === "pull" && session.prAssociations?.length) await client.sessions.associatePr(session.id, { ...githubSelection.source, expectedDigest: githubSelection.digest });
+          else await client.sessions.organize(session.id, githubSelection.source.kind === "pull" ? { prUrl: githubSelection.item.url } : { workItemUrl: githubSelection.item.url });
           setNotice("Linked the exact item. No checkout or inference was started.");
         } else { if (!native || !githubSelection.item.url) throw new Error("No native browser binding or canonical item URL is available."); await native.browser(githubSelection.item.url); }
       })); return;
