@@ -52,6 +52,8 @@ relicensing it.
 | `ghostty-web` 0.4.0 and its Ghostty WASM core | MIT | Maintained embedded desktop terminal, VT parsing and canvas rendering; self-hosted WASM, not a custom terminal emulator |
 | `@napi-rs/keyring` | MIT | Explicit OS credential backend |
 | `react-markdown`, `remark-gfm` | MIT | Safe Markdown presentation |
+| `lowlight` 3.3.0 with `highlight.js` 11.11 | MIT; BSD-3-Clause | Read-only syntax highlighting in the Files view |
+| `hast-util-to-jsx-runtime` 2.3.6 | MIT | Turns highlighted syntax trees into React elements without HTML strings |
 | Vite, esbuild, tsx | MIT | Builds and development/test TypeScript execution |
 | TypeScript | Apache-2.0 | Static verification |
 | Playwright | Apache-2.0 | Hidden Electron end-to-end testing |

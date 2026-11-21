@@ -87,6 +87,7 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       html_url: `https://github.com/${repository.full_name}/pull/${number}`, draft, merged: false,
       base: { ref: "main", sha: head, repo: repository }, head: { ref: "generated-feature", sha: head, repo: repository } });
     const issues = [issue(7)], pulls: ReturnType<typeof pull>[] = [];
+    const listed = (path: string, state: string) => { const requested = /[?&]state=(open|closed)\b/.exec(path)?.[1]; return !requested || requested === state; };
     const fixture = await githubServiceFixture({ ...options.github, runProgram: async (executable, args, request) => {
       if (executable !== "gh") return runProgram(executable, args, { ...request, env: { ...request.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
       const index = args.indexOf("--method"), method = args[index + 1]!, requested = args[index + 2]!;
@@ -125,8 +126,9 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
         if (options.ownedNetwork) created.head = { ref: fields.head!, sha: fixture.bare(["rev-parse", "--verify", `refs/heads/${fields.head}`]), repo: repository };
         pulls.push(created); data = created;
       }
-      else if (path.startsWith("repos/generated-owner/fixture/issues?")) data = issues;
-      else if (path.startsWith("repos/generated-owner/fixture/pulls?")) data = pulls;
+      else if (path.startsWith("repos/generated-owner/fixture/issues?")) data = issues.filter((item) => listed(path, item.state));
+      // Like GitHub, the pull list omits the "merged" boolean; only merged_at marks a merged PR there.
+      else if (path.startsWith("repos/generated-owner/fixture/pulls?")) data = pulls.filter((item) => listed(path, item.state)).map(({ merged: _merged, ...rest }) => rest);
       else if (/^repos\/generated-owner\/fixture\/pulls\/\d+\/files\?/.test(path)) data = [{ filename: "generated.ts", status: "modified", additions: 1, deletions: 1,
         patch: "@@ -1 +1 @@\n-old generated line\n+new generated line", blob_url: "https://github.com/generated-owner/fixture/blob/generated-feature/generated.ts" }];
       else if (path.startsWith("repos/generated-owner/fixture/actions/runs?")) {
@@ -196,6 +198,7 @@ process.exit(result.status ?? 67);
     const board = defaultBoard(fixture.projectId);
     await fixture.sdk.issues.configure(fixture.projectId, { ...board, autoRefreshPrs: false }, 0);
     return { ...fixture, calls, repository, addPull: (number: number) => { pulls.push(pull(number, `Generated PR ${number}`)); },
+      mergePull: (number: number) => { Object.assign(pulls.find((item) => item.number === number)!, { state: "closed", merged: true, merged_at: "2026-01-02T00:00:00Z" }); },
       relocate: (fullName: string) => {
         repository.full_name = fullName; repository.owner = { login: fullName.split("/")[0]!, type: "Organization" };
         repository.html_url = `https://github.com/${fullName}`; repository.ssh_url = `git@github.com:${fullName}.git`;
