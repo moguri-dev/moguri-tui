@@ -64,7 +64,7 @@ test("actual TUI keys share knowledge promotion, disabled hooks and exact review
     assert.equal(git(["rev-parse", "refs/heads/generated/native-built-in"]), git(["rev-parse", "HEAD"]));
     setup.mockInput.pressEscape();
     appendLegacyAutopilot(fixture.service, fixture.sessionId); await sdk.refresh();
-    await slash("/autonomy Autopilot", "Session autonomy set to Autopilot");
+    await slash("/autonomy Autonomous", "Session autonomy set to Autonomous");
     assert.equal(fixture.session().controls.automaticApprovals, true);
     await slash("/tool-preferences", "Integration method order:"); await frameUntil("MCP direct");
     setup.mockInput.pressEscape();

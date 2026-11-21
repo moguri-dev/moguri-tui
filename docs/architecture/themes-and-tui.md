@@ -10,7 +10,8 @@ or franchise assets, characters, logos or copied interface text are added.
 
 Ocean already provides the requested blue palette; Orchid remains its existing
 violet palette. New presets cover pink, green-on-black terminal, aubergine, red,
-monochrome, vaporwave and an original crystal-blue JRPG palette. Dark remains the
+monochrome, vaporwave and an original crystal-blue JRPG palette; D54 adds Amber
+and moves every preset onto a neutral (untinted) base. Dark remains the
 factory mode. Existing palette IDs, explicit modes and custom colors must survive
 upgrade and restart unchanged. Desktop and TUI resolve the same SDK color tokens;
 neither client owns a second theme preference store.

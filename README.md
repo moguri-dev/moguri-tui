@@ -70,10 +70,10 @@ read IDE login files.
   the OpenAI API, a ChatGPT account, OpenAI-compatible endpoints and local
   models. **Kupo** can route a task across the models you configured.
 - **Autonomy you choose per session.** Manual (the default) asks before every
-  command and edit. Guided recommends, and you confirm. Autopilot approves
-  tools automatically within hard policy, which always wins.
+  command and edit. Guided recommends, and you confirm. Autonomous and Autopilot
+  approve tools automatically within hard policy, which always wins.
 - **Explicit execution boundaries.** Run on your Mac (Local), in a SendBox VM
-  (Sandbox) or on your own SSH machine (Remote). Moguri never silently falls
+  (Sandbox) or on your own SSH machine (Remote host). Moguri never silently falls
   back to Local.
 - **Budgets and honest accounting.** Optional token and USD caps cover every
   model call. Unknown usage is shown as unknown, never as zero cost.
@@ -93,7 +93,7 @@ flowchart LR
   Service --> Store[(Encrypted event store)]
   Service --> Workers[Model and tool workers]
   Workers --> Providers[Model providers]
-  Workers --> Envs[Local / Sandbox / Remote]
+  Workers --> Envs[Local / Sandbox / Remote host]
 ```
 
 Every client talks to one local service through the same typed SDK, so a
@@ -127,7 +127,7 @@ The [setup guide](docs/setup.md) covers every workflow, and the
   drafts and held prompts, scheduled prompts and automations
 - Native file, terminal and browser tools with reviewed approvals and a
   website allowlist
-- Local, SendBox Sandbox and SSH Remote environments with visible boundaries
+- Local, SendBox Sandbox and SSH Remote host environments with visible boundaries
 - Kupo automatic routing, cascade and critique workflows, context compaction
   and per-call accounting
 - Local Git, GitHub (issues, PRs, reviews, CI watching, releases) and Linear
