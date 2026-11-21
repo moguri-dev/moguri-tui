@@ -313,7 +313,18 @@ export function removeAutomationsFixtureMarker(db: DatabaseSync, events: readonl
     event.event_type === "settings.updated" && event.payload.settings.interactions?.continueInterrupted !== undefined)) {
     throw new Error("Generate genuine pre-115 history; actual interrupted-chat records and the continue-interrupted setting cannot be relabelled.");
   }
+  removeRoundupsPersonasFixtureMarkers(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('automations_schema','interrupted_sessions_schema')");
+}
+export function removeRoundupsPersonasFixtureMarkers(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "dependency_roundup.recorded" || event.event_type === "dependency_roundup.run_recorded" ||
+    event.event_type === "my_work.refresh_recorded" && (event.payload.refresh.actor !== "user" || event.payload.refresh.trigger !== undefined))) {
+    throw new Error("Generate genuine pre-119 history; actual dependency roundups and schedule-triggered inbox refreshes cannot be relabelled.");
+  }
+  if (events.some((event) => event.event_type === "persona.recorded" || event.event_type === "persona.run_recorded")) {
+    throw new Error("Generate genuine pre-119 history; actual personas and persona runs cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id IN ('dependency_roundups_schema','personas_schema')");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
