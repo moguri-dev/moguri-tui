@@ -1021,6 +1021,7 @@ test("the actual TUI creates Home-backed chats, shows attention and keeps metach
     await waitFor(() => fixture.service.controller.snapshot().attention.find((entry) => entry.id === question.id)?.acknowledged);
     await slash("/meta generated config proposal");
     const meta = await waitFor(() => fixture.service.controller.snapshot().sessions.find((value) => value.kind === "metachat"));
+    assert.equal(meta.parentSessionId, undefined);
     await frameUntil("generated config proposal");
     setup.mockInput.pressEnter({ ctrl: true, shift: true });
     const proposal = await waitFor(() => fixture.service.controller.snapshot().configurationProposals.find((entry) => entry.sessionId === meta.id));
