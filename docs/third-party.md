@@ -76,6 +76,8 @@ relicensing it.
 | Cargo / Rust tooling | MIT OR Apache-2.0, plus included notices | Explicit native locked registry-cache preparation, not host build-script execution |
 | Go tooling | BSD-3-Clause, plus included notices | Native locked module checksum/cache verification; no implicit toolchain download |
 | LobeHub Icons (`@lobehub/icons-static-svg` 1.102.0) | MIT | Monochrome provider marks (GitHub Copilot, OpenRouter, Anthropic, OpenAI, Claude Code, Codex) on Settings / Model providers. Path data is copied into `apps/desktop/src/ProviderLogo.tsx` with its license notice; no package dependency is added. The marks are their owners' trademarks, used only to identify each service. |
+| Simple Icons 16.38.0 | CC0-1.0 | Monochrome GitHub, Linear and Model Context Protocol marks on Settings / Integrations. Path data is copied into `apps/desktop/src/IntegrationLogo.tsx`; no package dependency is added. The marks are their owners' trademarks, used only to identify each service. |
+| Stainless app icon (`mbianchidev/stainless`, `chromium/branding/stainless-icon.png`) | Apache-2.0 | Resized to 64 px as `assets/integrations/stainless.png` for Settings / Integrations / Stainless. Moguri still never bundles or redistributes the Stainless browser itself. |
 | Sharp 0.35.5 | Apache-2.0, with bundled libvips LGPL-2.1-or-later notices | Bounded local image validation/normalization for explicit attachments; no remote conversion or real-image test fixtures |
 
 The managed cache's advisory source is the public OSV batch API. Its use

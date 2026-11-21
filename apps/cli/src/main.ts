@@ -104,7 +104,7 @@ moguri models source API_ID MODEL_ID  Choose one exact provider offering; never 
 moguri models evidence MODEL_ID   Explicit provider claims, not independence/quality; no inference
 moguri models token ENDPOINT       Piped stdin only, never a shell argument
 moguri models clear-token ENDPOINT Remove the resource-bound endpoint key
-moguri remote status|probe          Pinned SSH worker/runtime readiness
+moguri remote status|probe          Remote host (pinned SSH) worker/runtime readiness
 moguri remote reconcile RUN_ID      Existing receipts/late usage, never replay
 moguri remote acknowledge RUN_ID --confirm-review  After actual process inspection
 moguri remote token|clear-token ENDPOINT  Piped remote endpoint credential
@@ -195,6 +195,7 @@ moguri telemetry storage           Current profile key-backed ciphertext, not di
 moguri telemetry otlp status|review INPUT_JSON|apply REVIEW_JSON confirm-reviewed
 moguri stainless status|check      Stainless browser readiness; check launches a hidden throwaway instance
 moguri stainless open [URL] --session ID   Open a Local session preview in Stainless
+moguri browser agent on|off --session ID   Your Agent control choice for that chat's desktop Browser pane; on stays on until off
 moguri telemetry otlp credential set ENDPOINT NAME   Credential header value from piped stdin only
 moguri telemetry otlp credential remove ENDPOINT NAME
 moguri repository preview|state --session ID
@@ -562,7 +563,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "answer-draft" && args[0]) output(await sdk.questions.answerDraft(args[0], expectedRevision()));
       else throw new Error("Use question list/read, answer or answer-other ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
     } else if (group === "repository") {
-      if (!values.session) throw new Error("Choose an explicit --session ID for the actual Local/Remote repository binding.");
+      if (!values.session) throw new Error("Choose an explicit --session ID for the actual Local or Remote host repository binding.");
       if (action === "preview") output(await sdk.repositories.preview(values.session));
       else if (action === "state") output(await sdk.repositories.state(values.session));
       else if (action === "refresh" && values.digest && values["confirm-review"]) output(await sdk.repositories.refresh(values.session, values.digest, expectedRevision(), true));
@@ -579,6 +580,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       const session = values.session ? snapshot.sessions.find((session) => session.id === values.session) : undefined;
       if (values.session && !session) throw new Error("Choose an existing session ID. Nothing was opened.");
       output(await executeStainlessCommand(sdk, [action ?? "status", ...args].join(" "), session?.id, session?.browserUrl));
+    } else if (group === "browser") {
+      if (!values.session || action !== "agent" || args.length !== 1 || !["on", "off"].includes(args[0]!)) throw new Error("Use browser agent on|off --session ID. It records your Agent control choice for that chat; its desktop Browser pane applies it with a new control identity.");
+      await sdk.sessions.browserControl(values.session, args[0] === "on");
+      output((await sdk.browser.state(values.session)).browser);
     } else if (group === "telemetry") {
       if (action === "otlp") {
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("OTLP configuration belongs to the exact selected profile, not a session or usage filter.");

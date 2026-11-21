@@ -573,7 +573,7 @@ test("the actual TUI keeps a pending Remote plan editor and stops only its owned
   try {
     flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk })));
     await frameUntil("Write a prompt");
-    await setup.mockInput.typeText("/plan edit"); setup.mockInput.pressEnter(); await frameUntil("Exact Remote plan");
+    await setup.mockInput.typeText("/plan edit"); setup.mockInput.pressEnter(); await frameUntil("Exact Remote host plan");
     const text = "Generated pending terminal plan stays in its editor.";
     setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ text })); setup.mockInput.pressEnter({ ctrl: true });
     await waitFor(() => gate.held); await frameUntil("Saving exact owned plan");
@@ -581,7 +581,7 @@ test("the actual TUI keeps a pending Remote plan editor and stops only its owned
     setup.mockInput.pressKey("c", { ctrl: true }); await waitFor(() => fixture.session().status === "stopping"); gate.release();
     await waitFor(() => fixture.controller.snapshot().planSaves[0]?.status === "stopped");
     await frameUntil("Owned plan save stopped");
-    await frameUntil("Exact Remote plan"); await frameUntil(text);
+    await frameUntil("Exact Remote host plan"); await frameUntil(text);
     assert.equal((await fixture.sdk.plans.saves(fixture.sessionId)).saves[0]?.status, "stopped");
     await assert.rejects(() => readFile(join(fixture.workspace, "docs/plan.md")), { code: "ENOENT" });
     setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
@@ -600,7 +600,7 @@ test("the actual TUI edits and retains a reviewed Remote plan without a Local op
   try {
     flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk, native: { browser: async () => { throw new Error("No browser in Remote plan test."); }, file: async () => { throw new Error("No Local opener in Remote plan test."); }, copy: async () => {} } })));
     await frameUntil("Write a prompt");
-    await setup.mockInput.typeText("/plan edit"); setup.mockInput.pressEnter(); await frameUntil("Exact Remote plan");
+    await setup.mockInput.typeText("/plan edit"); setup.mockInput.pressEnter(); await frameUntil("Exact Remote host plan");
     const text = "Generated terminal  exact Remote plan.\n\tGenerated retained indentation.\n";
     setup.mockInput.pressKey("a", { super: true }); await setup.mockInput.typeText(JSON.stringify({ text })); setup.mockInput.pressEnter({ ctrl: true });
     await frameUntil("Plan saved and independently retained"); await frameUntil("Write a prompt");
