@@ -125,6 +125,8 @@ The [setup guide](docs/setup.md) covers every workflow, and the
   and an importable SDK
 - Streamed conversations with queue, steer and interrupt delivery, persistent
   drafts and held prompts, scheduled prompts and automations
+- Taggable `@` personas in linked subsessions and read-only dependency update
+  roundups
 - Native file, terminal and browser tools with reviewed approvals and a
   website allowlist
 - Local, SendBox Sandbox and SSH Remote host environments with visible boundaries
