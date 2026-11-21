@@ -1,3 +1,4 @@
+import type { IntakeClock } from "../apps/service/src/session-intake.ts";
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -22,7 +23,8 @@ export async function connectGithubSdk(sdk: MoguriSdk): Promise<void> {
     await delay(10);
   }
 }
-export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, configuredProvider?: ProviderAdapter, retentionKey: Buffer = randomBytes(32), integrations: IntegrationOptions = {}) {
+export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, configuredProvider?: ProviderAdapter, retentionKey: Buffer = randomBytes(32), integrations: IntegrationOptions = {},
+  intakeClock?: IntakeClock) {
   const parent = resolve(".moguri", "qualification");
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const directory = join(parent, `generated-github-service-${randomUUID()}`);
@@ -45,6 +47,7 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
   let service: Awaited<ReturnType<typeof startService>> | undefined, sdk: MoguriSdk | undefined;
   try {
     service = await startService({ stateDir, retentionKey, provider, platform: {
+      ...(intakeClock ? { intakeClock } : {}),
       terminal: { executable: process.execPath, args: ["-e", "process.stdin.resume()"], defaultRoot: home },
       integrations: { ...integrations, githubCliRead: async (endpoint, root, signal) => {
         if (!options.runProgram) throw new MoguriError("github_cli_unavailable", "Generated fixture has no authenticated GitHub CLI account.", 403);
