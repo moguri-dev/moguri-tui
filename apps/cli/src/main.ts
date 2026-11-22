@@ -244,7 +244,7 @@ moguri roundups configure SOURCE_IDS [BOTS] | schedule on|off | schedule set SCH
   Dependency update roundup over configured My Work sources (comma-separated IDs). Read-only, no model call; schedules use automation schedule syntax.
 moguri personas list | runs | presets | add PRESET | create DEFINITION_FILE | update HANDLE DEFINITION_FILE
 moguri personas enable|pause HANDLE | delete HANDLE [--stop-running] | stop RUN_ID
-  Personas start off. Tag an enabled one with @handle in a message; its subsession starts under Manual autonomy.
+  Custom agents (personas) start off. Tag an enabled one with @handle in a message; its subsession starts under Manual autonomy.
 moguri session delete --session ID --revision N --confirm-remove [--children delete|detach] [--confirm-running]
   Child-tree actions can also use the saved Settings / Retention preference. Deletion preserves ordinary artifacts and Git resources.
   Archiving or deleting a running session (or one with running subsessions) stops its work and always needs --confirm-running.
@@ -898,7 +898,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "personas") {
       const definition = async (path: string) => {
         const file = await stat(path);
-        if (!file.isFile() || file.size > 64 * 1024) throw new Error("Choose a persona definition file of at most 64 KiB. Nothing was saved.");
+        if (!file.isFile() || file.size > 64 * 1024) throw new Error("Choose a custom agent definition file of at most 64 KiB. Nothing was saved.");
         return parse(PersonaDefinitionSchema, parseYaml(await readFile(path, "utf8")));
       };
       if (action === "create" && args[0]) output(await sdk.personas.create(await definition(args[0])));
