@@ -22,8 +22,10 @@ The build ships an executable `dist/moguri` inside the app. Both the bundled
 and installed launchers use the same shell body to `exec` the bundled Node and
 `dist/cli.mjs`. They preserve arguments, working directory, standard streams,
 signals and exit codes without depending on a system Node or starting Electron.
-The bundled launcher resolves resources relative to itself. The installed
-launcher binds the exact canonical app resources path selected at installation.
+The bundled launcher resolves resources relative to itself, after following its
+own symlink chain (at most 40 hops), so a package manager's link to it, such
+as a Homebrew cask `binary`, still finds the app. The installed launcher binds
+the exact canonical app resources path selected at installation.
 
 Installation publishes a completely written executable using an exclusive
 hard link. It never truncates or replaces an existing file, directory or

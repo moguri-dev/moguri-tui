@@ -49,7 +49,12 @@ process, which only maintainers run.
 
 1. Create a branch from `main` and keep the change focused on one problem.
 2. Change the service, SDK and clients together where needed. TUI, desktop
-   and CLI share one SDK and must not keep client-only state.
+   and CLI share one SDK and must not keep client-only state. Clients import
+   only the SDK entrypoints (`packages/sdk/src/{index,node,react,mcp-server}.ts`);
+   re-export anything else they need from there. The SDK is moving to its own
+   repository, `moguri-dev/moguri-sdk`, which becomes its source of truth once
+   [#93](https://github.com/mbianchidev/moguri/issues/93) swaps this repository
+   to the published `@moguri-dev/sdk` package.
 3. Add or update tests that would fail without your change. Use generated
    fixtures only: no real credentials, customer data or personal data.
 4. Update the relevant documentation under `docs/` in the same change. Keep
