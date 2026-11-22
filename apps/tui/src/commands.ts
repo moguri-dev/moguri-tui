@@ -1,5 +1,4 @@
-import { slashCommands } from "../../../packages/sdk/src/index.ts";
-import { tuiSlashCommands } from "../../../packages/protocol/src/slash-commands.ts";
+import { slashCommands, tuiSlashCommands } from "../../../packages/sdk/src/index.ts";
 
 export const tuiTabs = [
   { id: "session", label: "Current session", compact: "Chat", command: "/session" },

@@ -1,9 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import {
   ClientError, GithubActionSchema, GithubBrowseSchema, GithubCommandSchema, LinearCatalogResourceSchema, LinearWorkflowInputSchema,
-  isRecord, parse, type GithubScope, type MoguriSdk,
+  gitSessionScope, isRecord, parse, type GithubScope, type MoguriSdk,
 } from "../../../packages/sdk/src/index.ts";
-import { gitSessionScope } from "../../../packages/sdk/src/git.ts";
 
 interface Flags { project?: string; workspace?: string; session?: string; digest?: string; confirmations?: string; revision?: string; "confirm-review"?: boolean }
 async function json(path: string | undefined): Promise<unknown> {
