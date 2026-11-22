@@ -54,6 +54,7 @@ relicensing it.
 | `react-markdown`, `remark-gfm` | MIT | Safe Markdown presentation |
 | `lowlight` 3.3.0 with `highlight.js` 11.11 | MIT; BSD-3-Clause | Read-only syntax highlighting in the Files view |
 | `hast-util-to-jsx-runtime` 2.3.6 | MIT | Turns highlighted syntax trees into React elements without HTML strings |
+| `@pierre/diffs` 1.6.4 with Shiki, `diff` and `@pierre/highlights`/`theme`/`theming` | Apache-2.0; MIT; BSD-3-Clause | Pull request diffs with syntax highlighting, unchanged-line expansion and review-comment annotations (D70) |
 | Vite, esbuild, tsx | MIT | Builds and development/test TypeScript execution |
 | TypeScript | Apache-2.0 | Static verification |
 | Playwright | Apache-2.0 | Hidden Electron end-to-end testing |
