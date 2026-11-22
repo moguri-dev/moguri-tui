@@ -47,8 +47,9 @@ The [design rules](docs/design.md) are the detailed reference. In short:
 
 ## Known limitations
 
-- No formal accessibility audit has been performed. App-wide verification is
-  tracked in [#77](https://github.com/mbianchidev/moguri/issues/77).
+- No formal accessibility audit has been performed. App-wide verification
+  ([#77](https://github.com/mbianchidev/moguri/issues/77)) is not planned for
+  now (D74).
 - The embedded terminal renders to a canvas through Ghostty, so screen readers
   cannot read terminal output directly.
 - The TUI's accessibility depends on your terminal emulator's screen reader

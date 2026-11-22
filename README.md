@@ -80,7 +80,7 @@ read IDE login files.
 - **Nothing is lost.** Drafts, queues, sessions and artifacts survive
   restarts and crashes. Stopping work records exactly what was cancelled.
 - **Tradeoffs.** macOS on Apple silicon only, alpha quality, and many
-  advanced workflows are still on the [roadmap](docs/remaining-milestone-gaps.md).
+  advanced workflows are not built yet (see the [roadmap record](docs/remaining-milestone-gaps.md)).
 
 ## How it works
 

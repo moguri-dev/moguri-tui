@@ -17,8 +17,10 @@ merged.
 ## Issues and proposals
 
 - Search [existing issues](https://github.com/mbianchidev/moguri/issues) first.
-  The roadmap lives in [remaining milestone gaps](docs/remaining-milestone-gaps.md)
-  and its parent issue, [#39](https://github.com/mbianchidev/moguri/issues/39).
+  The milestone and roadmap record is [remaining milestone gaps](docs/remaining-milestone-gaps.md).
+  Its parent issue, [#39](https://github.com/mbianchidev/moguri/issues/39), is
+  closed; follow-on work such as [#93](https://github.com/mbianchidev/moguri/issues/93)
+  is tracked in its own issue.
 - **Bugs:** include the Moguri version, your macOS version, the client (TUI,
   desktop, CLI or SDK), the environment (Local, Sandbox or Remote), what you
   expected, and the smallest steps that reproduce it. Use generated data;
