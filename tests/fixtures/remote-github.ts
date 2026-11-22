@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RemoteTarget } from "@moguri-dev/sdk/testing";
 import { generatedRepositoryMetadata } from "./repository-info.ts";
+import { sdkPath } from "./sdk-paths.ts";
 
 export async function generatedRemoteGithub(directory: string, target: RemoteTarget, options: { bridge?: string; node?: string } = {}) {
   const bin = join(directory, "generated-gh-bin"), home = join(directory, "generated-gh-home");
@@ -30,7 +31,7 @@ else process.stdout.write(JSON.stringify(config.reply));
   await writeFile(front, `
 process.env.HOME = ${JSON.stringify(home)};
 process.env.PATH = ${JSON.stringify(bin)};
-await import(process.argv.includes("--repository-probe") ? ${JSON.stringify(pathToFileURL(resolve("tests/fixtures/remote-repository-probe.ts")).href)} : ${JSON.stringify(pathToFileURL(options.bridge ?? resolve("apps/service/src/remote-bridge.ts")).href)});
+await import(process.argv.includes("--repository-probe") ? ${JSON.stringify(pathToFileURL(resolve("tests/fixtures/remote-repository-probe.ts")).href)} : ${JSON.stringify(pathToFileURL(options.bridge ?? sdkPath("dist/remote-bridge.mjs")).href)});
 `);
   return {
     target: { ...target, command: options.bridge ? [node, front] : [node, "--import", pathToFileURL(resolve("node_modules/tsx/dist/loader.mjs")).href, front] },
