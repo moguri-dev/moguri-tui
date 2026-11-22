@@ -6,7 +6,7 @@ import { createRoot, flushSync } from "@opentui/react";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { KUPO_MODEL_ID } from "../packages/sdk/src/index.ts";
+import { KUPO_MODEL_ID } from "@moguri-dev/sdk";
 import { reviewNativeTools, waitFor } from "./fixture.ts";
 import { routedFixture } from "./fixtures/single-routing.ts";
 import { generatedDocx } from "./fixtures/documents.ts";

@@ -1,4 +1,4 @@
-import { digest } from "../../apps/service/src/store.ts";
+import { digest } from "@moguri-dev/sdk/testing";
 import { ownedSequenceFixture } from "./owned-sequence-api.ts";
 
 export const roleProposalPatch = { kind: "patch" as const, summary: "Generated canonical final-role proposal.", edits: [

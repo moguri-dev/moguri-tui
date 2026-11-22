@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { startService } from "../../apps/service/src/server.ts";
-import { MoguriSdk, type SandboxConfiguration } from "../../packages/sdk/src/index.ts";
+import { startService } from "@moguri-dev/sdk/testing";
+import { MoguriSdk, type SandboxConfiguration } from "@moguri-dev/sdk";
 import { fixtureProvider, GENERATED_RETENTION_KEY, type GeneratedProviderOptions } from "../fixture.ts";
 import { nativeFixtureCommand } from "./native-target.ts";
 import { GeneratedFileVault } from "./generated-vault.ts";
-import type { SandboxDns } from "../../apps/service/src/sandbox-network.ts";
-import type { IntakeClock } from "../../apps/service/src/session-intake.ts";
+import type { SandboxDns } from "@moguri-dev/sdk/testing";
+import type { IntakeClock } from "@moguri-dev/sdk/testing";
 
 // Model HTTP is intercepted; real DNS and proxy access have separate qualification gates.
 const generatedModelDns: SandboxDns = { addresses: async () => ["1.1.1.1"], aliases: async () => [] };

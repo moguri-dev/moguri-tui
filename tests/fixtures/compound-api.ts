@@ -1,16 +1,16 @@
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { KUPO_MODEL_ID } from "../../packages/sdk/src/index.ts";
-import type { CompoundSettings } from "../../packages/protocol/src/compound.ts";
-import { digest } from "../../apps/service/src/store.ts";
+import { KUPO_MODEL_ID } from "@moguri-dev/sdk";
+import type { CompoundSettings } from "@moguri-dev/sdk/testing";
+import { digest } from "@moguri-dev/sdk/testing";
 import { fixtureProvider, waitFor, type GeneratedProviderOptions } from "../fixture.ts";
 import { candidateApiFixture } from "./candidate-api.ts";
-import type { PlatformOptions } from "../../apps/service/src/platform.ts";
+import { sdkPath } from "./sdk-paths.ts";
+import type { PlatformOptions } from "@moguri-dev/sdk/testing";
 
 export async function compoundApiFixture(configuration: { legacyNotifications?: boolean; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; platform?: PlatformOptions; reasoning?: boolean; hostedRoles?: boolean } = {}) {
   const routerOptions: GeneratedProviderOptions & { workerPath: string; legacyCandidateJournal?: boolean; legacySessionControlsJournal?: boolean; platform?: PlatformOptions } = { responseMode: "text", maxOutputTokens: 8192, contextWindow: 262144,
-    exposeModels: true, reasoning: configuration.reasoning, replyText: "Generated pending compound classifier.", workerPath: fileURLToPath(new URL("../../apps/service/src/worker.ts", import.meta.url)),
+    exposeModels: true, reasoning: configuration.reasoning, replyText: "Generated pending compound classifier.", workerPath: sdkPath("dist/worker.mjs"),
     ...(configuration.platform ? { platform: configuration.platform } : {}),
     legacySessionControlsJournal: configuration.legacySessionControlsJournal,
     ...(configuration.legacyCandidateJournal ? { legacyCandidateJournal: true } : {}) };

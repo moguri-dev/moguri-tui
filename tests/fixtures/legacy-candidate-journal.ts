@@ -1,5 +1,5 @@
-import type { EventStore } from "../../apps/service/src/store.ts";
-import type { EventInput } from "../../packages/protocol/src/index.ts";
+import type { EventStore } from "@moguri-dev/sdk/testing";
+import type { EventInput } from "@moguri-dev/sdk/testing";
 
 export function legacyCandidateJournal(store: EventStore): () => void {
   if (store.events().some((event) => ["candidate.saved", "candidate.generation_recorded", "candidate.owner_bound", "candidate.cleanup_recorded", "candidate.usage_retained"].includes(event.event_type))) {

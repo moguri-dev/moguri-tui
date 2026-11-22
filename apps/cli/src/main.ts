@@ -4,23 +4,23 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { resolve as resolvePath } from "node:path";
 import { createRequire } from "node:module";
-import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, restartMoguriService, ensureConnection, stateDirectory, waitForStorageRelocation } from "../../../packages/sdk/src/node.ts";
-import { serveGatewayMcp } from "../../../packages/sdk/src/mcp-server.ts";
-import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, sessionChildBindings, type ControlDefaults, type SessionChildrenReview } from "../../../packages/sdk/src/index.ts";
-import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "../../../packages/sdk/src/index.ts";
+import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, restartMoguriService, ensureConnection, stateDirectory, waitForStorageRelocation } from "@moguri-dev/sdk/node";
+import { serveGatewayMcp } from "@moguri-dev/sdk/mcp";
+import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, sessionChildBindings, type ControlDefaults, type SessionChildrenReview } from "@moguri-dev/sdk";
+import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "@moguri-dev/sdk";
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
 import { decisionCommand } from "./decisions.ts";
 import { workspaceFeatureCommand } from "./workspace-features.ts";
 import { integrationCommand } from "./integrations.ts";
-import { DependencyRegistryConfigSchema, PackageManagerSchema } from "../../../packages/sdk/src/index.ts";
-import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "../../../packages/sdk/src/index.ts";
-import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
+import { DependencyRegistryConfigSchema, PackageManagerSchema } from "@moguri-dev/sdk";
+import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOptionsSchema } from "@moguri-dev/sdk";
+import { KanbanSourceSchema, PriceProviderSchema } from "@moguri-dev/sdk";
 import { queuedSlash } from "./queued-commands.ts";
-import { KupoModeSchema, ScheduledTimingSchema, parseAutomationWorkflow, executeInterruptedCommand } from "../../../packages/sdk/src/index.ts";
-import { PersonaDefinitionSchema, RoundupFiltersSchema, personasSlash, roundupSummary } from "../../../packages/sdk/src/index.ts";
+import { KupoModeSchema, ScheduledTimingSchema, parseAutomationWorkflow, executeInterruptedCommand } from "@moguri-dev/sdk";
+import { PersonaDefinitionSchema, RoundupFiltersSchema, personasSlash, roundupSummary } from "@moguri-dev/sdk";
 import { parse as parseYaml } from "yaml";
-import { AttentionFiltersSchema, MyWorkFiltersSchema, ProjectWorkspaceModeSchema } from "../../../packages/sdk/src/index.ts";
+import { AttentionFiltersSchema, MyWorkFiltersSchema, ProjectWorkspaceModeSchema } from "@moguri-dev/sdk";
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -363,13 +363,13 @@ moguri linear issue UUID|preview INPUT.json --project ID
 moguri linear execute INPUT.json --project ID --digest SHA --confirm-review
 moguri linear history|read ID|wait ID|stop ID   Actual retained results and ownership
 
-SDK: import { MoguriSdk } from "moguri"; import { connectMoguri, createRuntime } from "moguri/node".
+SDK: import { MoguriSdk } from "@moguri-dev/sdk"; import { connectMoguri, createRuntime } from "@moguri-dev/sdk/node".
 Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
 `);
     return;
   }
   if (group === "worker") {
-    await import(new URL(import.meta.url.endsWith(".ts") ? "../../service/src/remote-bridge.ts" : "./remote-bridge.mjs", import.meta.url).href);
+    await import("@moguri-dev/sdk/remote-bridge");
     return;
   }
   if (group === "tui" || group === "desktop") {
@@ -583,7 +583,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else if (group === "stainless") {
       if (values.filters || values.project || values.folder || values.model || values.provider || values.role) throw new Error("Stainless takes status, check, or open [URL] with an explicit --session for open.");
       if (action !== "open" && values.session) throw new Error("Stainless status and check belong to this profile, not a session.");
-      const { executeStainlessCommand } = await import("../../../packages/sdk/src/index.ts");
+      const { executeStainlessCommand } = await import("@moguri-dev/sdk");
       const session = values.session ? snapshot.sessions.find((session) => session.id === values.session) : undefined;
       if (values.session && !session) throw new Error("Choose an existing session ID. Nothing was opened.");
       output(await executeStainlessCommand(sdk, [action ?? "status", ...args].join(" "), session?.id, session?.browserUrl));
@@ -596,7 +596,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
         if (values.filters || values.project || values.folder || values.session || values.model || values.provider || values.role) throw new Error("OTLP configuration belongs to the exact selected profile, not a session or usage filter.");
         if (args[0] === "credential" && args[1] === "set" && args[2] && args[3] && args.length === 4) output(await sdk.telemetry.export.setCredential(args[2], args[3], await credential(4096)));
         else {
-          const { executeOtlpCommand } = await import("../../../packages/sdk/src/index.ts");
+          const { executeOtlpCommand } = await import("@moguri-dev/sdk");
           output(await executeOtlpCommand(sdk, args.join(" ")));
         }
       } else if (action === "storage") {
@@ -1176,7 +1176,7 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       if (action && !["work", "usage", "cost", "velocity"].includes(action)) throw new Error("Use dashboard work, usage, cost, velocity or analytics, with optional --filters JSON.");
       const filters: unknown = values.filters ? JSON.parse(values.filters) : {};
       if (!isRecord(filters) || Object.hasOwn(filters, "type")) throw new Error("Use a dashboard filter object with range and optional projectId.");
-      const { DashboardQuerySchema } = await import("../../../packages/sdk/src/index.ts");
+      const { DashboardQuerySchema } = await import("@moguri-dev/sdk");
       output(await sdk.query(parse(DashboardQuerySchema, { ...filters, ...(values.project ? { projectId: values.project } : {}), type: "dashboard.overview" })));
     } else if (group === "mcp") {
       if (!action) {

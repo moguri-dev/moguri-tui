@@ -3,9 +3,9 @@ import { createServer, connect } from "node:net";
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import type { RemoteTarget } from "../../packages/protocol/src/index.ts";
+import type { RemoteTarget } from "@moguri-dev/sdk/testing";
+import { sdkPath } from "./sdk-paths.ts";
 
 const execute = promisify(execFile);
 export async function createSshTarget(directory: string): Promise<{ target: RemoteTarget; incorrectHostKey: string; readonly diagnostic: string; close(): Promise<void> }> {
@@ -68,7 +68,7 @@ export async function createSshTarget(directory: string): Promise<{ target: Remo
         id: "generated-ssh", name: "Generated loopback SSH", host: "127.0.0.1", port: address.port, user: userInfo().username,
         hostKey: (await readFile(join(root, "host.pub"), "utf8")).trim().split(" ").slice(0, 2).join(" "),
         identityFile: join(root, "client"), stateDir: join(root, "remote-runs"),
-        command: [process.execPath, "--import", pathToFileURL(resolve("node_modules/tsx/dist/loader.mjs")).href, resolve("apps/service/src/remote-bridge.ts")],
+        command: [process.execPath, sdkPath("dist/remote-bridge.mjs")],
         allowCopilot: true, models: [],
       },
       incorrectHostKey: (await readFile(join(root, "incorrect-host.pub"), "utf8")).trim().split(" ").slice(0, 2).join(" "), close,

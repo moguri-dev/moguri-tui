@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { build, transform } from "esbuild";
 import { fileURLToPath } from "node:url";
-import { isRecord, MoguriError, parse, PROTOCOL_VERSION, SandboxConfigurationSchema, type SandboxConfiguration } from "../../packages/sdk/src/index.ts";
-import { distributionConfiguration, readSandboxDistribution } from "../../apps/service/src/sandbox-distribution.ts";
+import { isRecord, MoguriError, parse, PROTOCOL_VERSION, SandboxConfigurationSchema, type SandboxConfiguration } from "@moguri-dev/sdk";
+import { distributionConfiguration, readSandboxDistribution } from "@moguri-dev/sdk/testing";
 
 export async function nativeConfiguration(preserveReviewedNetwork = false): Promise<SandboxConfiguration | null> {
   const installation = process.env.MOGURI_NATIVE_INSTALLATION, workload = process.env.MOGURI_NATIVE_WORKLOAD;

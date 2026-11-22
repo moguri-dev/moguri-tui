@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { TuiNativeActions } from "./App.tsx";
-import { saveArtifactExport } from "../../../packages/sdk/src/node.ts";
+import { saveArtifactExport } from "@moguri-dev/sdk/node";
 
 async function invoke(command: string, args: string[], input?: string): Promise<void> {
   if (process.platform !== "darwin") throw new Error("Default application and clipboard bindings are currently qualified only on macOS.");

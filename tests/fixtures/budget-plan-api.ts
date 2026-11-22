@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { MoguriSdk, projectEvents, type EventInput } from "../../packages/sdk/src/index.ts";
+import { MoguriSdk, projectEvents, type EventInput } from "@moguri-dev/sdk";
 import { setupFixture } from "../fixture.ts";
 
 export async function budgetPlanFixture() {

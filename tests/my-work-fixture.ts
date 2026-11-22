@@ -2,10 +2,10 @@ import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { githubServiceFixture } from "./github-workflows-fixture.ts";
-import { runProgram } from "../apps/service/src/program.ts";
-import type { GithubScope } from "../packages/sdk/src/index.ts";
-import type { GitHubWorkflowOptions } from "../apps/service/src/github-workflows.ts";
-import type { IntakeClock } from "../apps/service/src/session-intake.ts";
+import { runProgram } from "@moguri-dev/sdk/testing";
+import type { GithubScope } from "@moguri-dev/sdk";
+import type { GitHubWorkflowOptions } from "@moguri-dev/sdk/testing";
+import type { IntakeClock } from "@moguri-dev/sdk/testing";
 
 export interface GeneratedWorkPull {
   number: number; state: "open" | "closed"; merged: boolean; head: string; updatedAt: string;

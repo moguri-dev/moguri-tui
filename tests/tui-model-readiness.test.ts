@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { configuredReadinessModels, MoguriSdk } from "../packages/sdk/src/index.ts";
+import { configuredReadinessModels, MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture } from "./fixture.ts";
 import { configureGeneratedReadiness, generatedReadinessCollector, generatedReviewedReadinessCollector } from "./fixtures/model-readiness.ts";
 import { closeTui } from "./fixtures/tui-client.ts";

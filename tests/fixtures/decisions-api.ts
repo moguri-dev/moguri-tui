@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { defaultKupoSettings, KUPO_MODEL_ID, MoguriSdk } from "../../packages/sdk/src/index.ts";
+import { defaultKupoSettings, KUPO_MODEL_ID, MoguriSdk } from "@moguri-dev/sdk";
 import { fixtureProvider, setupFixture, type GeneratedProviderOptions } from "../fixture.ts";
 import { appendBoundedAutopilot } from "./legacy-state.ts";
 import { routedFixture } from "./single-routing.ts";

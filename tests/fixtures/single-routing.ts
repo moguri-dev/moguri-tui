@@ -1,12 +1,12 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { MoguriSdk, KUPO_MODEL_ID } from "../../packages/sdk/src/index.ts";
+import { MoguriSdk, KUPO_MODEL_ID } from "@moguri-dev/sdk";
 import { fixtureProvider, setupFixture, waitFor, type GeneratedProviderOptions } from "../fixture.ts";
-import type { PlatformOptions } from "../../apps/service/src/platform.ts";
+import type { PlatformOptions } from "@moguri-dev/sdk/testing";
 import { createSshTarget } from "./ssh-target.ts";
 import { fileURLToPath } from "node:url";
 import { appendLegacyKupoSelection } from "./legacy-state.ts";
-import type { RemoteTarget } from "../../packages/sdk/src/index.ts";
+import type { RemoteTarget } from "@moguri-dev/sdk";
 
 export async function routedFixture(configuration: { env?: "Local" | "Remote"; configured?: boolean; platform?: PlatformOptions; legacy?: boolean;
   remoteTarget?: { target: RemoteTarget; workspace: string }; legacySessionControlsJournal?: boolean; imageInput?: boolean; toolInput?: boolean;

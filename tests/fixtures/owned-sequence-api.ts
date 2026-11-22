@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
-import { digest } from "../../apps/service/src/store.ts";
-import type { OwnedRoleInput } from "../../apps/service/src/owned-roles.ts";
-import type { WorkspaceFinish } from "../../apps/service/src/session-workspace.ts";
-import { projectEvents, type CommandResult } from "../../packages/sdk/src/index.ts";
+import { digest } from "@moguri-dev/sdk/testing";
+import type { OwnedRoleInput } from "@moguri-dev/sdk/testing";
+import type { WorkspaceFinish } from "@moguri-dev/sdk/testing";
+import { projectEvents, type CommandResult } from "@moguri-dev/sdk";
 import { waitFor, type GeneratedProviderOptions } from "../fixture.ts";
 import { candidateApiFixture } from "./candidate-api.ts";
+import { sdkPath } from "./sdk-paths.ts";
 
 export const ownedRoleMarker = "GENERATED_OWNED_ROLE_RESULT_NOT_ACCEPTANCE";
 export async function ownedSequenceFixture(options: Parameters<typeof candidateApiFixture>[0] = {}) {
   const providerOptions: GeneratedProviderOptions & { workerPath: string; legacyCandidateJournal?: boolean } = { replyText: ownedRoleMarker, responseMode: "text", maxOutputTokens: 256,
-    workerPath: fileURLToPath(new URL("../../apps/service/src/worker.ts", import.meta.url)), ...options };
+    workerPath: sdkPath("dist/worker.mjs"), ...options };
   const f = await candidateApiFixture(providerOptions);
   try {
     await f.configure();

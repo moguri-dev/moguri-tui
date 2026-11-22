@@ -1,13 +1,13 @@
 import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { budgetCharges } from "../../apps/service/src/budgets.ts";
-import { digest } from "../../apps/service/src/store.ts";
+import { budgetCharges } from "@moguri-dev/sdk/testing";
+import { digest } from "@moguri-dev/sdk/testing";
 import { fixtureProvider, waitFor } from "../fixture.ts";
 import { routedFixture } from "./single-routing.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
-import { defaultKupoSettings, type StoredEvent, type RemoteTarget } from "../../packages/sdk/src/index.ts";
-import type { SecretVault } from "../../apps/service/src/gateway.ts";
-import { envelope } from "../../apps/service/src/controller.ts";
+import { defaultKupoSettings, type StoredEvent, type RemoteTarget } from "@moguri-dev/sdk";
+import type { SecretVault } from "@moguri-dev/sdk/testing";
+import { envelope } from "@moguri-dev/sdk/testing";
 import { generatedKupoProfile } from "./kupo-profiles.ts";
 
 export async function remoteWinddownApiFixture(options: { unknown?: boolean; kupo?: boolean; target?: { target: RemoteTarget; workspace: string }; vault?: SecretVault } = {}) {

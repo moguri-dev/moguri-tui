@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
-import { githubPrCiState, MoguriError, type GithubItem } from "../packages/protocol/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
+import { githubPrCiState, MoguriError, type GithubItem } from "@moguri-dev/sdk/testing";
 import { githubApplicationFixture } from "./github-workflows-fixture.ts";
 import { AttentionNotifier, type Banner } from "../apps/desktop/src/notifications.ts";
 import { execFile, execFileSync } from "node:child_process";

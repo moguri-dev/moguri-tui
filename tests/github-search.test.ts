@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { MoguriError } from "../packages/sdk/src/index.ts";
+import { MoguriError } from "@moguri-dev/sdk";
 import { fixtureProvider, reviewNativeTools, waitFor } from "./fixture.ts";
 import { githubApplicationFixture } from "./github-workflows-fixture.ts";
 

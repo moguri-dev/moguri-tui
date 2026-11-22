@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { RemoteTarget } from "../../packages/protocol/src/index.ts";
+import type { RemoteTarget } from "@moguri-dev/sdk/testing";
 import { generatedRepositoryMetadata } from "./repository-info.ts";
 
 export async function generatedRemoteGithub(directory: string, target: RemoteTarget, options: { bridge?: string; node?: string } = {}) {

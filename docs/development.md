@@ -20,6 +20,13 @@ rules.
 
 ## Setup and running
 
+The SDK, the local service and its workers come from the private
+[`@moguri-dev/sdk`](https://github.com/moguri-dev/moguri-sdk) package on
+GitHub Packages. The committed `.npmrc` maps the `@moguri-dev` scope to
+`https://npm.pkg.github.com`; put a classic token with `read:packages` in your
+user `~/.npmrc` (`//npm.pkg.github.com/:_authToken=...`) or `NODE_AUTH_TOKEN`
+before `npm ci`. Never commit it.
+
 ```sh
 npm ci
 npm run build
@@ -27,8 +34,8 @@ npm start -- --project /absolute/path/to/project   # TUI
 npm run desktop                                    # desktop app, same service and sessions
 ```
 
-`npm run dev:tui` and `npm run service` run the TUI and the local service from
-TypeScript sources without building. State goes to
+`npm run dev:tui` runs the TUI from TypeScript sources without building;
+`npm run service` runs the installed SDK's service. State goes to
 `~/Library/Application Support/Moguri` unless `MOGURI_STATE_DIR` points to a
 private directory; use a separate one for development. The service writes
 diagnostics to `service.log` in that directory; see
@@ -38,11 +45,9 @@ diagnostics to `service.log` in that directory; see
 
 | Path | Contents |
 | --- | --- |
-| `apps/service` | The local control plane: event store, controller, model and tool workers, MCP gateway, PTY broker, environments and updater |
 | `apps/cli`, `apps/tui` | The `moguri` CLI and the OpenTUI terminal client |
 | `apps/desktop` | The Electron main process and the React renderer |
-| `packages/protocol` | Shared TypeBox schemas, events and domain types |
-| `packages/sdk`, `packages/client` | The importable Moguri SDK used by every client; root and React entrypoints are browser-safe |
+| `node_modules/@moguri-dev/sdk` | The SDK, protocol, local control plane and workers, from [moguri-sdk](https://github.com/moguri-dev/moguri-sdk). Clients import only `@moguri-dev/sdk`, `/node`, `/react`, `/mcp` and `/remote-bridge`; tests may also use the unstable `/testing` entry |
 | `scripts` | Build, packaging, spikes, qualification and [release](releasing.md) tooling |
 | `tests` | Node test runner suites; `tests/e2e` holds hidden Electron Playwright specs |
 | `docs` | User, developer and architecture documentation; see the [index](README.md) |
@@ -56,12 +61,11 @@ The [SDK reference](sdk.md) documents the public API and CLI.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run typecheck` | TypeScript for the service, SDK, desktop, tests and TUI |
-| `npm run build` | Production bundles, SDK types and `dist/THIRD_PARTY_NOTICES.md` |
+| `npm run typecheck` | TypeScript for the desktop, CLI, TUI and tests |
+| `npm run build` | CLI, TUI and desktop bundles and `dist/THIRD_PARTY_NOTICES.md` |
 | `npm test` | Full Node suite, including the native TUI interaction test and the covering-array milestone matrix. Run `npm run build` first: some tests execute `dist` bundles |
 | `node --import tsx --test tests/<name>.test.ts` | One or more focused suites |
 | `npm run test:e2e` | Hidden Electron end-to-end tests. Needs a build and `npm exec -- playwright install chromium` once |
-| `npm run verify:sdk` | Packs the SDK and checks every entrypoint in an external consumer |
 | `npm audit --audit-level=moderate` | Dependency audit |
 | `npm run test:matrix` | Opt-in full 10,080-cell milestone matrix |
 
@@ -73,8 +77,9 @@ the real GitHub authorization page. Phase 0 and platform spikes
 ## Continuous integration
 
 [`ci.yml`](../.github/workflows/ci.yml) runs only on pushes to `main`, on
-macOS and Ubuntu: audit, typecheck, build, `npm test`, `verify:sdk` and, on
-macOS, `test:e2e`. It does not run on pull requests or feature branches, so run
+macOS and Ubuntu: audit, typecheck, build, `npm test` and, on macOS,
+`test:e2e`. It installs the SDK with the `MOGURI_PACKAGES_TOKEN` secret. It
+does not run on pull requests or feature branches, so run
 the relevant checks locally before opening a PR. The tag-triggered
 [`release.yml`](../.github/workflows/release.yml) verifies and publishes
 releases; see [releasing](releasing.md).

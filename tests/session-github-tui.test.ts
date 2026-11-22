@@ -5,7 +5,7 @@ import { Renderable, TextareaRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { isRecord, MoguriSdk } from "../packages/sdk/src/index.ts";
+import { isRecord, MoguriSdk } from "@moguri-dev/sdk";
 import { githubApplicationFixture } from "./github-workflows-fixture.ts";
 import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";

@@ -3,12 +3,13 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultSandboxManagement, isRecord, PROTOCOL_VERSION, type SandboxConfiguration } from "../../packages/sdk/src/index.ts";
-import { readSandboxDistribution } from "../../apps/service/src/sandbox-distribution.ts";
+import { defaultSandboxManagement, isRecord, PROTOCOL_VERSION, type SandboxConfiguration } from "@moguri-dev/sdk";
+import { readSandboxDistribution } from "@moguri-dev/sdk/testing";
 import { fixtureProvider, type GeneratedProviderOptions } from "../fixture.ts";
 import { nativeApiFixture } from "./native-api.ts";
 import type { MilestoneFixture } from "./milestone-combinations.ts";
-import type { startService } from "../../apps/service/src/server.ts";
+import type { startService } from "@moguri-dev/sdk/testing";
+import { sdkPath } from "./sdk-paths.ts";
 
 export async function nativeMilestoneFixture(configuration: SandboxConfiguration, scenario: "milestone" | "compound" | "scripts" = "milestone"): Promise<MilestoneFixture & {
   state: string; nativeRoot: string; restartOptions: Parameters<typeof startService>[0];
@@ -26,7 +27,8 @@ export async function nativeMilestoneFixture(configuration: SandboxConfiguration
   assert.deepEqual(Object.keys(workload.payload.files).sort(), [...paths].sort());
   const actual: Record<string, string> = {};
   for (const path of [...paths, "scripts/worker-image/Containerfile"]) {
-    actual[path] = createHash("sha256").update(await readFile(path)).digest("hex");
+    const source = path === "package.json" || path === "package-lock.json" ? sdkPath("dist/worker-image", path) : sdkPath(path);
+    actual[path] = createHash("sha256").update(await readFile(source)).digest("hex");
     assert.equal(actual[path], path === "scripts/worker-image/Containerfile" ? workload.payload.recipeDigest : workload.payload.files[path],
       `The physical milestone fixture cannot use stale payload bytes: ${path}`);
   }

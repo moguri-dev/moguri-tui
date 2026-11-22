@@ -1,18 +1,18 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useKeyboard, usePaste, useRenderer, useTerminalDimensions, type InputProps, type SelectProps } from "@opentui/react";
-import { executeAutomationsCommand, executeInterruptedCommand, interruptedSessions, executeOtlpCommand, executeStainlessCommand, effectivePrAutomation, PR_AUTOMATION_LABELS, prAutomationDefaults, prAutomationExceptions, prAutomationSourceLabel } from "../../../packages/sdk/src/index.ts";
+import { executeAutomationsCommand, executeInterruptedCommand, interruptedSessions, executeOtlpCommand, executeStainlessCommand, effectivePrAutomation, PR_AUTOMATION_LABELS, prAutomationDefaults, prAutomationExceptions, prAutomationSourceLabel } from "@moguri-dev/sdk";
 import { CliRenderEvents, SyntaxStyle, TextRenderable, type BoxOptions, type CliRendererFrameEvent, type InputRenderable, type TextareaRenderable, type MarkdownOptions, type ScrollBoxRenderable } from "@opentui/core";
 import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
-import { useMoguri, useSessionActivity, useTaskProgress } from "../../../packages/sdk/src/react.ts";
-import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, runningSessionNames, runningSessions, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "../../../packages/sdk/src/index.ts";
-import { agentHarnessProduct, describeActivityCall, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "../../../packages/sdk/src/index.ts";
-import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "../../../packages/sdk/src/index.ts";
+import { useMoguri, useSessionActivity, useTaskProgress } from "@moguri-dev/sdk/react";
+import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, runningSessionNames, runningSessions, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "@moguri-dev/sdk";
+import { agentHarnessProduct, describeActivityCall, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "@moguri-dev/sdk";
+import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "@moguri-dev/sdk";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
-import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "../../../packages/sdk/src/index.ts";
-import { autonomyLabel, envLabel, configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming, type Automation, type AutomationRun, describeAutomationSchedule } from "../../../packages/sdk/src/index.ts";
-import { MyWorkFiltersSchema, type MyWorkEntry, type MyWorkFilters, type MyWorkResponse, type Snapshot } from "../../../packages/sdk/src/index.ts";
+import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "@moguri-dev/sdk";
+import { autonomyLabel, envLabel, configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming, type Automation, type AutomationRun, describeAutomationSchedule } from "@moguri-dev/sdk";
+import { MyWorkFiltersSchema, type MyWorkEntry, type MyWorkFilters, type MyWorkResponse, type Snapshot } from "@moguri-dev/sdk";
 type MoguriClient = MoguriSdk;
 
 function terminalColors(appearance: Appearance, mode: ThemeMode) {

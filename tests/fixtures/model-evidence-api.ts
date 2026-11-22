@@ -1,6 +1,6 @@
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
-import { CopilotAdapter } from "../../apps/service/src/provider.ts";
-import { MoguriSdk } from "../../packages/sdk/src/index.ts";
+import { CopilotAdapter } from "@moguri-dev/sdk/testing";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture } from "../fixture.ts";
 
 export async function modelEvidenceFixture() {

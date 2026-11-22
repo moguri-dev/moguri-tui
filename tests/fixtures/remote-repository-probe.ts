@@ -1,6 +1,6 @@
-import { isRecord, MoguriError } from "../../packages/protocol/src/index.ts";
-import { readRepositoryCli } from "../../apps/service/src/repository-metadata.ts";
-import { JsonLineChannel } from "../../apps/service/src/worker-wire.ts";
+import { isRecord, MoguriError } from "@moguri-dev/sdk/testing";
+import { readRepositoryCli } from "@moguri-dev/sdk/testing";
+import { JsonLineChannel } from "@moguri-dev/sdk/testing";
 
 const wire = new JsonLineChannel(process.stdin, process.stdout), abort = new AbortController();
 let admitted = false;

@@ -1,4 +1,4 @@
-import { MoguriSdk } from "../../packages/sdk/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { remoteFixture } from "./remote-service.ts";
 import { forbidControllerGithub, generatedRemoteGithub } from "./remote-github.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";

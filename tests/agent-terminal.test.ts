@@ -3,14 +3,14 @@ import { test } from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { MoguriSdk, PROTOCOL_VERSION, isRecord } from "../packages/sdk/src/index.ts";
-import { EventStore } from "../apps/service/src/store.ts";
-import { startService } from "../apps/service/src/server.ts";
-import { effectiveTools } from "../apps/service/src/tools.ts";
+import { MoguriSdk, PROTOCOL_VERSION, isRecord } from "@moguri-dev/sdk";
+import { EventStore } from "@moguri-dev/sdk/testing";
+import { startService } from "@moguri-dev/sdk/testing";
+import { effectiveTools } from "@moguri-dev/sdk/testing";
 import { setupFixture, waitFor, type GeneratedProviderOptions } from "./fixture.ts";
 import { retainedCiphertextRows, writeLegacyState } from "./fixtures/legacy-state.ts";
 import { remoteFixture } from "./fixtures/remote-service.ts";
-import { operationProjection } from "../apps/service/src/operation-telemetry.ts";
+import { operationProjection } from "@moguri-dev/sdk/testing";
 
 test("Agent terminal tools require an actual project or captured Home, never an unbound scope", async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();

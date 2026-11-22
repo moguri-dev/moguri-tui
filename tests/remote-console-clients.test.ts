@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { remoteFixture } from "./fixtures/remote-service.ts";
 
 test("compiled CLI and shared TUI commands explicitly open, inspect and stop the captured Remote console without storing stdin", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {

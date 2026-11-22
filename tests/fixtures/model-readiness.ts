@@ -1,5 +1,5 @@
-import { collectModelReadiness, type ReadinessFileInspection } from "../../apps/service/src/model-readiness.ts";
-import type { LocalRuntimeConfiguration, ModelRequirements, MoguriSdk } from "../../packages/sdk/src/index.ts";
+import { collectModelReadiness, type ReadinessFileInspection } from "@moguri-dev/sdk/testing";
+import type { LocalRuntimeConfiguration, ModelRequirements, MoguriSdk } from "@moguri-dev/sdk";
 
 export async function configureGeneratedReadiness(sdk: MoguriSdk, fixture: { baseUrl: string; modelId: string }, options: {
   runtime?: LocalRuntimeConfiguration; requirements?: ModelRequirements;

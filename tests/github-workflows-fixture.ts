@@ -1,17 +1,17 @@
-import type { IntakeClock } from "../apps/service/src/session-intake.ts";
+import type { IntakeClock } from "@moguri-dev/sdk/testing";
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
-import { startService } from "../apps/service/src/server.ts";
-import { runProgram } from "../apps/service/src/program.ts";
-import type { GitHubWorkflowOptions } from "../apps/service/src/github-workflows.ts";
-import type { ProviderAdapter } from "../apps/service/src/provider.ts";
-import type { IntegrationOptions } from "../apps/service/src/project-integrations.ts";
-import type { GithubScope } from "../packages/protocol/src/github-workflows.ts";
-import { defaultBoard, MoguriError } from "../packages/protocol/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
+import { startService } from "@moguri-dev/sdk/testing";
+import { runProgram } from "@moguri-dev/sdk/testing";
+import type { GitHubWorkflowOptions } from "@moguri-dev/sdk/testing";
+import type { ProviderAdapter } from "@moguri-dev/sdk/testing";
+import type { IntegrationOptions } from "@moguri-dev/sdk/testing";
+import type { GithubScope } from "@moguri-dev/sdk/testing";
+import { defaultBoard, MoguriError } from "@moguri-dev/sdk/testing";
 import { generatedNodeSupervision } from "./fixture.ts";
 import { appendLegacyProjectSession } from "./fixtures/legacy-state.ts";
 

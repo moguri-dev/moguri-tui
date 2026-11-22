@@ -8,8 +8,8 @@ import { Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp } from "../apps/tui/src/App.tsx";
-import { sourceRootSync } from "../apps/service/src/repository-source.ts";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { sourceRootSync } from "@moguri-dev/sdk/testing";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { closeTui, waitTuiFrame } from "./fixtures/tui-client.ts";
 

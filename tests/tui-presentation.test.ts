@@ -7,7 +7,7 @@ import { Renderable, SyntaxStyle, TextAttributes } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp, TuiMessage } from "../apps/tui/src/App.tsx";
-import { appearanceColors, MoguriSdk, type PublicMessage } from "../packages/sdk/src/index.ts";
+import { appearanceColors, MoguriSdk, type PublicMessage } from "@moguri-dev/sdk";
 import { tuiTabs } from "../apps/tui/src/commands.ts";
 import { admitGeneratedSkill, reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
-import { localModelId } from "../apps/service/src/model-registry.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
+import { localModelId } from "@moguri-dev/sdk/testing";
 import { setupFixture, waitFor } from "./fixture.ts";
 
 test("compiled CLI and shared TUI commands manage one authoritative availability catalogue without inference", async () => {

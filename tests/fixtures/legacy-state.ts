@@ -1,19 +1,19 @@
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
-import type { startService } from "../../apps/service/src/server.ts";
-import { hasChatTitleHistory, hasLiveDeliveryHistory, hasCombinedWorkspaceHistory, hasSessionControlsHistory, hasVoiceShortcutHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "../../packages/protocol/src/index.ts";
+import type { startService } from "@moguri-dev/sdk/testing";
+import { hasChatTitleHistory, hasLiveDeliveryHistory, hasCombinedWorkspaceHistory, hasSessionControlsHistory, hasVoiceShortcutHistory, PROTOCOL_VERSION, resolveControls, type StoredEvent } from "@moguri-dev/sdk/testing";
 import { randomUUID } from "node:crypto";
-import type { ControlPlane } from "../../apps/service/src/controller.ts";
-import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
-import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "../../packages/protocol/src/milestone-models.ts";
-import { hasGithubPrCiHistory } from "../../packages/protocol/src/github-workflows.ts";
-import { prWorkflowItem } from "../../packages/protocol/src/pr-actions.ts";
-import { hasPrAutomationHistory } from "../../packages/protocol/src/pr-automation.ts";
-import { hasMyWorkHistory } from "../../packages/protocol/src/my-work.ts";
-import { hasBackgroundServiceHistory } from "../../packages/protocol/src/application.ts";
-import { hasScriptInboxHistory, hasNativeScriptHistory } from "../../packages/protocol/src/script-reviews.ts";
-import { hasRepositoryWorkflowHistory } from "../../packages/protocol/src/repository-trust.ts";
-import { hasNativeCandidateIdentityHistory } from "../../packages/protocol/src/candidate-workspaces.ts";
+import type { ControlPlane } from "@moguri-dev/sdk/testing";
+import type { MoguriSdk } from "@moguri-dev/sdk";
+import { hasMilestoneCandidateHistory, hasMilestoneModelHistory } from "@moguri-dev/sdk/testing";
+import { hasGithubPrCiHistory } from "@moguri-dev/sdk/testing";
+import { prWorkflowItem } from "@moguri-dev/sdk/testing";
+import { hasPrAutomationHistory } from "@moguri-dev/sdk/testing";
+import { hasMyWorkHistory } from "@moguri-dev/sdk/testing";
+import { hasBackgroundServiceHistory } from "@moguri-dev/sdk/testing";
+import { hasScriptInboxHistory, hasNativeScriptHistory } from "@moguri-dev/sdk/testing";
+import { hasRepositoryWorkflowHistory } from "@moguri-dev/sdk/testing";
+import { hasNativeCandidateIdentityHistory } from "@moguri-dev/sdk/testing";
 
 export async function appendLegacyProjectFreeSession(client: MoguriSdk, control: ControlPlane, title: string): Promise<{ id: string }> {
   const snapshot = control.snapshot(), settings = snapshot.settings;

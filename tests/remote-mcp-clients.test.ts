@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { remoteFixture } from "./fixtures/remote-service.ts";
 
 test("CLI and shared TUI/desktop commands review exact Remote grants with no model, credential forwarding or implicit approval", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {

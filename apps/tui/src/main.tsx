@@ -4,8 +4,8 @@ import { createRoot } from "@opentui/react";
 import { createElement } from "react";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { connectMoguri } from "../../../packages/sdk/src/node.ts";
-import type { MoguriSdk } from "../../../packages/sdk/src/index.ts";
+import { connectMoguri } from "@moguri-dev/sdk/node";
+import type { MoguriSdk } from "@moguri-dev/sdk";
 import { TuiApp } from "./App.tsx";
 import { nativeActions } from "./native.ts";
 

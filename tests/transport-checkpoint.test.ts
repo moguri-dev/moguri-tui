@@ -4,8 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { remoteWinddownApiFixture } from "./fixtures/winddown-api.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
-import { MoguriError, parse, unsettledWinddownCommit, WinddownCommandSchema, WinddownQuerySchema } from "../packages/sdk/src/index.ts";
-import { EventStore } from "../apps/service/src/store.ts";
+import { MoguriError, parse, unsettledWinddownCommit, WinddownCommandSchema, WinddownQuerySchema } from "@moguri-dev/sdk";
+import { EventStore } from "@moguri-dev/sdk/testing";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 

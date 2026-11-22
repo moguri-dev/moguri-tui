@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { KupoModelProfileInput, MoguriSdk } from "../../packages/sdk/src/index.ts";
+import type { KupoModelProfileInput, MoguriSdk } from "@moguri-dev/sdk";
 
 const evaluationSet = createHash("sha256").update("Generated four-dimension routing mechanics, not real model evaluation.").digest("hex");
 export async function generatedKupoProfile(sdk: MoguriSdk, modelId: string, values: {

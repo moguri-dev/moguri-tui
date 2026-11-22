@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { setupFixture } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { profileFixture } from "./fixtures/profiles.ts";
 
 test("the CLI exposes shared working-window choices and holds exact long text as a scoped file without inference", async () => {

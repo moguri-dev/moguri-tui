@@ -1,4 +1,4 @@
-import type { OwnedRoleInput } from "../../apps/service/src/owned-roles.ts";
+import type { OwnedRoleInput } from "@moguri-dev/sdk/testing";
 import { ownedSequenceFixture } from "./owned-sequence-api.ts";
 
 export const contractedRouterReason = "GENERATED_ROUTER_REASON_EXCLUDED_FROM_ROLE_CONTEXT";

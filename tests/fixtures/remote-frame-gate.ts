@@ -1,9 +1,9 @@
 import { EventEmitter } from "node:events";
 import type { TestContext } from "node:test";
-import { isRecord } from "../../packages/protocol/src/index.ts";
-import type { RemoteRuntime } from "../../apps/service/src/remote.ts";
-import type { WorkerConnectionEvents } from "../../apps/service/src/worker-connection.ts";
-import type { WorkerConnection, WorkerFrame } from "../../apps/service/src/worker-connection.ts";
+import { isRecord } from "@moguri-dev/sdk/testing";
+import type { RemoteRuntime } from "@moguri-dev/sdk/testing";
+import type { WorkerConnectionEvents } from "@moguri-dev/sdk/testing";
+import type { WorkerConnection, WorkerFrame } from "@moguri-dev/sdk/testing";
 
 export function createRemoteFrameGate(kind: string, onHold?: (frame: WorkerFrame | undefined) => void, accepts?: (request: unknown) => boolean) {
   let holding = false, enabled = true;

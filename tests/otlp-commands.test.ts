@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { createElement } from "react";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
-import * as sdkModule from "../packages/sdk/src/index.ts";
+import * as sdkModule from "@moguri-dev/sdk";
 import { TuiApp } from "../apps/tui/src/App.tsx";
 import { closeTui, waitTuiFrame } from "./fixtures/tui-client.ts";
 import { setupFixture } from "./fixture.ts";

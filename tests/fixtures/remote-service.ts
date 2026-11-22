@@ -1,9 +1,9 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { envelope } from "../../apps/service/src/controller.ts";
+import { envelope } from "@moguri-dev/sdk/testing";
 import { setupFixture, type GeneratedProviderOptions } from "../fixture.ts";
 import { createSshTarget } from "./ssh-target.ts";
-import type { PlatformOptions } from "../../apps/service/src/platform.ts";
+import type { PlatformOptions } from "@moguri-dev/sdk/testing";
 
 export async function remoteFixture(options: { exposeModels?: boolean; imageInput?: boolean; platform?: PlatformOptions; respond?: GeneratedProviderOptions["respond"]; mcpCall?: GeneratedProviderOptions["mcpCall"]; holdAfterTool?: boolean; readPaste?: GeneratedProviderOptions["readPaste"]; documentTool?: GeneratedProviderOptions["documentTool"]; toolCall?: GeneratedProviderOptions["toolCall"]; agentTerminalRead?: boolean } = {}) {
   const secrets = new Map<string, string>(), vault = {

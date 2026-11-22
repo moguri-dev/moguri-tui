@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { DraftEditor, commandViewKey, parseSlash, terminalCommandExecution, type MoguriSdk, type CommandViewHandler } from "../../../packages/sdk/src/index.ts";
-import { saveArtifactExport } from "../../../packages/sdk/src/node.ts";
+import { DraftEditor, commandViewKey, parseSlash, terminalCommandExecution, type MoguriSdk, type CommandViewHandler } from "@moguri-dev/sdk";
+import { saveArtifactExport } from "@moguri-dev/sdk/node";
 
 export async function queuedSlash(sdk: MoguriSdk, sessionId: string, text: string, options: { hold?: boolean; json?: boolean }, output: (value: unknown) => void): Promise<void> {
   const snapshot = sdk.getState().snapshot, session = snapshot?.sessions.find((session) => session.id === sessionId), parsed = parseSlash(text);

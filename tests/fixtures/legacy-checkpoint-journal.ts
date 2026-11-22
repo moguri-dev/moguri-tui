@@ -1,5 +1,5 @@
-import { EventStore } from "../../apps/service/src/store.ts";
-import type { EventInput } from "../../packages/protocol/src/index.ts";
+import { EventStore } from "@moguri-dev/sdk/testing";
+import type { EventInput } from "@moguri-dev/sdk/testing";
 
 export function legacyCheckpointJournal(store: EventStore): () => void {
   const future = (event: EventInput) => event.event_type.startsWith("checkpoint.") || event.event_type.startsWith("rewind.") ||

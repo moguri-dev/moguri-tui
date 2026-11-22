@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { digest } from "../../apps/service/src/store.ts";
-import { projectRoleSequence, type RoleSequenceRecord } from "../../packages/protocol/src/index.ts";
+import { digest } from "@moguri-dev/sdk/testing";
+import { projectRoleSequence, type RoleSequenceRecord } from "@moguri-dev/sdk/testing";
 import { budgetPlanFixture } from "./budget-plan-api.ts";
 
 export async function roleSequenceFixture() {

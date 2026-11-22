@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { chmod, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { MoguriSdk, defaultSettings, type SandboxExecution, type SandboxResult, type SandboxRepository } from "../../packages/sdk/src/index.ts";
-import { captureNativeSource, captureNativeTree, materializeNativeStage, materializeNativeGroup, nativeRepositoryDirectory } from "../../apps/service/src/native-staging.ts";
-import { digest } from "../../apps/service/src/store.ts";
+import { MoguriSdk, defaultSettings, type SandboxExecution, type SandboxResult, type SandboxRepository } from "@moguri-dev/sdk";
+import { captureNativeSource, captureNativeTree, materializeNativeStage, materializeNativeGroup, nativeRepositoryDirectory } from "@moguri-dev/sdk/testing";
+import { digest } from "@moguri-dev/sdk/testing";
 import { setupFixture } from "../fixture.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
 

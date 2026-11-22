@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { isRecord, ModelReadinessReportSchema, ModelRuntimePreviewSchema, MoguriSdk, parse } from "../packages/sdk/src/index.ts";
+import { isRecord, ModelReadinessReportSchema, ModelRuntimePreviewSchema, MoguriSdk, parse } from "@moguri-dev/sdk";
 import { setupFixture } from "./fixture.ts";
 import { configureGeneratedReadiness, generatedReviewedReadinessCollector } from "./fixtures/model-readiness.ts";
 

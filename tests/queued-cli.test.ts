@@ -3,7 +3,7 @@ import test from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, resolve } from "node:path";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture, waitFor } from "./fixture.ts";
 
 test("the actual CLI queues behind a running model and its service-capable command finishes after the CLI exits", { skip: process.platform !== "darwin" }, async () => {

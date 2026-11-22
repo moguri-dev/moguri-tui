@@ -1,9 +1,9 @@
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MoguriSdk } from "../../packages/sdk/src/index.ts";
-import { startService } from "../../apps/service/src/server.ts";
-import type { PlatformOptions } from "../../apps/service/src/platform.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
+import { startService } from "@moguri-dev/sdk/testing";
+import type { PlatformOptions } from "@moguri-dev/sdk/testing";
 import { fixtureProvider, generatedNodeSupervision } from "../fixture.ts";
 import { legacySessionControlsJournal } from "./legacy-session-controls-journal.ts";
 

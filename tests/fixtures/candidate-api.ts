@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { MoguriSdk, type CandidatePatch } from "../../packages/sdk/src/index.ts";
-import { digest } from "../../apps/service/src/store.ts";
+import { MoguriSdk, type CandidatePatch } from "@moguri-dev/sdk";
+import { digest } from "@moguri-dev/sdk/testing";
 import { setupFixture } from "../fixture.ts";
 import { initializeGeneratedRepository } from "./git-project.ts";
 

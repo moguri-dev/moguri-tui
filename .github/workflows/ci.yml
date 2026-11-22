@@ -22,7 +22,12 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+          # @moguri-dev/sdk comes from GitHub Packages, which needs a read:packages token even in CI.
+          registry-url: https://npm.pkg.github.com
+          scope: "@moguri-dev"
       - run: npm ci --no-fund --no-progress
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.MOGURI_PACKAGES_TOKEN }}
       - run: npm audit --audit-level=moderate
       - run: npm run typecheck
       - run: npm run build
@@ -31,7 +36,6 @@ jobs:
       - run: npm test
         env:
           NODE_OPTIONS: --test-reporter=tap
-      - run: npm run verify:sdk
       - if: runner.os == 'macOS'
         run: npm run test:e2e
         env:

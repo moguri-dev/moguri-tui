@@ -1,7 +1,7 @@
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { isRecord } from "../../packages/protocol/src/index.ts";
-import type { SecretVault } from "../../apps/service/src/gateway.ts";
+import { isRecord } from "@moguri-dev/sdk/testing";
+import type { SecretVault } from "@moguri-dev/sdk/testing";
 
 export class GeneratedFileVault implements SecretVault {
   private chain: Promise<unknown> = Promise.resolve();

@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import {
   ClientError, HookDefinitionSchema, KnowledgeInputSchema, KnowledgePromotionSchema, MarketplaceInputSchema, MarketplaceSourceSchema,
   parse, type KnowledgeTier, type MoguriSdk, type WorkspaceFeature,
-} from "../../../packages/sdk/src/index.ts";
+} from "@moguri-dev/sdk";
 
 interface Flags { session?: string; project?: string; revision?: string; digest?: string; "confirm-review"?: boolean; "confirm-remove"?: boolean }
 async function json(path: string | undefined): Promise<unknown> {

@@ -48,7 +48,9 @@ checksum, and drag Moguri onto Applications. The build is not notarized, so
 the first launch needs **System Settings > Privacy & Security > Open Anyway**.
 Follow the [installation guide](docs/installation.md) for the exact steps.
 
-**From source** (macOS on Apple silicon, Node.js 26):
+**From source** (macOS on Apple silicon, Node.js 26, and a classic GitHub
+token with `read:packages` in `~/.npmrc` for the private `@moguri-dev/sdk`;
+see [development](docs/development.md#setup-and-running)):
 
 ```sh
 git clone https://github.com/mbianchidev/moguri.git

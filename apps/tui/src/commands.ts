@@ -1,4 +1,4 @@
-import { slashCommands, tuiSlashCommands } from "../../../packages/sdk/src/index.ts";
+import { slashCommands, tuiSlashCommands } from "@moguri-dev/sdk";
 
 export const tuiTabs = [
   { id: "session", label: "Current session", compact: "Chat", command: "/session" },

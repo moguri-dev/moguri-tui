@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { digest } from "../../apps/service/src/store.ts";
+import { digest } from "@moguri-dev/sdk/testing";
 import { candidateApiFixture } from "./candidate-api.ts";
 
 export const generatedCandidatePatch = { kind: "patch" as const, summary: "Generated model proposal", edits: [

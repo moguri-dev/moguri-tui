@@ -1,4 +1,4 @@
-import { MoguriSdk } from "../../packages/sdk/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { remoteFixture } from "./remote-service.ts";
 
 export async function remotePlanFixture() {

@@ -7,7 +7,7 @@ import { CliRenderEvents, Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
 import { TuiApp, waitForCommandFrame } from "../apps/tui/src/App.tsx";
-import { appearanceColors, colorContrast, MoguriSdk, themePalettes, type PlatformQuery, type PlatformResponse } from "../packages/sdk/src/index.ts";
+import { appearanceColors, colorContrast, MoguriSdk, themePalettes, type PlatformQuery, type PlatformResponse } from "@moguri-dev/sdk";
 import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { closeTui } from "./fixtures/tui-client.ts";

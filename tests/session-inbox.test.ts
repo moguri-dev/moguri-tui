@@ -3,8 +3,8 @@ import test from "node:test";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { AttentionDeletedSchema, MoguriSdk, parse, projectEvents } from "../packages/sdk/src/index.ts";
-import { startService } from "../apps/service/src/server.ts";
+import { AttentionDeletedSchema, MoguriSdk, parse, projectEvents } from "@moguri-dev/sdk";
+import { startService } from "@moguri-dev/sdk/testing";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { profileFixture } from "./fixtures/profiles.ts";
 

@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { DecisionSettingsSchema, parse, type MoguriSdk } from "../../../packages/sdk/src/index.ts";
+import { DecisionSettingsSchema, parse, type MoguriSdk } from "@moguri-dev/sdk";
 
 export async function decisionCommand(sdk: MoguriSdk, action: string | undefined, args: string[], options: {
   session?: string; project?: string; workspace?: string; "confirm-review"?: boolean;

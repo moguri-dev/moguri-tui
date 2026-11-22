@@ -7,8 +7,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { MoguriSdk } from "../packages/sdk/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { TuiApp } from "../apps/tui/src/App.tsx";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { generatedDocx, generatedPdf, generatedXlsx } from "./fixtures/documents.ts";
@@ -63,8 +64,8 @@ test("actual TUI keys attach all three document types, inspect bounded content a
   } finally { await closeTui(root, setup, sdk, fixture.close); }
 });
 
-test("browser SDK entrypoints do not bundle document parsers or Node runtime dependencies", async () => {
-  for (const entry of ["packages/sdk/src/index.ts", "packages/sdk/src/react.ts"]) {
+test("the installed browser SDK entrypoints do not bundle document parsers or Node runtime dependencies", async () => {
+  for (const entry of [fileURLToPath(import.meta.resolve("@moguri-dev/sdk")), fileURLToPath(import.meta.resolve("@moguri-dev/sdk/react"))]) {
     const result = await build({ entryPoints: [entry], bundle: true, platform: "browser", format: "esm", write: false, metafile: true,
       external: ["react", "typebox", "typebox/value"] });
     assert.ok(Object.keys(result.metafile.inputs).every((path) => !/document-extract|document-worker|node_modules\/(?:pdfjs-dist|yauzl|sax)\//.test(path)));

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { defaultKupoSettings, defaultSingleKupoSettings, isRecord, type Controls, type SandboxExecution, type SandboxResult } from "../../packages/sdk/src/index.ts";
-import { readNativeCompletion } from "../../apps/service/src/native-evidence.ts";
+import { defaultKupoSettings, defaultSingleKupoSettings, isRecord, type Controls, type SandboxExecution, type SandboxResult } from "@moguri-dev/sdk";
+import { readNativeCompletion } from "@moguri-dev/sdk/testing";
 import { routedFixture } from "./single-routing.ts";
 import { generatedKupoProfile } from "./kupo-profiles.ts";
 import { milestoneResponder } from "./milestone-response.ts";

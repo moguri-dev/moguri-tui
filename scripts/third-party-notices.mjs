@@ -35,6 +35,8 @@ export async function collectNotices(roots) {
   const entries = new Map();
   for (const root of roots) {
     const metadata = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+    // Moguri's own packages (the @moguri-dev scope, such as the SDK) are covered by LICENSE.md, not third-party notices.
+    if (typeof metadata.name === "string" && metadata.name.startsWith("@moguri-dev/")) continue;
     const key = `${metadata.name}@${metadata.version}`;
     if (entries.has(key)) continue;
     const files = (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isFile() && licenseFile.test(entry.name)).map((entry) => entry.name).sort();
@@ -52,7 +54,7 @@ export function renderNotices(entries) {
     "# Third-party notices", "",
     "Moguri's own code is licensed under the MIT License (`LICENSE.md`). The build bundles the third-party packages below into Moguri's JavaScript files.",
     "Each package remains under its own license, reproduced here. The MIT License does not relicense any of them.",
-    "Packages shipped unbundled in the app's `node_modules`, and the native speech runtimes under `dist/native`, keep their own license files in place.", "",
+    "Packages shipped unbundled in the app's `node_modules`, including the Moguri SDK's own notices and native speech runtimes, keep their own license files in place.", "",
   ];
   if (restricted.length) {
     lines.push("## Components without an OSI-approved license", "",

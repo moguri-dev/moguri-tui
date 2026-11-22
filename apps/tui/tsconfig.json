@@ -4,6 +4,6 @@
     "jsxImportSource": "@opentui/react",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "../../packages/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "../../dist"]
 }

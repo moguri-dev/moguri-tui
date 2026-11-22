@@ -1,5 +1,5 @@
-import { EventStore } from "../../apps/service/src/store.ts";
-import { hasSessionControlsHistory, type EventInput } from "../../packages/protocol/src/index.ts";
+import { EventStore } from "@moguri-dev/sdk/testing";
+import { hasSessionControlsHistory, type EventInput } from "@moguri-dev/sdk/testing";
 
 export function legacySessionControlsJournal(store: EventStore, allViews = false): () => void {
   if (hasSessionControlsHistory(store.events())) throw new Error("Select the pre-87 journal before generating session/tool history. Existing current records cannot become a legacy fixture.");

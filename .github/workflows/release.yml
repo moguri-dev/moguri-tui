@@ -29,7 +29,12 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+          # @moguri-dev/sdk comes from GitHub Packages, which needs a read:packages token even in CI.
+          registry-url: https://npm.pkg.github.com
+          scope: "@moguri-dev"
       - run: npm ci --no-fund --no-progress
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.MOGURI_PACKAGES_TOKEN }}
       - name: Audit dependencies at the tagged commit
         run: npm audit --audit-level=moderate
       - name: Verify and publish the draft release

@@ -1,4 +1,4 @@
-import { MoguriSdk } from "../../packages/sdk/src/index.ts";
+import { MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture, type GeneratedProviderOptions } from "../fixture.ts";
 
 export async function compactionFixture(configuration: GeneratedProviderOptions = { responseMode: "text", replyText: "Generated summary: preserve the fixture task, completed observations and unresolved work." }) {

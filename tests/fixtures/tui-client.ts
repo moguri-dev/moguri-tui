@@ -1,6 +1,6 @@
 import { flushSync, type createRoot } from "@opentui/react";
 import type { createTestRenderer } from "@opentui/core/testing";
-import type { MoguriSdk } from "../../packages/sdk/src/index.ts";
+import type { MoguriSdk } from "@moguri-dev/sdk";
 
 export async function waitTuiFrame(terminal: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
   const deadline = Date.now() + 8000;

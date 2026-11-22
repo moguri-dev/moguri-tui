@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { isRecord, parse, WinddownCommandSchema, WinddownQuerySchema, type MoguriSdk } from "../../../packages/sdk/src/index.ts";
+import { isRecord, parse, WinddownCommandSchema, WinddownQuerySchema, type MoguriSdk } from "@moguri-dev/sdk";
 
 interface Options {
   session?: string; project?: string; workspace?: string; digest?: string; revision?: string;
