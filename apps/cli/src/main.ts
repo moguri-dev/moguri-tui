@@ -18,6 +18,7 @@ import { DocumentReadOptionsSchema, DocumentSearchOptionsSchema, DocumentListOpt
 import { KanbanSourceSchema, PriceProviderSchema } from "../../../packages/sdk/src/index.ts";
 import { queuedSlash } from "./queued-commands.ts";
 import { KupoModeSchema, ScheduledTimingSchema, parseAutomationWorkflow, executeInterruptedCommand } from "../../../packages/sdk/src/index.ts";
+import { PersonaDefinitionSchema, RoundupFiltersSchema, personasSlash, roundupSummary } from "../../../packages/sdk/src/index.ts";
 import { parse as parseYaml } from "yaml";
 import { AttentionFiltersSchema, MyWorkFiltersSchema, ProjectWorkspaceModeSchema } from "../../../packages/sdk/src/index.ts";
 
@@ -238,6 +239,12 @@ moguri automations list [--project ID | --no-project] | runs [ID]
 moguri automations create WORKFLOW_FILE (--project ID | --no-project) [--paused]   YAML/JSON: name, schedule, steps (- prompt: / - script:), controls
 moguri automations update ID WORKFLOW_FILE | enable ID | pause ID | run ID | stop RUN_ID | delete ID [--stop-running]
   Each run starts a new chat in the project. Script steps run repository-trusted scripts Local only, under normal approval.
+moguri roundups [show] [--filters JSON] [--json] | status | refresh | wait RUN_ID | stop RUN_ID
+moguri roundups configure SOURCE_IDS [BOTS] | schedule on|off | schedule set SCHEDULE_FILE
+  Dependency update roundup over configured My Work sources (comma-separated IDs). Read-only, no model call; schedules use automation schedule syntax.
+moguri personas list | runs | presets | add PRESET | create DEFINITION_FILE | update HANDLE DEFINITION_FILE
+moguri personas enable|pause HANDLE | delete HANDLE [--stop-running] | stop RUN_ID
+  Custom agents (personas) start off. Tag an enabled one with @handle in a message; its subsession starts under Manual autonomy.
 moguri session delete --session ID --revision N --confirm-remove [--children delete|detach] [--confirm-running]
   Child-tree actions can also use the saved Settings / Retention preference. Deletion preserves ordinary artifacts and Git resources.
   Archiving or deleting a running session (or one with running subsessions) stops its work and always needs --confirm-running.
@@ -865,6 +872,42 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "stop" && args[0]) output(await sdk.automations.stopRun(args[0]));
       else if (action === "delete" && args[0]) output(await sdk.automations.delete(args[0], { stopRunning: values["stop-running"] }));
       else throw new Error("Use automations list, runs [ID], create WORKFLOW_FILE (--project ID | --no-project) [--paused], update ID WORKFLOW_FILE, enable ID, pause ID, run ID, stop RUN_ID or delete ID [--stop-running].");
+    } else if (group === "roundups") {
+      const schedule = async (path: string) => {
+        const file = await stat(path);
+        if (!file.isFile() || file.size > 16384) throw new Error("Choose a schedule file of at most 16 KiB. Nothing was saved.");
+        return parseAutomationWorkflow({ name: "Dependency roundup", schedule: parseYaml(await readFile(path, "utf8")), steps: [{ prompt: "Roundup schedule check." }] }).definition.schedule;
+      };
+      if (!action || action === "show") {
+        const roundup = await sdk.roundups.query(values.filters ? parse(RoundupFiltersSchema, JSON.parse(values.filters)) : {});
+        if (values.json) output(roundup); else console.log(roundupSummary(roundup));
+      } else if (action === "status") output({ settings: sdk.roundups.settings(), runs: sdk.roundups.runs() });
+      else if (action === "refresh") output(await sdk.roundups.refresh());
+      else if (action === "wait" && args[0]) output(await sdk.roundups.wait(args[0]));
+      else if (action === "stop" && args[0]) output(await sdk.roundups.cancel(args[0]));
+      else if (action === "configure" && args[0]) {
+        const current = sdk.roundups.settings();
+        output(await sdk.roundups.configure({ sourceIds: args[0].split(",").filter(Boolean), bots: args[1] ? args[1].split(",").filter(Boolean) : current?.bots,
+          schedule: current?.schedule ?? null, scheduleEnabled: current?.status === "active" }));
+      } else if (action === "schedule" && (args[0] === "on" || args[0] === "off")) output(await sdk.roundups.setSchedule(args[0] === "on"));
+      else if (action === "schedule" && args[0] === "set" && args[1]) {
+        const current = sdk.roundups.settings();
+        if (!current) throw new Error("Configure roundups first with: moguri roundups configure SOURCE_IDS.");
+        output(await sdk.roundups.configure({ sourceIds: current.sourceIds, bots: current.bots, schedule: await schedule(args[1]), scheduleEnabled: current.status === "active" }));
+      } else throw new Error("Use roundups [show] [--filters JSON] [--json], status, refresh, wait RUN_ID, stop RUN_ID, configure SOURCE_IDS [BOTS], schedule on|off or schedule set SCHEDULE_FILE.");
+    } else if (group === "personas") {
+      const definition = async (path: string) => {
+        const file = await stat(path);
+        if (!file.isFile() || file.size > 64 * 1024) throw new Error("Choose a custom agent definition file of at most 64 KiB. Nothing was saved.");
+        return parse(PersonaDefinitionSchema, parseYaml(await readFile(path, "utf8")));
+      };
+      if (action === "create" && args[0]) output(await sdk.personas.create(await definition(args[0])));
+      else if (action === "update" && args[0] && args[1]) output(await sdk.personas.update(args[0], await definition(args[1])));
+      else if (action === "delete" && args[0]) output(await sdk.personas.delete(args[0], { stopRunning: values["stop-running"] }));
+      else {
+        const result = await personasSlash(sdk, [action ?? "list", ...args].join(" "));
+        console.log(result.kind === "text" ? result.text : result.kind === "ok" ? result.message : JSON.stringify(result));
+      }
     } else if (group === "session") {
       if (action === "create") {
         let overrides: ControlDefaults | undefined;

@@ -1,3 +1,4 @@
+import type { IntakeClock } from "../apps/service/src/session-intake.ts";
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -22,7 +23,8 @@ export async function connectGithubSdk(sdk: MoguriSdk): Promise<void> {
     await delay(10);
   }
 }
-export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, configuredProvider?: ProviderAdapter, retentionKey: Buffer = randomBytes(32), integrations: IntegrationOptions = {}) {
+export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, configuredProvider?: ProviderAdapter, retentionKey: Buffer = randomBytes(32), integrations: IntegrationOptions = {},
+  intakeClock?: IntakeClock) {
   const parent = resolve(".moguri", "qualification");
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const directory = join(parent, `generated-github-service-${randomUUID()}`);
@@ -45,6 +47,7 @@ export async function githubServiceFixture(options: GitHubWorkflowOptions = {}, 
   let service: Awaited<ReturnType<typeof startService>> | undefined, sdk: MoguriSdk | undefined;
   try {
     service = await startService({ stateDir, retentionKey, provider, platform: {
+      ...(intakeClock ? { intakeClock } : {}),
       terminal: { executable: process.execPath, args: ["-e", "process.stdin.resume()"], defaultRoot: home },
       integrations: { ...integrations, githubCliRead: async (endpoint, root, signal) => {
         if (!options.runProgram) throw new MoguriError("github_cli_unavailable", "Generated fixture has no authenticated GitHub CLI account.", 403);
@@ -99,7 +102,7 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
       labels: [{ ...repositoryLabels[0]! }], assignees: [{ login: "generated-owner" }], requested_reviewers: [{ login: "generated-reviewer" }], commits: 2, changed_files: 1,
       base: { ref: "main", sha: head, repo: repository }, head: { ref: "generated-feature", sha: head, repo: repository } });
     type GeneratedPull = ReturnType<typeof pull>;
-    const issues = [issue(7)], pulls: GeneratedPull[] = [];
+    const issues = [issue(7)], pulls: GeneratedPull[] = [], deletedBranches = new Set<string>();
     const firstCommit = `c0ffee${"0".repeat(34)}`;
     const commits = () => [{ sha: firstCommit, message: "Generated first commit\n\nGenerated commit details.", date: "2026-01-01T00:00:00Z" },
       { sha: head, message: "Generated head commit", date: "2026-01-01T01:00:00Z" }].map((value) => ({ sha: value.sha, html_url: `${repository.html_url}/commit/${value.sha}`,
@@ -223,6 +226,28 @@ export async function githubApplicationFixture(options: { provider?: ProviderAda
         }
         data = selected;
       }
+      else if (method === "PUT" && /^repos\/generated-owner\/fixture\/pulls\/\d+\/merge$/.test(path)) {
+        const selected = pulls.find((item) => item.number === Number(path.split("/")[4]));
+        if (!selected || selected.state !== "open" || selected.draft || fields.sha !== selected.head.sha) return "HTTP/2.0 409 Conflict\r\n\r\n{}";
+        const sha = `feed${"0".repeat(36)}`;
+        Object.assign(selected, { merged: true, state: "closed", merged_at: "2026-01-05T00:00:00Z", merge_commit_sha: sha }); recordEvent(selected.number, "merged");
+        data = { merged: true, sha, message: "Pull Request successfully merged" };
+      }
+      else if (/^repos\/generated-owner\/fixture\/git\/refs?\/heads\//.test(path)) {
+        const name = decodeURIComponent(path.split("/heads/")[1]!);
+        if (deletedBranches.has(name) || !pulls.some((item) => item.head.ref === name)) return "HTTP/2.0 404 Not Found\r\n\r\n{}";
+        if (method === "DELETE") { deletedBranches.add(name); return "HTTP/2.0 204 No Content\r\n\r\n"; }
+        data = { ref: `refs/heads/${name}`, object: { type: "commit", sha: pulls.find((item) => item.head.ref === name)!.head.sha } };
+      }
+      else if (path === "graphql" && /revertPullRequest/.test(fields.query ?? "")) {
+        const selected = pulls.find((item) => item.node_id === fields.id);
+        if (!selected?.merged) data = { errors: [{ message: "Generated revert needs a merged pull request." }] };
+        else {
+          const created = pull(40 + pulls.length, `Revert "${selected.title}"`, `Reverts #${selected.number}`, fields.draft === "true");
+          created.head = { ref: `revert-${selected.number}-${selected.head.ref}`, sha: head, repo: repository }; pulls.push(created);
+          data = { data: { revertPullRequest: { revertPullRequest: { number: created.number, url: created.html_url, isDraft: created.draft, repository: { nameWithOwner: repository.full_name } } } } };
+        }
+      }
       else if (path === "graphql" && /convertPullRequestToDraft|markPullRequestReadyForReview/.test(fields.query ?? "")) {
         const operation = fields.query!.includes("convertPullRequestToDraft") ? "convertPullRequestToDraft" : "markPullRequestReadyForReview";
         const selected = pulls.find((item) => item.node_id === fields.id);
@@ -335,5 +360,6 @@ process.exit(result.status ?? 67);
       closePull: (number: number) => { const selected = pulls.find((pull) => pull.number === number); if (!selected) throw new Error("Generated PR is absent."); selected.state = "closed"; },
       changeSource: () => { changedBody = true; }, changeAccount: (id: number) => { accountId = id; }, writes: () => ({ issues: issueWrites, pulls: prWrites }),
       reviewComments: (number: number) => structuredClone(reviewComments.get(number) ?? []), driftReviewComments: () => { reviewCommentDrift = true; },
+      deletedBranches: () => [...deletedBranches],
       workItem: (number: number): (ReturnType<typeof issue> & Partial<GeneratedPull>) | undefined => structuredClone(workItem(number)), timeline: (number: number) => structuredClone(timeline(number)) };
 }

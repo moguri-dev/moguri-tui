@@ -5,10 +5,13 @@ import { githubServiceFixture } from "./github-workflows-fixture.ts";
 import { runProgram } from "../apps/service/src/program.ts";
 import type { GithubScope } from "../packages/sdk/src/index.ts";
 import type { GitHubWorkflowOptions } from "../apps/service/src/github-workflows.ts";
+import type { IntakeClock } from "../apps/service/src/session-intake.ts";
 
 export interface GeneratedWorkPull {
   number: number; state: "open" | "closed"; merged: boolean; head: string; updatedAt: string;
   title: string; body: string; requests: { kind: "user" | "team" | "bot" | "mannequin" | "enterprise-team"; login: string }[];
+  /** Generated PR author, branch and labels; defaults are the repository account and a generated feature branch. */
+  author?: string; headRef?: string; labels?: string[];
   threads: { id: string; commentId: number; resolved: boolean; outdated: boolean }[];
   decision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
 }
@@ -17,12 +20,15 @@ export interface GeneratedWorkRepository {
   pulls: GeneratedWorkPull[]; checks: Record<string, unknown>[]; statuses: Record<string, unknown>[]; runs: Record<string, unknown>[];
   annotations: Record<string, unknown>[]; revoked: boolean; outage: boolean;
   malformedThreads: boolean; repeatedCursor: boolean; countOverride?: number;
+  /** Answer every read except the account check with a generated provider rate limit. */
+  rateLimited?: boolean;
   pullPages?: number[][];
 }
 export async function myWorkFixture(options: {
   beforeRead?: (repository: GeneratedWorkRepository, path: string, signal: AbortSignal) => Promise<void>;
   now?: () => number; retentionKey?: Buffer;
   wait?: GitHubWorkflowOptions["wait"];
+  intakeClock?: IntakeClock;
 } = {}) {
   const repositories = new Map<string, GeneratedWorkRepository>(), calls: { root: string; method: string; path: string }[] = [];
   const fixture = await githubServiceFixture({ now: options.now, wait: options.wait, runProgram: async (executable, args, request) => {
@@ -36,6 +42,7 @@ export async function myWorkFixture(options: {
     request.signal.throwIfAborted();
     if (repo.revoked && path !== "user") return "HTTP/2.0 403 Forbidden\r\n\r\n{}";
     if (repo.outage && path !== "user") return "HTTP/2.0 502 Bad Gateway\r\n\r\n{}";
+    if (repo.rateLimited && path !== "user") return "HTTP/2.0 403 Forbidden\r\nx-ratelimit-remaining: 0\r\nx-ratelimit-reset: 1893456000\r\n\r\n{}";
     const fields: Record<string, string> = {};
     for (let index = 0; index < args.length - 1; index++) if (["--raw-field", "--field"].includes(args[index]!)) {
       const field = args[index + 1]!, split = field.indexOf("="); fields[field.slice(0, split)] = field.slice(split + 1);
@@ -47,8 +54,9 @@ export async function myWorkFixture(options: {
       ssh_url: `git@github.com:${repo.repository}.git`, clone_url: `https://github.com/${repo.repository}.git`, license: { spdx_id: "MIT" } };
     const pull = (value: GeneratedWorkPull) => ({ id: value.number + 100, number: value.number, state: value.state,
       merged: value.merged, title: value.title, body: value.body, draft: false, updated_at: value.updatedAt,
-      html_url: `https://github.com/${repo.repository}/pull/${value.number}`, user: { login: repo.account },
-      base: { ref: "main", sha: value.head, repo: metadata }, head: { ref: "generated-feature", sha: value.head, repo: metadata } });
+      html_url: `https://github.com/${repo.repository}/pull/${value.number}`, user: { login: value.author ?? repo.account },
+      ...(value.labels ? { labels: value.labels.map((name, index) => ({ id: 700 + index, name, color: "ededed" })) } : {}),
+      base: { ref: "main", sha: value.head, repo: metadata }, head: { ref: value.headRef ?? "generated-feature", sha: value.head, repo: metadata } });
     let data: unknown, next = false;
     const paginate = (values: unknown[]) => {
       next = page * perPage < values.length; return values.slice((page - 1) * perPage, page * perPage);
@@ -105,7 +113,7 @@ export async function myWorkFixture(options: {
       default_branch: "main", description: "Generated inbox metadata", license: { spdx_id: "MIT" } });
     return Response.json({ number: pull.number, html_url: `https://github.com/${repo.repository}/pull/${pull.number}`,
       state: pull.state, merged: pull.merged, merged_at: pull.merged ? "2026-01-01T00:00:00Z" : null, draft: false, head: { sha: pull.head } });
-  } });
+  } }, options.intakeClock);
   const head = fixture.git(["rev-parse", "HEAD"]);
   const addRepository = async (name: string, account: string, id: number, original = false, repository = `generated-owner/${name}`) => {
     const root = original ? fixture.root : join(fixture.directory, name);
