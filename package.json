@@ -1,79 +1,65 @@
 {
-  "name": "moguri",
+  "name": "@moguri-dev/tui",
   "version": "0.32.0-alpha.1",
-  "private": true,
+  "description": "The Moguri terminal UI and the moguri command-line interface.",
   "license": "MIT",
-  "description": "A local-first AI coding workspace for terminal and desktop",
   "type": "module",
-  "bin": {
-    "moguri": "bin/moguri.mjs"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moguri-dev/moguri-tui.git"
+  },
+  "homepage": "https://github.com/moguri-dev/moguri-tui#readme",
+  "bugs": {
+    "url": "https://github.com/moguri-dev/moguri-tui/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "engines": {
     "node": ">=26.4.0 <27"
   },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "bin": {
+    "moguri": "bin/moguri.mjs"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "docs/third-party.md"
+  ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/tui/tsconfig.json --noEmit",
     "test": "node --import tsx --test --test-concurrency=1 --test-force-exit tests/*.test.ts",
-    "test:matrix": "node --import tsx --test --test-concurrency=1 tests/matrix/*.test.ts",
-    "generate:covering": "node --import tsx scripts/generate-milestone-covering-array.mjs",
-    "test:e2e": "playwright test",
-    "verify:update": "node --import tsx scripts/verify-update-package.mjs",
-    "spike": "node scripts/spikes.mjs",
-    "spike:sessions": "node scripts/session-spikes.mjs",
     "start": "node scripts/launch.mjs tui",
-    "desktop": "node scripts/launch.mjs desktop",
-    "service": "node scripts/launch.mjs service",
     "dev:tui": "node --import tsx apps/tui/src/main.tsx",
     "cli": "node dist/cli.mjs",
-    "package:mac": "npm run build && node scripts/package.mjs"
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@moguri-dev/sdk": "0.32.0-alpha.1",
     "@opentui/core": "0.6.6",
     "@opentui/react": "0.6.6",
-    "@pierre/diffs": "1.6.4",
-    "@types/node": "26.6.5",
-    "ghostty-web": "0.4.0",
-    "hast-util-to-jsx-runtime": "2.3.6",
-    "lowlight": "3.3.0",
-    "lucide-react": "1.77.0",
-    "node": "26.12.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "react-markdown": "10.1.0",
-    "remark-gfm": "4.0.1",
-    "semver": "7.8.5",
-    "typebox": "1.3.27",
     "yaml": "2.9.1"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "1.3.0",
-    "@electron/packager": "20.3.0",
-    "@modelcontextprotocol/sdk": "1.32.1",
-    "@playwright/test": "1.64.1",
     "@resvg/resvg-js": "2.6.2",
+    "@types/node": "26.6.5",
     "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@types/ws": "8.18.2",
-    "@vitejs/plugin-react": "6.1.2",
-    "electron": "44.9.3",
     "esbuild": "0.28.2",
+    "node": "26.12.0",
     "node-pty": "1.2.0-beta.18",
-    "playwright-core": "1.64.1",
-    "sharp": "0.35.5",
     "spdx-license-list": "6.12.0",
     "tsx": "4.23.15",
-    "typescript": "7.0.2",
-    "vite": "8.3.4",
-    "ws": "8.22.0"
-  },
-  "main": "dist/desktop/main.mjs",
-  "overrides": {
-    "glob": "14.0.3",
-    "minimatch": "11.0.3",
-    "encoding-sniffer": "1.0.2",
-    "node-fetch": "npm:node-fetch-native@1.6.7"
+    "typescript": "7.0.2"
   },
   "allowScripts": {
     "esbuild@0.28.2": true,

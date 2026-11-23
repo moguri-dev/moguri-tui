@@ -54,7 +54,7 @@ export function renderNotices(entries) {
     "# Third-party notices", "",
     "Moguri's own code is licensed under the MIT License (`LICENSE.md`). The build bundles the third-party packages below into Moguri's JavaScript files.",
     "Each package remains under its own license, reproduced here. The MIT License does not relicense any of them.",
-    "Packages shipped unbundled in the app's `node_modules`, including the Moguri SDK's own notices and native speech runtimes, keep their own license files in place.", "",
+    "Dependencies installed unbundled in `node_modules`, including the Moguri SDK with its own notices, keep their own license files in place.", "",
   ];
   if (restricted.length) {
     lines.push("## Components without an OSI-approved license", "",

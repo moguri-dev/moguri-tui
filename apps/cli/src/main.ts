@@ -1,8 +1,9 @@
 import { parseArgs } from "node:util";
 import { readFile, stat } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { resolve as resolvePath } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import { createRequire } from "node:module";
 import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, restartMoguriService, ensureConnection, stateDirectory, waitForStorageRelocation } from "@moguri-dev/sdk/node";
 import { serveGatewayMcp } from "@moguri-dev/sdk/mcp";
@@ -21,6 +22,18 @@ import { KupoModeSchema, ScheduledTimingSchema, parseAutomationWorkflow, execute
 import { PersonaDefinitionSchema, RoundupFiltersSchema, personasSlash, roundupSummary } from "@moguri-dev/sdk";
 import { parse as parseYaml } from "yaml";
 import { AttentionFiltersSchema, MyWorkFiltersSchema, ProjectWorkspaceModeSchema } from "@moguri-dev/sdk";
+
+/** The Moguri desktop source checkout this CLI is installed in, found from the CLI's own package directory. */
+function desktopCheckout(start: string): string {
+  for (let directory = start; ; directory = dirname(directory)) {
+    try {
+      const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as { name?: unknown; main?: unknown };
+      if (manifest.name === "moguri" && manifest.main === "dist/desktop/main.mjs") return directory;
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (dirname(directory) === directory) break;
+  }
+  throw new Error("moguri desktop runs only from a Moguri desktop source checkout. Open the installed Moguri app instead.");
+}
 
 export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
@@ -373,10 +386,10 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     return;
   }
   if (group === "tui" || group === "desktop") {
-    const require = createRequire(import.meta.url);
     const root = fileURLToPath(new URL(".", import.meta.url));
-    const runtime = group === "desktop" ? require("electron") as string : process.execPath;
-    const args = group === "desktop" ? [fileURLToPath(new URL("..", import.meta.url))] : [`${root}tui.mjs`, ...(values.project ? ["--project", values.project] : []), ...(values.profile ? ["--profile", values.profile] : [])];
+    const desktop = group === "desktop" ? desktopCheckout(root) : null;
+    const runtime = desktop ? createRequire(join(desktop, "package.json"))("electron") as string : process.execPath;
+    const args = desktop ? [desktop] : [`${root}tui.mjs`, ...(values.project ? ["--project", values.project] : []), ...(values.profile ? ["--profile", values.profile] : [])];
     const child = spawn(runtime, args, { stdio: "inherit", env: { ...process.env, ...(values.profile ? { MOGURI_PROFILE_ID: values.profile } : {}) } });
     await new Promise<void>((resolve, reject) => { child.on("error", reject); child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`Moguri ${group} exited with ${code}.`))); });
     return;

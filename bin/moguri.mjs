@@ -4,7 +4,11 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const runtime = require.resolve("node/bin/node");
+// Inside the Moguri app, the pinned Node runtime package sits beside this one. A standalone install runs on the
+// current Node, which package.json engines already constrains.
+let runtime = process.execPath;
+try { runtime = require.resolve("node/bin/node"); }
+catch (error) { if (error?.code !== "MODULE_NOT_FOUND") throw error; }
 const worker = process.argv[2] === "worker";
 const entrypoint = worker ? new URL(import.meta.resolve("@moguri-dev/sdk/remote-bridge")) : new URL("../dist/cli.mjs", import.meta.url);
 const args = process.argv.slice(worker ? 3 : 2);
