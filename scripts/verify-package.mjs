@@ -2,7 +2,7 @@
 // Usage: node scripts/verify-package.mjs [path/to/moguri-dev-tui-<version>.tgz]
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -37,6 +37,19 @@ try {
   // Outside a desktop source checkout, moguri desktop refuses instead of guessing an app location.
   const desktop = run(join(consumer, "node_modules", ".bin", "moguri"), ["desktop"]);
   assert.notEqual(desktop.status, 0); assert.match(desktop.stderr, /runs only from a Moguri desktop source checkout/);
+  // A packaged desktop app has the desktop manifest but no Electron of its own. It refuses too, and never runs an
+  // Electron that happens to sit in a parent folder.
+  const decoy = join(temporary, "node_modules", "electron"), marker = join(temporary, "decoy-electron-ran");
+  await mkdir(decoy, { recursive: true });
+  await writeFile(join(decoy, "package.json"), JSON.stringify({ name: "electron", main: "index.js" }));
+  await writeFile(join(decoy, "decoy.sh"), `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`, { mode: 0o755 });
+  await writeFile(join(decoy, "index.js"), `module.exports = ${JSON.stringify(join(decoy, "decoy.sh"))};\n`);
+  const consumerManifest = await readFile(join(consumer, "package.json"), "utf8");
+  await writeFile(join(consumer, "package.json"), JSON.stringify({ ...JSON.parse(consumerManifest), name: "moguri", main: "dist/desktop/main.mjs" }));
+  const packaged = run(join(consumer, "node_modules", ".bin", "moguri"), ["desktop"]);
+  await writeFile(join(consumer, "package.json"), consumerManifest);
+  assert.notEqual(packaged.status, 0); assert.match(packaged.stderr, /runs only from a Moguri desktop source checkout/);
+  await assert.rejects(access(marker), { code: "ENOENT" }, "moguri desktop ran an Electron from a parent folder.");
   // Embedders such as the desktop app run commands through the ./cli entry.
   const embedded = run(process.execPath, ["--input-type=module", "--eval", `const { run } = await import("${manifest.name}/cli"); await run(["--help"]);`]);
   assert.equal(embedded.status, 0, embedded.stderr); assert.match(embedded.stdout, /Moguri CLI \+ SDK/);

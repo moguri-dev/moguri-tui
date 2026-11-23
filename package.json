@@ -1,6 +1,6 @@
 {
   "name": "@moguri-dev/tui",
-  "version": "0.32.0-alpha.1",
+  "version": "0.32.0-alpha.2",
   "description": "The Moguri terminal UI and the moguri command-line interface.",
   "license": "MIT",
   "type": "module",
