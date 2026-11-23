@@ -94,7 +94,7 @@ documents every API.
 | `npm run build` | `dist/cli.mjs`, `dist/tui.mjs` and `dist/THIRD_PARTY_NOTICES.md` |
 | `npm test` | Full Node suite, including the native TUI interaction test. Run `npm run build` first: some tests execute the `dist` bundles |
 | `node --import tsx --test tests/<name>.test.ts` | One or more focused suites |
-| `npm run verify:package` | Packs the package, installs it in a generated consumer and checks the CLI, the TUI, the `moguri desktop` refusal and the remote bridge |
+| `npm run verify:package` | Packs the package, installs it in a generated consumer and checks the CLI, the TUI, the `moguri desktop` refusal (also in a packaged-app layout, where an Electron in a parent folder must never run) and the remote bridge |
 | `npm audit --audit-level=moderate` | Dependency audit |
 
 Tests use generated fixtures only: no real credentials, personal data,
