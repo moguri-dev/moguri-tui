@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { MoguriError } from "@moguri-dev/sdk";
 import { fixtureProvider, reviewNativeTools, waitFor } from "./fixture.ts";
 import { githubApplicationFixture } from "./github-workflows-fixture.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 const terms = "is:issue is:open (UI OR UX OR redesign OR polish)";
 const exec = promisify(execFile);
@@ -81,7 +82,7 @@ test("incomplete, oversized, foreign and inconsistent GitHub search results neve
   });
 });
 
-test("an actual Autopilot worker discovers authenticated GitHub reads and never asks permission for qualified calls", { timeout: 20_000 }, async () => {
+test("an actual Autopilot worker discovers authenticated GitHub reads and never asks permission for qualified calls", { timeout: ciTime(20_000) }, async () => {
   const provider = await fixtureProvider({ respond: (_request, index) => index === 1 ?
     { tool: { name: "discover_tools", args: { query: "github_read" } } } : index === 2 ?
       { tool: { name: "github_read", args: { action: "project" } } } : index === 3 ?

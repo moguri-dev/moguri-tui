@@ -9,8 +9,9 @@ import { setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
 import { appendLegacyAutopilot } from "./fixtures/legacy-state.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("actual TUI keys share knowledge promotion, disabled hooks and exact reviewed Git actions without inference", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
+test("actual TUI keys share knowledge promotion, disabled hooks and exact reviewed Git actions without inference", { skip: process.platform !== "darwin", timeout: ciTime(30_000) }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const git = initializeGeneratedRepository(fixture.project);
   for (const [name, value] of [["core.hooksPath", "/dev/null"], ["tag.gpgSign", "false"], ["commit.gpgSign", "false"]]) git(["config", name!, value!]);

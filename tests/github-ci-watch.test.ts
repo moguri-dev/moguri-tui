@@ -8,8 +8,9 @@ import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { integrationCommand } from "../apps/cli/src/integrations.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("the exact selected PR discovers its retained watch across SDK views without relinking or another job", { timeout: 30_000 }, async () => {
+test("the exact selected PR discovers its retained watch across SDK views without relinking or another job", { timeout: ciTime(30_000) }, async () => {
   const f = await githubApplicationFixture();
   let reopened: MoguriSdk | undefined;
   try {
@@ -33,7 +34,7 @@ test("the exact selected PR discovers its retained watch across SDK views withou
   } finally { reopened?.disconnect(); await f.close(); }
 });
 
-test("concurrent independently reviewed views reuse one exact PR watcher and never create duplicate pollers", { timeout: 30_000 }, async () => {
+test("concurrent independently reviewed views reuse one exact PR watcher and never create duplicate pollers", { timeout: ciTime(30_000) }, async () => {
   let release!: () => void;
   const held = new Promise<void>((resolve) => { release = resolve; });
   const f = await githubApplicationFixture({ beforeRead: async (path) => { if (path.includes("/check-runs?")) await held; } });
@@ -59,7 +60,7 @@ test("concurrent independently reviewed views reuse one exact PR watcher and nev
   } finally { release(); other?.disconnect(); await f.close(); }
 });
 
-test("a live watch retains its complete original observation and stops when that PR changes head", { timeout: 30_000 }, async () => {
+test("a live watch retains its complete original observation and stops when that PR changes head", { timeout: ciTime(30_000) }, async () => {
   let reached!: () => void, release!: () => void;
   const polling = new Promise<void>((resolve) => { reached = resolve; });
   const held = new Promise<void>((resolve) => { release = resolve; });
@@ -89,7 +90,7 @@ test("a live watch retains its complete original observation and stops when that
   } finally { release(); await f.close(); }
 });
 
-test("incomplete or duplicate declared CI collections never become a complete green observation", { timeout: 30_000 }, async (t) => {
+test("incomplete or duplicate declared CI collections never become a complete green observation", { timeout: ciTime(30_000) }, async (t) => {
   for (const variant of ["partial-count", "invalid-count", "duplicate"] as const) await t.test(variant, async () => {
     const f = await githubApplicationFixture();
     try {
@@ -110,7 +111,7 @@ test("incomplete or duplicate declared CI collections never become a complete gr
   });
 });
 
-test("owned watch cancellation preserves observations and never labels failed cleanup acknowledged", { timeout: 30_000 }, async (t) => {
+test("owned watch cancellation preserves observations and never labels failed cleanup acknowledged", { timeout: ciTime(30_000) }, async (t) => {
   for (const failedCleanup of [false, true]) await t.test(failedCleanup ? "unconfirmed cleanup" : "acknowledged stop", async () => {
     let reached!: () => void;
     const polling = new Promise<void>((resolve) => { reached = resolve; });
@@ -138,7 +139,7 @@ test("owned watch cancellation preserves observations and never labels failed cl
   });
 });
 
-test("a captured CI view rejects a replaced checkout before accessing GitHub through that replacement root", { timeout: 30_000 }, async () => {
+test("a captured CI view rejects a replaced checkout before accessing GitHub through that replacement root", { timeout: ciTime(30_000) }, async () => {
   const f = await githubApplicationFixture();
   try {
     const project = await f.sdk.github.project(f.scope);
@@ -152,7 +153,7 @@ test("a captured CI view rejects a replaced checkout before accessing GitHub thr
   } finally { await f.close(); }
 });
 
-test("CLI and shared TUI commands derive the same uniquely linked PR without repository or SHA re-entry", { timeout: 30_000 }, async () => {
+test("CLI and shared TUI commands derive the same uniquely linked PR without repository or SHA re-entry", { timeout: ciTime(30_000) }, async () => {
   const f = await githubApplicationFixture();
   try {
     const project = await f.sdk.github.project(f.scope);
@@ -171,7 +172,7 @@ test("CLI and shared TUI commands derive the same uniquely linked PR without rep
   } finally { await f.close(); }
 });
 
-test("startup-failed checks retain canonical links and source diagnostics even when no job log exists", { timeout: 30_000 }, async () => {
+test("startup-failed checks retain canonical links and source diagnostics even when no job log exists", { timeout: ciTime(30_000) }, async () => {
   const f = await githubApplicationFixture();
   try {
     const project = await f.sdk.github.project(f.scope), head = f.git(["rev-parse", "HEAD"]);
@@ -206,7 +207,7 @@ test("PR classification never calls skipped, neutral, cancelled, timed-out or un
   assert.equal(githubPrCiState([check, { ...check, id: 83, conclusion: "skipped" }]), "skipped");
 });
 
-test("no-checks and still-running deadlines retain actual observations without claiming GitHub timed out", { timeout: 30_000 }, async (t) => {
+test("no-checks and still-running deadlines retain actual observations without claiming GitHub timed out", { timeout: ciTime(30_000) }, async (t) => {
   for (const running of [false, true]) await t.test(running ? "running" : "no-checks", async () => {
     let clock = Date.now();
     const f = await githubApplicationFixture({ github: { now: () => clock, wait: async (_ms, signal) => { signal.throwIfAborted(); clock += 5000; } } });
@@ -226,7 +227,7 @@ test("no-checks and still-running deadlines retain actual observations without c
   });
 });
 
-test("closed PR, changed numeric account and revoked access stop only the original watcher and retain its last evidence", { timeout: 30_000 }, async (t) => {
+test("closed PR, changed numeric account and revoked access stop only the original watcher and retain its last evidence", { timeout: ciTime(30_000) }, async (t) => {
   for (const variant of ["closed", "account", "revoked", "rate-limit"] as const) await t.test(variant, async () => {
     let reached!: () => void, release!: () => void, fail = false;
     const polling = new Promise<void>((resolve) => { reached = resolve; }), held = new Promise<void>((resolve) => { release = resolve; });
@@ -253,7 +254,7 @@ test("closed PR, changed numeric account and revoked access stop only the origin
   });
 });
 
-test("another view cannot use a missing original receipt to admit a second PR poller", { timeout: 30_000 }, async () => {
+test("another view cannot use a missing original receipt to admit a second PR poller", { timeout: ciTime(30_000) }, async () => {
   let reached!: () => void, release!: () => void;
   const polling = new Promise<void>((resolve) => { reached = resolve; }), held = new Promise<void>((resolve) => { release = resolve; });
   const f = await githubApplicationFixture({ github: { wait: async (_ms, signal) => { reached(); await held; signal.throwIfAborted(); } } });
@@ -271,7 +272,7 @@ test("another view cannot use a missing original receipt to admit a second PR po
   } finally { release(); await f.close(); }
 });
 
-test("all exact-head check, status and run pages are retained before a PR can show observed success", { timeout: 30_000 }, async () => {
+test("all exact-head check, status and run pages are retained before a PR can show observed success", { timeout: ciTime(30_000) }, async () => {
   const f = await githubApplicationFixture();
   try {
     const project = await f.sdk.github.project(f.scope), head = f.git(["rev-parse", "HEAD"]);
@@ -292,7 +293,7 @@ test("all exact-head check, status and run pages are retained before a PR can sh
   } finally { await f.close(); }
 });
 
-test("a CI deadline with unconfirmed owned-reader cleanup stays partial instead of becoming a completed empty result", { timeout: 30_000 }, async () => {
+test("a CI deadline with unconfirmed owned-reader cleanup stays partial instead of becoming a completed empty result", { timeout: ciTime(30_000) }, async () => {
   const f = await githubApplicationFixture({ beforeRead: async (path, signal) => {
     if (!path.includes("/check-runs?")) return;
     await new Promise<void>((_resolve, reject) => {
@@ -313,7 +314,7 @@ test("a CI deadline with unconfirmed owned-reader cleanup stays partial instead 
   } finally { await f.close(); }
 });
 
-test("the compiled CLI reads exact session PR history through the shared CI API without a model", { timeout: 30_000 }, async () => {
+test("the compiled CLI reads exact session PR history through the shared CI API without a model", { timeout: ciTime(30_000) }, async () => {
   const f = await githubApplicationFixture();
   try {
     const project = await f.sdk.github.project(f.scope), selected = await f.sdk.github.source(f.scope,

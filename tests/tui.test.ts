@@ -32,9 +32,10 @@ import { nativeApiFixture } from "./fixtures/native-api.ts";
 import { compoundApiFixture } from "./fixtures/compound-api.ts";
 import { winddownApiFixture } from "./fixtures/winddown-api.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 const nativeSandbox = await nativeConfiguration();
-test("actual TUI thinking, effort and exact context shortcuts share saved model controls without inference", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("actual TUI thinking, effort and exact context shortcuts share saved model controls without inference", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture({ reasoning: true, contextWindow: 32769 }), client = await new MoguriClient(fixture.service.connection).ready();
   await fixture.configure(); await client.refresh();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -76,7 +77,7 @@ test("TUI /archive asks how to handle subsessions and remembers the selected cas
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("TUI /archive always warns before stopping a running subsession, even with a saved cascade choice", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("TUI /archive always warns before stopping a running subsession, even with a saved cascade choice", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   await fixture.configure();
   const settings = client.settings.get()!;
@@ -103,7 +104,7 @@ test("TUI /archive always warns before stopping a running subsession, even with 
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("actual TUI model dropdown selects default automatic Kupo and runs its sole model without a classifier", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("actual TUI model dropdown selects default automatic Kupo and runs its sole model without a classifier", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture({ responseMode: "text", maxOutputTokens: 128 }), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 150, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -124,7 +125,7 @@ test("actual TUI model dropdown selects default automatic Kupo and runs its sole
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("actual TUI keys review reserved budget data and separately create an accepted-work checkpoint branch without another model or source index/HEAD change", { skip: process.platform !== "darwin", timeout: 25000 }, async () => {
+test("actual TUI keys review reserved budget data and separately create an accepted-work checkpoint branch without another model or source index/HEAD change", { skip: process.platform !== "darwin", timeout: ciTime(25000) }, async () => {
   const f = await winddownApiFixture({ git: true }), accepted = await f.accept(), checkpoint = await f.run(); assert.ok(f.git);
   const index = await readFile(join(f.project, ".git/index")), head = f.git(["rev-parse", "HEAD"]);
   const setup = await createTestRenderer({ width: 180, height: 90, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -150,7 +151,7 @@ test("actual TUI keys review reserved budget data and separately create an accep
   } finally { await closeTui(root, setup, f.sdk, () => f.close()); }
 });
 
-test("actual TUI keys review public compound cost and exact host tests, inspect the recommendation and edit only independent report metadata", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
+test("actual TUI keys review public compound cost and exact host tests, inspect the recommendation and edit only independent report metadata", { skip: process.platform !== "darwin", timeout: ciTime(30000) }, async () => {
   const f = await compoundApiFixture(); await f.configure();
   const setup = await createTestRenderer({ width: 180, height: 90, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -186,7 +187,7 @@ test("actual TUI keys review public compound cost and exact host tests, inspect 
   } finally { await closeTui(root, setup, f.sdk, () => f.close()); }
 });
 
-test("native TUI keys review retained Sandbox outputs and confirm separate source publication without a model call", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("native TUI keys review retained Sandbox outputs and confirm separate source publication without a model call", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const fixture = await nativePublicationFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
     const deadline = Date.now() + 8000;
@@ -215,7 +216,7 @@ test("native TUI keys review retained Sandbox outputs and confirm separate sourc
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("actual native TUI qualifies the guest, prepares reviewed source, schedules unsent input and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: 90_000 }, async () => {
+test("actual native TUI qualifies the guest, prepares reviewed source, schedules unsent input and uses exact human tool/publication decisions", { skip: !nativeSandbox, timeout: ciTime(90_000) }, async () => {
   assert.ok(nativeSandbox);
   const fixture = await nativeApiFixture(nativeSandbox), { sdk, provider, project, service } = fixture;
   await reviewNativeTools(sdk);
@@ -276,7 +277,7 @@ test("actual native TUI qualifies the guest, prepares reviewed source, schedules
   } finally { await closeTui(root, setup, sdk, () => fixture.close(passed)); }
 });
 
-test("native bracketed paste preserves exact long text in a scoped file after a Unicode cursor and keeps queue-only semantics", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("native bracketed paste preserves exact long text in a scoped file after a Unicode cursor and keeps queue-only semantics", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 45, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -303,7 +304,7 @@ test("native bracketed paste preserves exact long text in a scoped file after a 
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("native TUI keys inspect exact retained role contracts without dispatching, accepting or changing their input", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("native TUI keys inspect exact retained role contracts without dispatching, accepting or changing their input", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const f = await roleContractFixture(), created = await f.run(); await f.settled(created.id);
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -319,7 +320,7 @@ test("native TUI keys inspect exact retained role contracts without dispatching,
   } finally { await closeTui(root, setup, f.sdk, () => f.close()); }
 });
 
-test("native TUI keys read provider-declared metadata through the shared SDK without calling a model or treating it as approval", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("native TUI keys read provider-declared metadata through the shared SDK without calling a model or treating it as approval", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const f = await modelEvidenceFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
     const deadline = Date.now() + 8000;
@@ -335,7 +336,7 @@ test("native TUI keys read provider-declared metadata through the shared SDK wit
   } finally { await closeTui(root, setup, f.sdk, () => f.close()); }
 });
 
-test("native TUI keys inspect final-role provenance and keep its origin through separate staging and actual-user application", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
+test("native TUI keys inspect final-role provenance and keep its origin through separate staging and actual-user application", { skip: process.platform !== "darwin", timeout: ciTime(30_000) }, async () => {
   const f = await roleProposalFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
     const deadline = Date.now() + 8000;
@@ -361,7 +362,7 @@ test("native TUI keys inspect final-role provenance and keep its origin through 
   } finally { await closeTui(root, setup, f.sdk, () => f.close()); }
 });
 
-test("native TUI keys inspect independent recorded roles and edit metadata without replacing raw inputs or calling a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("native TUI keys inspect independent recorded roles and edit metadata without replacing raw inputs or calling a model", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const f = await roleSequenceFixture(); f.start(0); f.result(0); f.start(1); f.result(1); f.complete();
   const original = f.current().inputDigest, setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -380,7 +381,7 @@ test("native TUI keys inspect independent recorded roles and edit metadata witho
   } finally { await closeTui(root, setup, f.sdk, () => f.close()); }
 });
 
-test("native TUI keys review one owned generated proposal and edit only retained metadata without staging source files", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("native TUI keys review one owned generated proposal and edit only retained metadata without staging source files", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const f = await candidateGenerationFixture(), client = f.sdk;
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -403,7 +404,7 @@ test("native TUI keys review one owned generated proposal and edit only retained
   } finally { await closeTui(root, setup, client, () => f.close()); }
 });
 
-test("the native TUI inspects planned model holds separately from actual call history without dispatching a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the native TUI inspects planned model holds separately from actual call history without dispatching a model", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const f = await budgetPlanFixture(), plan = f.create();
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -421,7 +422,7 @@ test("the native TUI inspects planned model holds separately from actual call hi
   } finally { await closeTui(root, setup, f.sdk, () => f.close()); }
 });
 
-test("the native TUI stages and separately applies exact reviewed candidate bytes through the shared SDK without a model", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("the native TUI stages and separately applies exact reviewed candidate bytes through the shared SDK without a model", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const f = await candidateApiFixture(), client = f.sdk;
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -457,7 +458,7 @@ test("the native TUI stages and separately applies exact reviewed candidate byte
   } finally { await closeTui(root, setup, f.sdk, () => f.close()); }
 });
 
-test("the actual TUI explicitly indexes and searches its pinned SSH repository without a provider or Local memory fallback", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("the actual TUI explicitly indexes and searches its pinned SSH repository without a provider or Local memory fallback", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const f = await remoteMemoryFixture(), client = await new MoguriClient(f.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 55, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -482,7 +483,7 @@ test("the actual TUI explicitly indexes and searches its pinned SSH repository w
   } finally { await closeTui(root, setup, client, () => f.close()); }
 });
 
-test("the actual TUI reviews the captured SSH account and explicitly refreshes private repository metadata without a model", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("the actual TUI reviews the captured SSH account and explicitly refreshes private repository metadata without a model", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const f = await remoteGithubFixture(), client = await new MoguriClient(f.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 55, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -504,7 +505,7 @@ test("the actual TUI reviews the captured SSH account and explicitly refreshes p
   } finally { await closeTui(root, setup, client, () => f.close()); }
 });
 
-test("the actual TUI explicitly opens and inspects a captured Remote user console without feeding stdin through the composer", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("the actual TUI explicitly opens and inspects a captured Remote user console without feeding stdin through the composer", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const fixture = await remoteFixture({ exposeModels: false, platform: { terminal: { executable: "/bin/sh", args: ["-c", "printf 'GENERATED_TUI_REMOTE_CONSOLE\\n'; exec cat"] } } });
   const client = await new MoguriClient(fixture.service.connection).ready();
   await fixture.probe(); await client.sessions.env(fixture.sessionId, "Remote");
@@ -531,7 +532,7 @@ test("the actual TUI explicitly opens and inspects a captured Remote user consol
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI reviews, explicitly grants and revokes Remote MCP authority without a model or implicit forwarding", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI reviews, explicitly grants and revokes Remote MCP authority without a model or implicit forwarding", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await remoteFixture({ exposeModels: false }), client = await new MoguriClient(fixture.service.connection).ready();
   await fixture.probe(); await client.sessions.env(fixture.sessionId, "Remote");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -562,7 +563,7 @@ test("the actual TUI reviews, explicitly grants and revokes Remote MCP authority
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI keeps a pending Remote plan editor and stops only its owned save", { skip: process.platform !== "darwin", timeout: 20_000 }, async (t) => {
+test("the actual TUI keeps a pending Remote plan editor and stops only its owned save", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async (t) => {
   const fixture = await remotePlanFixture(), gate = holdRemoteFrame(t, fixture.controller.remote, "approval");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -589,7 +590,7 @@ test("the actual TUI keeps a pending Remote plan editor and stops only its owned
   } finally { gate.release(); await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("the actual TUI edits and retains a reviewed Remote plan without a Local opener or model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI edits and retains a reviewed Remote plan without a Local opener or model", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await remotePlanFixture();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -615,7 +616,7 @@ test("the actual TUI edits and retains a reviewed Remote plan without a Local op
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("the actual TUI explicitly generates, reviews, applies and restores one metered context proposal", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI explicitly generates, reviews, applies and restores one metered context proposal", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await compactionFixture();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -649,7 +650,7 @@ test("the actual TUI explicitly generates, reviews, applies and restores one met
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("the actual TUI queries dated aggregate and retained per-call telemetry without another model request", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI queries dated aggregate and retained per-call telemetry without another model request", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture({ stream: { chunks: ["Generated ", "TUI ", "telemetry."], delayMs: 25 } }), client = await new MoguriClient(fixture.service.connection).ready();
   await fixture.configure(); await fixture.send("Generated TUI telemetry source."); await fixture.terminal();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -675,7 +676,7 @@ test("the actual TUI queries dated aggregate and retained per-call telemetry wit
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI reviews and explicitly refreshes repository metadata without running a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI reviews and explicitly refreshes repository metadata without running a model", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   let lookups = 0;
   const fixture = await setupFixture({ platform: { integrations: { fetch: async () => { lookups++; return Response.json(generatedRepositoryMetadata()); } } } });
   const client = await new MoguriClient(fixture.service.connection).ready(), git = initializeGeneratedRepository(fixture.project);
@@ -700,7 +701,7 @@ test("the actual TUI reviews and explicitly refreshes repository metadata withou
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI reads SSH files, changes and plan text without a local opener or model request", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI reads SSH files, changes and plan text without a local opener or model request", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await remoteFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   initializeGeneratedRepository(fixture.workspace);
   await writeFile(join(fixture.workspace, "fixture.txt"), "Generated remote-only TUI file edit.\n");
@@ -729,7 +730,7 @@ test("the actual TUI reads SSH files, changes and plan text without a local open
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI selects opt-in Single, clears fixed tuning and shows owned routing provenance", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI selects opt-in Single, clears fixed tuning and shows owned routing provenance", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await routedFixture();
   await fixture.sdk.sessions.configure(fixture.sessionId, { ...fixture.session().controls, modelId: fixture.solverId });
   await fixture.sdk.sessions.modelOptions(fixture.sessionId, { contextWindow: 8192 });
@@ -754,7 +755,7 @@ test("the actual TUI selects opt-in Single, clears fixed tuning and shows owned 
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("the actual TUI shows solver advice but waits for a different explicit user choice", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI shows solver advice but waits for a different explicit user choice", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture({ questionRecommendation: { choiceIndex: 1, reason: "Generated Guided comparison favors the second choice." } }), client = await new MoguriClient(fixture.service.connection).ready();
   await client.sessions.configure(fixture.sessionId, { ...fixture.session().controls, modelId: fixture.modelId, autonomy: "Guided" });
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -777,7 +778,7 @@ test("the actual TUI shows solver advice but waits for a different explicit user
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI creates and renames an isolated profile, flushes old drafts and switches back without rebinding editors", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("the actual TUI creates and renames an isolated profile, flushes old drafts and switches back without rebinding editors", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const fixture = await profileFixture(), first = await fixture.sdk.sessions.create(null, "Generated terminal Default");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -819,7 +820,7 @@ test("the actual TUI creates and renames an isolated profile, flushes old drafts
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("the actual OpenTUI client selects Copilot, streams, stops and receives a second client's draft", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual OpenTUI client selects Copilot, streams, stops and receives a second client's draft", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture();
   const client = new MoguriClient(fixture.service.connection);
   const setup = await createTestRenderer({ width: 120, height: 40, kittyKeyboard: true, exitOnCtrlC: false });
@@ -864,7 +865,7 @@ test("the actual OpenTUI client selects Copilot, streams, stops and receives a s
   }
 });
 
-test("the actual TUI creates local issues and masks Linear credentials without sending a model turn", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI creates local issues and masks Linear credentials without sending a model turn", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture();
   const client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
@@ -896,7 +897,7 @@ test("the actual TUI creates local issues and masks Linear credentials without s
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI views, edits and restores the SDK system prompt with an explicit warning", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI views, edits and restores the SDK system prompt with an explicit warning", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture();
   const client = new MoguriClient(fixture.service.connection);
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
@@ -942,7 +943,7 @@ test("the actual TUI views, edits and restores the SDK system prompt with an exp
   }
 });
 
-test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, copy and side commands", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, copy and side commands", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture();
   const client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 100, height: 38, kittyKeyboard: true, exitOnCtrlC: false });
@@ -992,7 +993,7 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI creates Home-backed chats, shows attention and keeps metachat changes separately reviewed without filesystem authority", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI creates Home-backed chats, shows attention and keeps metachat changes separately reviewed without filesystem authority", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 46, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
@@ -1038,7 +1039,7 @@ test("the actual TUI creates Home-backed chats, shows attention and keeps metach
     assert.equal(JSON.stringify(fixture.requests).includes('"name":"write_file"'), false);
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
-test("the actual TUI captures explicit typed files and inspects them without pretending clipboard images or calling a model", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI captures explicit typed files and inspects them without pretending clipboard images or calling a model", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
@@ -1061,7 +1062,7 @@ test("the actual TUI captures explicit typed files and inspects them without pre
     assert.equal(fixture.requests.length, 0);
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
-test("the actual TUI creates and opens an explicit managed root through shared slash commands", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI creates and opens an explicit managed root through shared slash commands", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture(), git = initializeGeneratedRepository(fixture.project), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -1083,7 +1084,7 @@ test("the actual TUI creates and opens an explicit managed root through shared s
     assert.equal(git(["branch", "--show-current"]), "main"); assert.equal(fixture.requests.length, 0);
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
-test("the actual TUI edits a retained document through shared commands and browses it after session deletion", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI edits a retained document through shared commands and browses it after session deletion", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
@@ -1108,7 +1109,7 @@ test("the actual TUI edits a retained document through shared commands and brows
     assert.equal(fixture.requests.length, 0);
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
-test("the actual TUI answers a canonical question through its choices without inventing consent", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI answers a canonical question through its choices without inventing consent", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   await fixture.configure();
   const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -1131,7 +1132,7 @@ test("the actual TUI answers a canonical question through its choices without in
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
-test("the actual TUI sets warned estimated caps and opens authoritative cumulative accounting with F7", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("the actual TUI sets warned estimated caps and opens authoritative cumulative accounting with F7", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture({ maxOutputTokens: 128 }); await fixture.configure();
   const client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);

@@ -5,8 +5,9 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { winddownApiFixture } from "./fixtures/winddown-api.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("shared CLI/TUI checkpoint review cannot turn model output into Git authority; exact actual-user confirmation publishes only accepted work", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+test("shared CLI/TUI checkpoint review cannot turn model output into Git authority; exact actual-user confirmation publishes only accepted work", { skip: process.platform !== "darwin", timeout: ciTime(20000) }, async () => {
   const f = await winddownApiFixture({ git: true });
   const cli = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), "winddown", ...args],
     { env: { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") } });

@@ -11,6 +11,7 @@ import { TuiApp } from "../apps/tui/src/App.tsx";
 import { myWorkFixture } from "./my-work-fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
 import { waitFor } from "./fixture.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 const exec = promisify(execFile);
 async function frameUntil(setup: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
@@ -21,7 +22,7 @@ async function frameUntil(setup: Awaited<ReturnType<typeof createTestRenderer>>,
   } while (Date.now() < deadline);
   throw new Error(`Actual My Work frame did not contain ${text}:\n${setup.captureCharFrame()}`);
 }
-test("compiled CLI uses shared source review, query/filter/refresh/status and exact idle follow-up without writes", { timeout: 30000 }, async () => {
+test("compiled CLI uses shared source review, query/filter/refresh/status and exact idle follow-up without writes", { timeout: ciTime(30000) }, async () => {
   const f = await myWorkFixture();
   const cli = async (...args: string[]) => {
     const { stdout } = await exec(process.execPath, [resolve("bin/moguri.mjs"), "my-work", ...args], {

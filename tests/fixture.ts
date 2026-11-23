@@ -17,6 +17,7 @@ import { legacyCandidateJournal } from "./fixtures/legacy-candidate-journal.ts";
 import { legacySessionControlsJournal } from "./fixtures/legacy-session-controls-journal.ts";
 import { legacyCheckpointJournal } from "./fixtures/legacy-checkpoint-journal.ts";
 import type { MoguriSdk } from "@moguri-dev/sdk";
+import { ciTime } from "./fixtures/time-scale.ts";
 export const GENERATED_RETENTION_KEY = Buffer.alloc(32, 0x67);
 export async function admitGeneratedSkill(sdk: MoguriSdk, sessionId: string, skillId: string, expectedDigest: string) {
   const { inspection } = await sdk.skills.inspect(sessionId, skillId, expectedDigest);
@@ -64,9 +65,9 @@ export async function homeCommand(sdk: MoguriSdk, sessionId: string, command: st
   return sdk.tools.execute(sessionId, tool.name, { command, timeoutMs }, tool.schemaDigest);
 }
 
-// Generous by default: only a condition that is late waits longer, and shared CI runners can be twice as slow as a developer Mac.
+// Generous by default: only a condition that is late waits longer. MOGURI_TEST_TIME_SCALE stretches it on slower CI runners.
 export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 20_000): Promise<NonNullable<T>> {
-  const deadline = Date.now() + timeout;
+  const deadline = Date.now() + ciTime(timeout);
   for (;;) {
     const value = read();
     if (value) return value;

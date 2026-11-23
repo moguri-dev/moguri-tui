@@ -6,8 +6,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { candidateGenerationFixture, generatedCandidatePatch } from "./fixtures/candidate-generation-api.ts";
 import { waitFor } from "./fixture.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("shared generation commands require explicit cost review and preserve canonical model output for separate staging", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
+test("shared generation commands require explicit cost review and preserve canonical model output for separate staging", { skip: process.platform !== "darwin", timeout: ciTime(30_000) }, async () => {
   const f = await candidateGenerationFixture();
   try {
     const value = { stageWorkspaceId: f.workspace.id, input: f.input };
@@ -23,7 +24,7 @@ test("shared generation commands require explicit cost review and preserve canon
   } finally { await f.close(); }
 });
 
-test("compiled generation CLI performs one reviewed model request, reports actual provenance and waits for a separately confirmed stage", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
+test("compiled generation CLI performs one reviewed model request, reports actual provenance and waits for a separately confirmed stage", { skip: process.platform !== "darwin", timeout: ciTime(30_000) }, async () => {
   const f = await candidateGenerationFixture(), execute = (args: string[]) => promisify(execFile)(process.execPath, [resolve("dist/cli.mjs"), ...args], {
     env: { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") },
   });
@@ -43,7 +44,7 @@ test("compiled generation CLI performs one reviewed model request, reports actua
   } finally { await f.close(); }
 });
 
-test("compiled generation CLI SIGINT stops only its exact owned request and exits unsuccessfully with retained unknown usage", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("compiled generation CLI SIGINT stops only its exact owned request and exits unsuccessfully with retained unknown usage", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const f = await candidateGenerationFixture();
   try {
     const input = { ...f.input, task: "generated slow CLI interrupt" }, path = join(f.directory, "generated-interrupt-selection.json"); await writeFile(path, JSON.stringify(input));
