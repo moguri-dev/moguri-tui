@@ -17,7 +17,7 @@ upgrade and restart unchanged. Desktop and TUI resolve the same SDK color tokens
 neither client owns a second theme preference store.
 
 The current terminal presentation is
-[compact and chat-first](sdk-platform.md#compact-chat-first-terminal), replacing
+[compact and chat-first](https://github.com/moguri-dev/moguri-sdk/blob/main/docs/architecture/sdk-platform.md#compact-chat-first-terminal), replacing
 the historical double-line menu frames and loading splash. A single-row header
 and navigation leave room for conversation; the growing composer's accent rail
 is the main visual landmark. Content and actual pending decisions take priority
@@ -85,7 +85,7 @@ actions wait for an acknowledged compatible client.
 Held text, including `/yolo`, remains inert. Only unheld stop/approval/yolo
 controls are live. Real user-gate scheduling, original continuation reviews,
 retained responses and draft provenance follow
-[the shared command contract](workspace-experience.md#shared-queued-command-primitives).
+[the shared command contract](https://github.com/mbianchidev/moguri/blob/main/docs/architecture/workspace-experience.md#shared-queued-command-primitives).
 
 ### Historical independent schema lineage and integration gate
 

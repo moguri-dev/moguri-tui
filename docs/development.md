@@ -1,99 +1,129 @@
 # Development
 
-This guide is for contributors working on Moguri itself. Users installing the
-app should read [installation](installation.md). Coding agents also follow
-[`AGENTS.md`](../AGENTS.md), which holds the repository's binding architecture
-rules.
+This guide is for contributors working on the Moguri TUI and CLI. Coding
+agents also follow [`AGENTS.md`](../AGENTS.md), which holds the repository's
+binding rules.
 
 ## Toolchain
 
-- macOS on Apple silicon runs the full suite, the desktop app and packaging.
-  Linux runs the portable foundation only; it is not release qualification.
+- macOS on Apple silicon runs the full suite and is the qualified platform.
+  Linux runs a portable subset only; it is not release qualification.
 - Node.js 26, pinned in [`.node-version`](../.node-version). `package.json`
-  enforces it with `engine-strict`.
+  requires `>=26.4.0 <27`, and the committed [`.npmrc`](../.npmrc) enforces
+  it with `engine-strict`.
 - npm (bundled with Node). Dependencies are pinned exactly (`save-exact`).
-- Git, and the GitHub CLI (`gh`) for GitHub workflows and releases.
-- Python 3.10+ for DMG packaging. Packaging creates a private virtual
-  environment under `.native/` and never changes system Python packages.
-- Apple `container` only for Sandbox images, packaging and native
-  qualification.
+- Git, and the GitHub CLI (`gh`) for releases.
+- `rg` (ripgrep) on `PATH`: the SDK service's file tools run it, and several
+  client tests reach them.
 
 ## Setup and running
 
 The SDK, the local service and its workers come from the public
 [`@moguri-dev/sdk`](https://github.com/moguri-dev/moguri-sdk) package on
-GitHub Packages, which needs a token to install even public packages. The committed `.npmrc` maps the `@moguri-dev` scope to
-`https://npm.pkg.github.com`; put a classic token with `read:packages` in your
-user `~/.npmrc` (`//npm.pkg.github.com/:_authToken=...`) or `NODE_AUTH_TOKEN`
-before `npm ci`. Never commit it.
+GitHub Packages, which needs a token to install even public packages. The
+committed `.npmrc` maps the `@moguri-dev` scope to
+`https://npm.pkg.github.com`. Put a classic token with `read:packages` in your
+user `~/.npmrc` as `//npm.pkg.github.com/:_authToken=...` before `npm ci`; the
+value can be `${NODE_AUTH_TOKEN}` to read it from the environment. Never
+commit it.
 
 ```sh
 npm ci
 npm run build
-npm start -- --project /absolute/path/to/project   # TUI
-npm run desktop                                    # desktop app, same service and sessions
+npm start -- --project /absolute/path/to/project   # the built TUI
+npm run dev:tui                                    # the TUI from TypeScript sources, no build
+npm run cli -- --help                              # the built CLI
 ```
 
-`npm run dev:tui` runs the TUI from TypeScript sources without building;
-`npm run service` runs the installed SDK's service. State goes to
-`~/Library/Application Support/Moguri` unless `MOGURI_STATE_DIR` points to a
-private directory; use a separate one for development. The service writes
-diagnostics to `service.log` in that directory; see
-[state, policy and diagnostics](setup.md#state-policy-and-diagnostics).
+`npm start` runs `dist/tui.mjs` on the pinned `node` runtime package from the
+dev dependencies, and refuses until you build. `node scripts/launch.mjs service`
+starts the installed SDK's local service the same way. The service keeps state
+in `~/Library/Application Support/Moguri` unless `MOGURI_STATE_DIR` points to
+a private directory; use a separate one for development.
+
+The `moguri` launcher ([`bin/moguri.mjs`](../bin/moguri.mjs)) uses the pinned
+`node` runtime package when it is installed beside it, as in the Moguri
+desktop app, and otherwise the current Node. `moguri worker --stdio` runs the
+SDK's remote bridge for SSH hosts. `moguri desktop` works only from a Moguri
+desktop source checkout, where it finds the desktop package above the
+installed package, and refuses otherwise. Embedders such as the desktop app
+import `@moguri-dev/tui/cli` (`dist/cli.mjs`) and call its `run(argv)`, which
+runs one command with the CLI's error reporting.
 
 ## Code layout
 
 | Path | Contents |
 | --- | --- |
-| `apps/cli`, `apps/tui` | The `moguri` CLI and the OpenTUI terminal client |
-| `apps/desktop` | The Electron main process and the React renderer |
-| `node_modules/@moguri-dev/sdk` | The SDK, protocol, local control plane and workers, from [moguri-sdk](https://github.com/moguri-dev/moguri-sdk). Clients import only `@moguri-dev/sdk`, `/node`, `/react`, `/mcp` and `/remote-bridge`; tests may also use the unstable `/testing` entry |
-| `scripts` | Build, packaging, spikes, qualification and [release](releasing.md) tooling |
-| `tests` | Node test runner suites; `tests/e2e` holds hidden Electron Playwright specs |
-| `docs` | User, developer and architecture documentation; see the [index](README.md) |
+| `apps/cli` | The `moguri` CLI, bundled to `dist/cli.mjs` |
+| `apps/tui` | The OpenTUI + React terminal UI, bundled to `dist/tui.mjs` |
+| `bin` | `moguri.mjs`, the package's `moguri` command |
+| `scripts` | `build.mjs` (bundles and notices), `launch.mjs` (`npm start`), `verify-package.mjs` and `third-party-notices.mjs` |
+| `tests` | Node test runner suites and shared helpers (`fixture.ts`) |
+| `tests/fixtures` | Helpers that generate services, repositories, documents and API fixtures for the suites |
+| `docs` | Development, release, third-party and architecture notes |
 
-The [architecture overview](architecture/overview.md), the
-[implementation specification](implementation.md) and
-[architecture decisions](architecture/decisions.md) explain how the pieces fit.
-The [SDK reference](sdk.md) documents the public API and CLI.
+The build keeps every dependency external, so `dist` holds only this
+repository's code and the SDK stays a normal installed dependency.
+
+## SDK entrypoints
+
+Product code in `apps/cli` and `apps/tui` imports only the supported
+`@moguri-dev/sdk` entrypoints. `tests/client-sdk-boundary.test.ts` enforces
+this.
+
+| Export | Contents |
+| --- | --- |
+| `@moguri-dev/sdk` | Browser-safe typed client, protocol schemas and helpers |
+| `@moguri-dev/sdk/node` | Service discovery, startup and the in-process runtime |
+| `@moguri-dev/sdk/react` | React bindings |
+| `@moguri-dev/sdk/mcp` | The gateway MCP server |
+| `@moguri-dev/sdk/remote-bridge` | The SSH worker bridge behind `moguri worker --stdio` |
+| `@moguri-dev/sdk/testing` | Unstable test support. Tests may use it; product code never does |
+
+To change the SDK, the protocol or the service, work in
+[moguri-sdk](https://github.com/moguri-dev/moguri-sdk), release a new version,
+then bump the exact pin here. The
+[SDK reference](https://github.com/moguri-dev/moguri-sdk/blob/main/docs/sdk.md)
+documents every API.
 
 ## Checks
 
 | Command | Purpose |
 | --- | --- |
-| `npm run typecheck` | TypeScript for the desktop, CLI, TUI and tests |
-| `npm run build` | CLI, TUI and desktop bundles and `dist/THIRD_PARTY_NOTICES.md` |
-| `npm test` | Full Node suite, including the native TUI interaction test and the covering-array milestone matrix. Run `npm run build` first: some tests execute `dist` bundles |
+| `npm run typecheck` | TypeScript for the CLI and tests, then the TUI |
+| `npm run build` | `dist/cli.mjs`, `dist/tui.mjs` and `dist/THIRD_PARTY_NOTICES.md` |
+| `npm test` | Full Node suite, including the native TUI interaction test. Run `npm run build` first: some tests execute the `dist` bundles |
 | `node --import tsx --test tests/<name>.test.ts` | One or more focused suites |
-| `npm run test:e2e` | Hidden Electron end-to-end tests. Needs a build and `npm exec -- playwright install chromium` once |
+| `npm run verify:package` | Packs the package, installs it in a generated consumer and checks the CLI, the TUI, the `moguri desktop` refusal and the remote bridge |
 | `npm audit --audit-level=moderate` | Dependency audit |
-| `npm run test:matrix` | Opt-in full 10,080-cell milestone matrix |
 
 Tests use generated fixtures only: no real credentials, personal data,
-microphones or live provider logins. Electron tests run hidden and never open
-the real GitHub authorization page. Phase 0 and platform spikes
-(`npm run spike`, `npm run spike:*`) are listed in `AGENTS.md`.
+microphones or live provider logins. Node prints an experimental FFI warning
+for OpenTUI; it is expected.
 
 ## Continuous integration
 
 [`ci.yml`](../.github/workflows/ci.yml) runs only on pushes to `main`, on
-macOS and Ubuntu: audit, typecheck, build, `npm test` and, on macOS,
-`test:e2e`. It installs the public SDK package with the workflow's own `GITHUB_TOKEN`. It
-does not run on pull requests or feature branches, so run
-the relevant checks locally before opening a PR. The tag-triggered
-[`release.yml`](../.github/workflows/release.yml) verifies and publishes
-releases; see [releasing](releasing.md).
+macOS and Ubuntu: it installs ripgrep, then runs `npm ci`, the audit,
+typecheck, build, `npm test` and `verify:package`. It reads the public SDK
+package with the workflow's own `GITHUB_TOKEN`. It does not run on pull
+requests or feature branches, so run the relevant checks locally before
+opening a PR. The tag-triggered
+[`release.yml`](../.github/workflows/release.yml) publishes releases; see
+[releasing](releasing.md).
 
-## Packaging
+## Related repositories
 
-`npm run package:mac` builds an ad-hoc-signed development app, DMG, ZIP and
-integrity manifest under `release/`. `npm run verify:update` checks the ZIP
-through the production updater and the DMG layout without launching the app.
-Packaging requires `LICENSE.md` and the generated third-party notices in the
-app bundle; see [third-party components](third-party.md).
+- [moguri-sdk](https://github.com/moguri-dev/moguri-sdk) owns the SDK,
+  protocol, local service, runtime and workers. Its
+  [decisions](https://github.com/moguri-dev/moguri-sdk/blob/main/docs/architecture/decisions.md)
+  are authoritative for the shared stack.
+- The [Moguri desktop app](https://github.com/mbianchidev/moguri) (moving
+  later to `moguri-dev/moguri-desktop`) bundles this package to ship the CLI
+  and TUI, and installs the `moguri` command. It holds the product-wide
+  specification, setup, settings and roadmap.
 
 ## Documentation
 
-Put durable documentation under `docs/` and update the relevant setup,
-settings, architecture or protocol page in the same change. Keep the
-[README](../README.md) short and link here instead.
+Put durable documentation under `docs/` and update the relevant page in the
+same change. Keep the [README](../README.md) short and link here instead.

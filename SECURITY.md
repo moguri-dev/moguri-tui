@@ -53,8 +53,10 @@ its GitHub Releases page.
 
 Out of scope: third-party services and tools that Moguri connects to or
 launches, such as model providers, GitHub, Claude Code, Codex and SendBox.
-Report those to their maintainers. The [third-party component list](docs/third-party.md)
+Report those to their maintainers. The
+[third-party component list](https://github.com/mbianchidev/moguri/blob/main/docs/third-party.md)
 names them.
 
 Moguri's macOS builds are ad-hoc signed and not notarized. That is a known
-property of the alpha, not a vulnerability. See [releasing](docs/releasing.md).
+property of the alpha, not a vulnerability. See
+[releasing](https://github.com/mbianchidev/moguri/blob/main/docs/releasing.md).

@@ -1,10 +1,17 @@
 # Bundled macOS command launcher
 
+> [!NOTE]
+> The desktop app's bundled and installed launchers (`dist/moguri` and
+> **Install `moguri` command**) live in the
+> [desktop repository](https://github.com/mbianchidev/moguri). This
+> repository owns the package launcher (`bin/moguri.mjs`) and the CLI
+> (`apps/cli`) that those launchers run. This page keeps the shared history.
+
 The desktop distribution includes the CLI, TUI, OpenTUI dependencies and pinned
 Node runtime, including for desktop-only users. Copying `Moguri.app` does not run
 the TUI or install a shell command.
 
-The current [protocol-89 responsiveness follow-up](startup-responsiveness.md)
+The current [protocol-89 responsiveness follow-up](https://github.com/mbianchidev/moguri/blob/main/docs/architecture/startup-responsiveness.md)
 supersedes the earlier protocol-88 startup artifacts below. It preserves those
 entrypoint/ownership fixes and adds indexed reads, visible startup, bounded
 same-owner health recovery and counted session navigation. Earlier artifact

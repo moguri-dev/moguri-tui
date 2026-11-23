@@ -19,7 +19,8 @@ certification or a completed audit.
 
 ## Practices
 
-The [design rules](docs/design.md) are the detailed reference. In short:
+The [design rules](https://github.com/mbianchidev/moguri/blob/main/docs/design.md)
+are the detailed reference. In short:
 
 - Use semantic elements and native controls. Every icon button has an
   accessible name that matches its tooltip.
@@ -37,10 +38,12 @@ The [design rules](docs/design.md) are the detailed reference. In short:
 
 ## Checks
 
-- **Automated:** `tests/design-tokens.test.ts` checks WCAG contrast for every
-  palette in Dark and Light, and that components use the shared tokens. The
-  hidden Playwright suites (`npm run test:e2e`) find controls by role and
-  accessible name, so missing names fail tests.
+- **Automated:** in the
+  [desktop repository](https://github.com/mbianchidev/moguri),
+  `tests/design-tokens.test.ts` checks WCAG contrast for every palette in Dark
+  and Light, and that components use the shared tokens. Its hidden Playwright
+  suites (`npm run test:e2e`) find controls by role and accessible name, so
+  missing names fail tests.
 - **Manual:** for UI changes, check keyboard-only navigation, VoiceOver
   announcements for new controls and alerts, Increase Contrast, Reduce Motion
   and 200% zoom. Mention what you checked in your pull request.
