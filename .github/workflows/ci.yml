@@ -37,9 +37,16 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npm run typecheck
       - run: npm run build
-      - run: npm test
+      # Shared macOS runners run this suite about three times slower than a developer Mac, so a few
+      # harness deadlines can expire (moguri-dev/moguri-tui#1). Only failed tests rerun, once, with a
+      # warning; a test that fails twice fails the job.
+      - name: Run npm test
         env:
-          NODE_OPTIONS: --test-reporter=tap
+          NODE_OPTIONS: --test-reporter=tap --test-rerun-failures=${{ runner.temp }}/moguri-tui-test-state.json
+        run: |
+          npm test && exit 0
+          echo "::warning::Some tests failed on the first attempt; rerunning only those once (moguri-dev/moguri-tui#1)."
+          npm test
       - run: npm run verify:package
       - if: failure()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

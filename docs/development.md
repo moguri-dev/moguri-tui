@@ -106,7 +106,11 @@ for OpenTUI; it is expected.
 [`ci.yml`](../.github/workflows/ci.yml) runs only on pushes to `main`, on
 macOS and Ubuntu: it installs ripgrep, then runs `npm ci`, the audit,
 typecheck, build, `npm test` and `verify:package`. It reads the public SDK
-package with the workflow's own `GITHUB_TOKEN`. It does not run on pull
+package with the workflow's own `GITHUB_TOKEN`. Shared macOS runners run the
+suite about three times slower than a developer Mac, so CI reruns only the
+tests that failed, once, with a warning
+([#1](https://github.com/moguri-dev/moguri-tui/issues/1)); a test that fails
+twice fails the job. It does not run on pull
 requests or feature branches, so run the relevant checks locally before
 opening a PR. The tag-triggered
 [`release.yml`](../.github/workflows/release.yml) publishes releases; see
