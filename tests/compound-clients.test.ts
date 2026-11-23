@@ -7,7 +7,8 @@ import { test } from "node:test";
 import { compoundApiFixture } from "./fixtures/compound-api.ts";
 import { waitFor } from "./fixture.ts";
 
-test("shared slash and CLI compound commands preserve exact source/cost review and require a separate actual-user stage/test decision", { skip: process.platform !== "darwin", timeout: 25000 }, async () => {
+// It spawns the compiled CLI many times: about 6 s on a developer Mac, over 25 s on shared macOS runners (#1).
+test("shared slash and CLI compound commands preserve exact source/cost review and require a separate actual-user stage/test decision", { skip: process.platform !== "darwin", timeout: 60_000 }, async () => {
   const f = await compoundApiFixture(), sdk = f.sdk;
   const cli = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), "compound", ...args],
     { env: { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") } });
