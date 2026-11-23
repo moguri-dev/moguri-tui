@@ -1250,11 +1250,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
     } else throw new Error("Unknown command. Run moguri --help.");
   } finally { if (!keep) { try { await sdk.commands.detachAll(); } finally { sdk.disconnect(); } } }
 }
-if (import.meta.main) {
-  try { await main(process.argv.slice(2)); }
+/** Runs one moguri command with the CLI's user-facing error reporting; embedders such as the desktop app call this. */
+export async function run(argv: string[]): Promise<void> {
+  try { await main(argv); }
   catch (error) {
     const running = error instanceof Error && "code" in error && error.code === "session_running";
     console.error(error instanceof Error ? `${error.message}${running ? " Rerun with --confirm-running to stop it and continue." : ""}` : "Moguri command failed."); process.exitCode = 1;
   }
 }
+if (import.meta.main) await run(process.argv.slice(2));
 export { defaultSettings };

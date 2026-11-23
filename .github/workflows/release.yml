@@ -1,42 +1,60 @@
 name: Release
-# Triggered by the annotated vX.Y.Z tag that scripts/release.sh pushes after uploading a draft release built from that
-# commit. This workflow never builds: it re-verifies the draft's exact assets and is the only step that publishes it.
-# See docs/releasing.md.
 on:
   push:
-    tags: ['v*']
-permissions: {}
+    tags: ["v*"]
+permissions:
+  contents: write
+  packages: write
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  verify-and-publish:
+  publish:
     name: Verify and publish
     runs-on: macos-15
-    timeout-minutes: 60
-    permissions:
-      contents: write
-      packages: read
     env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      TAG: ${{ github.ref_name }}
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          fetch-depth: 0
-          persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
           cache: npm
-          # @moguri-dev/sdk is public on GitHub Packages, which still needs a token; the workflow token can read public packages.
           registry-url: https://npm.pkg.github.com
           scope: "@moguri-dev"
+      - name: Check the tag matches the package version
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "::error::Tag $GITHUB_REF_NAME does not match package version $version."; exit 1; }
       - run: npm ci --no-fund --no-progress
+      - run: npm audit --audit-level=moderate
+      - run: npm run typecheck
+      # npm pack's prepack build would print into its JSON, so build first and pack without lifecycle scripts.
+      - run: npm run build
+      - name: Pack
+        id: pack
+        run: |
+          file="$(npm pack --json --ignore-scripts | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          shasum -a 512 "$file" > SHA512SUMS
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+      - run: npm run verify:package -- "${{ steps.pack.outputs.file }}"
+      - name: Publish to GitHub Packages
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          tag="$(node -e 'const v=require("./package.json").version; const m=/-([a-z]+)/.exec(v); process.stdout.write(m ? m[1] : "latest")')"
+          if npm view "@moguri-dev/tui@$version" version >/dev/null 2>&1; then
+            echo "::notice::@moguri-dev/tui@$version is already published (a maintainer published it locally); the tag was only re-verified."
+          else
+            npm publish "${{ steps.pack.outputs.file }}" --tag "$tag"
+          fi
+      - name: Create the GitHub release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Audit dependencies at the tagged commit
-        run: npm audit --audit-level=moderate
-      - name: Verify and publish the draft release
-        run: node scripts/release/publish.mjs --tag "$TAG" --dir "$RUNNER_TEMP/release-assets"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          case "$version" in *-*) prerelease=--prerelease ;; *) prerelease= ;; esac
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "::notice::Release $GITHUB_REF_NAME already exists; it was not replaced."
+          else
+            gh release create "$GITHUB_REF_NAME" "${{ steps.pack.outputs.file }}" SHA512SUMS --title "Moguri TUI $version" --generate-notes $prerelease
+          fi

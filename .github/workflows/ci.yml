@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
   packages: read
-# One group per commit: a later push to main must not cancel the run that gates a release (docs/releasing.md).
+# One group per commit: a later push to main must not cancel another commit's verification.
 concurrency:
   group: ci-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
@@ -17,30 +17,30 @@ jobs:
       matrix:
         os: [macos-15, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # @moguri-dev/sdk is public on GitHub Packages, which still needs a token; the workflow token can read it.
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
           cache: npm
-          # @moguri-dev/sdk is public on GitHub Packages, which still needs a token; the workflow token can read public packages.
           registry-url: https://npm.pkg.github.com
           scope: "@moguri-dev"
+      # The service's lean file tools, which several client tests reach, run ripgrep.
+      - name: Install ripgrep
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then brew install ripgrep; else sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep; fi
+          rg --version
       - run: npm ci --no-fund --no-progress
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm audit --audit-level=moderate
       - run: npm run typecheck
       - run: npm run build
-      - if: runner.os == 'macOS'
-        run: npm exec -- playwright install chromium
       - run: npm test
         env:
           NODE_OPTIONS: --test-reporter=tap
-      - if: runner.os == 'macOS'
-        run: npm run test:e2e
-        env:
-          MOGURI_TEST_WINDOW: hidden
+      - run: npm run verify:package
       - if: failure()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:

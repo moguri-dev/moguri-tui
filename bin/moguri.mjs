@@ -14,7 +14,7 @@ const entrypoint = worker ? new URL(import.meta.resolve("@moguri-dev/sdk/remote-
 const args = process.argv.slice(worker ? 3 : 2);
 if (process.execPath === runtime) {
   if (worker) await import(entrypoint.href);
-  else { const { main } = await import(entrypoint.href); await main(args); }
+  else { const { run } = await import(entrypoint.href); await run(args); }
 } else {
   const child = spawn(runtime, [fileURLToPath(entrypoint), ...args], { stdio: "inherit" });
   process.on("SIGINT", () => {});

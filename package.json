@@ -26,6 +26,7 @@
     "moguri": "bin/moguri.mjs"
   },
   "exports": {
+    "./cli": "./dist/cli.mjs",
     "./package.json": "./package.json"
   },
   "files": [
@@ -40,7 +41,8 @@
     "start": "node scripts/launch.mjs tui",
     "dev:tui": "node --import tsx apps/tui/src/main.tsx",
     "cli": "node dist/cli.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "verify:package": "node scripts/verify-package.mjs"
   },
   "dependencies": {
     "@moguri-dev/sdk": "0.32.0-alpha.1",
