@@ -49,7 +49,7 @@ the first launch needs **System Settings > Privacy & Security > Open Anyway**.
 Follow the [installation guide](docs/installation.md) for the exact steps.
 
 **From source** (macOS on Apple silicon, Node.js 26, and a classic GitHub
-token with `read:packages` in `~/.npmrc` for the private `@moguri-dev/sdk`;
+token with `read:packages` in `~/.npmrc`, which GitHub Packages needs even for the public `@moguri-dev/sdk`;
 see [development](docs/development.md#setup-and-running)):
 
 ```sh

@@ -20,9 +20,9 @@ rules.
 
 ## Setup and running
 
-The SDK, the local service and its workers come from the private
+The SDK, the local service and its workers come from the public
 [`@moguri-dev/sdk`](https://github.com/moguri-dev/moguri-sdk) package on
-GitHub Packages. The committed `.npmrc` maps the `@moguri-dev` scope to
+GitHub Packages, which needs a token to install even public packages. The committed `.npmrc` maps the `@moguri-dev` scope to
 `https://npm.pkg.github.com`; put a classic token with `read:packages` in your
 user `~/.npmrc` (`//npm.pkg.github.com/:_authToken=...`) or `NODE_AUTH_TOKEN`
 before `npm ci`. Never commit it.

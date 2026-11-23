@@ -4,7 +4,7 @@
 - `docs/implementation.md` is the canonical implementation specification. `docs/vision.md` retains the product feature inventory and `docs/features.md` records implemented capabilities; `README.md` stays a short landing page linking to `docs/README.md`. `docs/architecture/decisions.md` is authoritative for the selected stack. Reconcile documentation with executable code/config once those exist.
 - Moguri is built from zero with borrowed libraries; it does not fork OpenCode or Pi. The stack is Node.js 26, OpenTUI + React, Electron + React, and a Moguri-owned worker loop using maintained `@earendil-works/pi-ai`. D06 explicitly permits Node/PTY supervision for this checkpoint; Rust helpers remain unvalidated. Change decisions in `docs/architecture/decisions.md`.
 - Before adding Moguri features, follow Phase 0: run the validation spikes listed in `docs/architecture/decisions.md` and record each pass or fail result with measurements under `docs/`.
-- The SDK, protocol, local service and workers live in `moguri-dev/moguri-sdk` and arrive here as the exact-pinned private `@moguri-dev/sdk` package from GitHub Packages (D75). `npm ci` needs a classic `read:packages` token in the user `~/.npmrc` or `NODE_AUTH_TOKEN`; never commit it. Change SDK code there, release it, then bump the pin here.
+- The SDK, protocol, local service and workers live in `moguri-dev/moguri-sdk` and arrive here as the exact-pinned public `@moguri-dev/sdk` package from GitHub Packages (D75). `npm ci` needs a classic `read:packages` token in the user `~/.npmrc` or `NODE_AUTH_TOKEN`; never commit it. Change SDK code there, release it, then bump the pin here.
 
 # Implementation Constraints
 
