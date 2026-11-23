@@ -4,6 +4,7 @@ on:
     branches: [main]
 permissions:
   contents: read
+  packages: read
 # One group per commit: a later push to main must not cancel the run that gates a release (docs/releasing.md).
 concurrency:
   group: ci-${{ github.ref }}-${{ github.sha }}
@@ -22,12 +23,12 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-          # @moguri-dev/sdk comes from GitHub Packages, which needs a read:packages token even in CI.
+          # @moguri-dev/sdk is public on GitHub Packages, which still needs a token; the workflow token can read public packages.
           registry-url: https://npm.pkg.github.com
           scope: "@moguri-dev"
       - run: npm ci --no-fund --no-progress
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.MOGURI_PACKAGES_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm audit --audit-level=moderate
       - run: npm run typecheck
       - run: npm run build

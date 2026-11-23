@@ -16,6 +16,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+      packages: read
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -29,12 +30,12 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-          # @moguri-dev/sdk comes from GitHub Packages, which needs a read:packages token even in CI.
+          # @moguri-dev/sdk is public on GitHub Packages, which still needs a token; the workflow token can read public packages.
           registry-url: https://npm.pkg.github.com
           scope: "@moguri-dev"
       - run: npm ci --no-fund --no-progress
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.MOGURI_PACKAGES_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Audit dependencies at the tagged commit
         run: npm audit --audit-level=moderate
       - name: Verify and publish the draft release

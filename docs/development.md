@@ -78,7 +78,7 @@ the real GitHub authorization page. Phase 0 and platform spikes
 
 [`ci.yml`](../.github/workflows/ci.yml) runs only on pushes to `main`, on
 macOS and Ubuntu: audit, typecheck, build, `npm test` and, on macOS,
-`test:e2e`. It installs the SDK with the `MOGURI_PACKAGES_TOKEN` secret. It
+`test:e2e`. It installs the public SDK package with the workflow's own `GITHUB_TOKEN`. It
 does not run on pull requests or feature branches, so run
 the relevant checks locally before opening a PR. The tag-triggered
 [`release.yml`](../.github/workflows/release.yml) verifies and publishes
