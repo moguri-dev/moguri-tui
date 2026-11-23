@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const runtime = require.resolve("node/bin/node");
 const worker = process.argv[2] === "worker";
-const entrypoint = new URL(worker ? "../dist/remote-bridge.mjs" : "../dist/cli.mjs", import.meta.url);
+const entrypoint = worker ? new URL(import.meta.resolve("@moguri-dev/sdk/remote-bridge")) : new URL("../dist/cli.mjs", import.meta.url);
 const args = process.argv.slice(worker ? 3 : 2);
 if (process.execPath === runtime) {
   if (worker) await import(entrypoint.href);
