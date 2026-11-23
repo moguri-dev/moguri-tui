@@ -7,8 +7,9 @@ import { TuiApp } from "../apps/tui/src/App.tsx";
 import { setupDecisions } from "./fixtures/decisions-api.ts";
 import { waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("actual TUI keys send Max work, inspect bounded provider evidence through shared slash and edit only independent report metadata", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+test("actual TUI keys send Max work, inspect bounded provider evidence through shared slash and edit only independent report metadata", { skip: process.platform !== "darwin", timeout: ciTime(20000) }, async () => {
   const f = await setupDecisions(), setup = await createTestRenderer({ width: 180, height: 90, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
     const deadline = Date.now() + 5000;

@@ -8,6 +8,7 @@ import { MoguriError, parse, unsettledWinddownCommit, WinddownCommandSchema, Win
 import { EventStore } from "@moguri-dev/sdk/testing";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 test("typed checkpoint source paths use the full file-path bounds, not artifact-ID bounds", () => {
   const paths = ["generated/".repeat(14) + "fixture.txt", "a".repeat(4096)];
@@ -21,7 +22,7 @@ test("typed checkpoint source paths use the full file-path bounds, not artifact-
     expectedRevision: 0, expectedDigest: "a".repeat(64), confirm: true }), /protocol schema/);
 });
 
-test("actual SSH checkpoint separately accepts source then publishes only at its pinned peer, preserving source index/HEAD and all-role charges", { skip: process.platform !== "darwin", timeout: 40000 }, async () => {
+test("actual SSH checkpoint separately accepts source then publishes only at its pinned peer, preserving source index/HEAD and all-role charges", { skip: process.platform !== "darwin", timeout: ciTime(40000) }, async () => {
   const f = await remoteWinddownApiFixture();
   try {
     assert.ok(f.workspace);
@@ -60,7 +61,7 @@ test("actual SSH checkpoint separately accepts source then publishes only at its
   } finally { await f.close(); }
 });
 
-test("failed original SSH checkpoint key preparation cannot claim RPC dispatch, quarantine an unstarted source writer or retry Git", { skip: process.platform !== "darwin", timeout: 35000 }, async () => {
+test("failed original SSH checkpoint key preparation cannot claim RPC dispatch, quarantine an unstarted source writer or retry Git", { skip: process.platform !== "darwin", timeout: ciTime(35000) }, async () => {
   const secrets = new Map<string, string>(); let fail = false;
   const vault = { read: async (id: string) => secrets.get(id) ?? null, remove: async (id: string) => { secrets.delete(id); },
     write: async (id: string, value: string) => { if (fail) throw new MoguriError("generated_key_write", "Generated original checkpoint key preparation failed.", 409); secrets.set(id, value); } };
@@ -82,7 +83,7 @@ test("failed original SSH checkpoint key preparation cannot claim RPC dispatch, 
   } finally { fail = false; await f.close(); }
 });
 
-test("lost actual SSH publication response retains its exact writer/report until fresh user inspection, without replay or successful-job relabeling", { skip: process.platform !== "darwin", timeout: 50000 }, async () => {
+test("lost actual SSH publication response retains its exact writer/report until fresh user inspection, without replay or successful-job relabeling", { skip: process.platform !== "darwin", timeout: ciTime(50000) }, async () => {
   const f = await remoteWinddownApiFixture(), original = f.service.controller.remote.checkpoint.bind(f.service.controller.remote);
   try {
     assert.ok(f.workspace); const git = initializeGeneratedRepository(f.workspace);
@@ -136,7 +137,7 @@ test("lost actual SSH publication response retains its exact writer/report until
   } finally { f.service.controller.remote.checkpoint = original; await f.close(); }
 });
 
-test("changed separately accepted SSH source never admits a new Git job or replaces the actual user acceptance", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
+test("changed separately accepted SSH source never admits a new Git job or replaces the actual user acceptance", { skip: process.platform !== "darwin", timeout: ciTime(30000) }, async () => {
   const f = await remoteWinddownApiFixture();
   try {
     assert.ok(f.workspace); const git = initializeGeneratedRepository(f.workspace), report = await f.run(), id = report.winddown.id;

@@ -11,6 +11,7 @@ import { appearanceColors, colorContrast, MoguriSdk, themePalettes, type Platfor
 import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 type Terminal = Awaited<ReturnType<typeof createTestRenderer>>;
 async function frameUntil(setup: Terminal, text: string) {
@@ -30,7 +31,7 @@ async function click(setup: Terminal, id: string) {
   await setup.flush();
 }
 
-test("an actually presented command frame remains acknowledged when navigation changes before the idle waiter resumes", { skip: process.platform !== "darwin", timeout: 5000 }, async () => {
+test("an actually presented command frame remains acknowledged when navigation changes before the idle waiter resumes", { skip: process.platform !== "darwin", timeout: ciTime(5000) }, async () => {
   const setup = await createTestRenderer({ width: 60, height: 12, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   let visible = true, presented = false;
   try {
@@ -47,7 +48,7 @@ test("an actually presented command frame remains acknowledged when navigation c
   } finally { flushSync(() => root.unmount()); await setup.dispose(); }
 });
 
-test("an unrelated native frame cannot acknowledge an unseen command and removes its original listener on cancellation", { skip: process.platform !== "darwin", timeout: 5000 }, async () => {
+test("an unrelated native frame cannot acknowledge an unseen command and removes its original listener on cancellation", { skip: process.platform !== "darwin", timeout: ciTime(5000) }, async () => {
   const setup = await createTestRenderer({ width: 60, height: 12, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const listeners = setup.renderer.listenerCount(CliRenderEvents.FRAME);
   try {
@@ -57,7 +58,7 @@ test("an unrelated native frame cannot acknowledge an unseen command and removes
   } finally { flushSync(() => root.unmount()); await setup.dispose(); }
 });
 
-test("cancellation after a matching native frame still refuses success when its original owner ended before acknowledgement", { skip: process.platform !== "darwin", timeout: 5000 }, async () => {
+test("cancellation after a matching native frame still refuses success when its original owner ended before acknowledgement", { skip: process.platform !== "darwin", timeout: ciTime(5000) }, async () => {
   const setup = await createTestRenderer({ width: 60, height: 12, exitOnCtrlC: false }), root = createRoot(setup.renderer), abort = new AbortController();
   try {
     flushSync(() => root.render(createElement("text", null, "Generated presented view before owned stop")));
@@ -252,7 +253,7 @@ test("work-item and code-request tabs operate the actual bound Kanban and Git di
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
-test("batched keyboard navigation cannot submit a configured session's existing prompt before focus renders", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+test("batched keyboard navigation cannot submit a configured session's existing prompt before focus renders", { skip: process.platform !== "darwin", timeout: ciTime(15000) }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   await fixture.configure();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -266,7 +267,7 @@ test("batched keyboard navigation cannot submit a configured session's existing 
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
-test("native terminal notices are informational and dismiss by X or Escape without consuming the draft", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+test("native terminal notices are informational and dismiss by X or Escape without consuming the draft", { skip: process.platform !== "darwin", timeout: ciTime(15000) }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
@@ -285,7 +286,7 @@ test("native terminal notices are informational and dismiss by X or Escape witho
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
-test("native terminal slash actions use the shared ordered queue and actual rendered-view acknowledgement", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+test("native terminal slash actions use the shared ordered queue and actual rendered-view acknowledgement", { skip: process.platform !== "darwin", timeout: ciTime(20000) }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   await fixture.configure();
   const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -315,7 +316,7 @@ test("native terminal slash actions use the shared ordered queue and actual rend
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
-test("compact pending decisions keep actual environment, budget and human controls readable without granting consent", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+test("compact pending decisions keep actual environment, budget and human controls readable without granting consent", { skip: process.platform !== "darwin", timeout: ciTime(20000) }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   await reviewNativeTools(fixture, ["read_file"]); await fixture.configure();
   const setup = await createTestRenderer({ width: 52, height: 24, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
@@ -370,7 +371,7 @@ test("queued terminal quit saves the real draft and acknowledges its actual call
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
-test("Escape cannot be undone by a delayed command response, which remains keyboard-readable in actual history", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+test("Escape cannot be undone by a delayed command response, which remains keyboard-readable in actual history", { skip: process.platform !== "darwin", timeout: ciTime(15000) }, async () => {
   const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
   class DelayedResult extends MoguriSdk {
     private delayed = false;

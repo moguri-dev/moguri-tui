@@ -107,10 +107,12 @@ for OpenTUI; it is expected.
 macOS and Ubuntu: it installs ripgrep, then runs `npm ci`, the audit,
 typecheck, build, `npm test` and `verify:package`. It reads the public SDK
 package with the workflow's own `GITHUB_TOKEN`. Shared macOS runners run the
-suite about three times slower than a developer Mac, so CI reruns only the
-tests that failed, once, with a warning
-([#1](https://github.com/moguri-dev/moguri-tui/issues/1)); a test that fails
-twice fails the job. It does not run on pull
+suite three to four times slower than a developer Mac, so CI sets
+`MOGURI_TEST_TIME_SCALE=4`, which stretches harness deadlines (`waitFor` and
+per-test timeouts wrapped in `ciTime()` from `tests/fixtures/time-scale.ts`)
+but never product latency budgets
+([#1](https://github.com/moguri-dev/moguri-tui/issues/1)). Wrap new per-test
+timeouts in `ciTime()`. It does not run on pull
 requests or feature branches, so run the relevant checks locally before
 opening a PR. The tag-triggered
 [`release.yml`](../.github/workflows/release.yml) publishes releases; see

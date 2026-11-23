@@ -5,8 +5,9 @@ import { promisify } from "node:util";
 import { join, resolve } from "node:path";
 import { MoguriSdk } from "@moguri-dev/sdk";
 import { remoteFixture } from "./fixtures/remote-service.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("compiled CLI and shared TUI commands explicitly open, inspect and stop the captured Remote console without storing stdin", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("compiled CLI and shared TUI commands explicitly open, inspect and stop the captured Remote console without storing stdin", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const f = await remoteFixture({ exposeModels: false, platform: { terminal: { executable: "/bin/sh", args: ["-c", "stty -echo; printf 'GENERATED_REMOTE_CLI_READY\\n'; exec cat"] } } });
   const sdk = await new MoguriSdk(f.service.connection).ready(), executable = resolve("dist/cli.mjs"), env = { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") };
   const cli = (args: string[]) => promisify(execFile)(process.execPath, [executable, "terminal", ...args], { env });

@@ -9,6 +9,7 @@ import { isRecord, MoguriSdk } from "@moguri-dev/sdk";
 import { githubApplicationFixture } from "./github-workflows-fixture.ts";
 import { reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 async function frameUntil(setup: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
   const deadline = Date.now() + 8000;
@@ -19,7 +20,7 @@ async function frameUntil(setup: Awaited<ReturnType<typeof createTestRenderer>>,
   throw new Error(`Native workflow did not render ${text}:\n${setup.captureCharFrame()}`);
 }
 
-test("native TUI searches the exact private repository without model work or an inferred account", { skip: process.platform !== "darwin", timeout: 20_000 }, async () => {
+test("native TUI searches the exact private repository without model work or an inferred account", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
     flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk })));
@@ -31,7 +32,7 @@ test("native TUI searches the exact private repository without model work or an 
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("native TUI previews the exact uniquely linked PR CI watch without starting inference or polling", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+test("native TUI previews the exact uniquely linked PR CI watch without starting inference or polling", { skip: process.platform !== "darwin", timeout: ciTime(20000) }, async () => {
   const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 160, height: 75, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
     const project = await fixture.sdk.github.project(fixture.scope);
@@ -47,7 +48,7 @@ test("native TUI previews the exact uniquely linked PR CI watch without starting
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("native TUI pickers discover repositories and review complete project issues before starting an idle source-bound session", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+test("native TUI pickers discover repositories and review complete project issues before starting an idle source-bound session", { skip: process.platform !== "darwin", timeout: ciTime(20000) }, async () => {
   const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 140, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frame = (text: string) => frameUntil(setup, text);
   try {
@@ -67,7 +68,7 @@ test("native TUI pickers discover repositories and review complete project issue
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("the actual Code requests tab explicitly browses project PRs and reviews a complete source without writes or session creation", { skip: process.platform !== "darwin", timeout: 20000 }, async () => {
+test("the actual Code requests tab explicitly browses project PRs and reviews a complete source without writes or session creation", { skip: process.platform !== "darwin", timeout: ciTime(20000) }, async () => {
   const fixture = await githubApplicationFixture(), setup = await createTestRenderer({ width: 140, height: 55, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
     flushSync(() => root.render(createElement(TuiApp, { client: fixture.sdk }))); await frameUntil(setup, "Write a prompt");
@@ -85,7 +86,7 @@ test("the actual Code requests tab explicitly browses project PRs and reviews a 
   } finally { await closeTui(root, setup, fixture.sdk, () => fixture.close()); }
 });
 
-test("native TUI remembered approval choices share project grants with later turns and other SDK clients", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+test("native TUI remembered approval choices share project grants with later turns and other SDK clients", { skip: process.platform !== "darwin", timeout: ciTime(15000) }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
@@ -103,7 +104,7 @@ test("native TUI remembered approval choices share project grants with later tur
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
-test("native TUI continuation asks for a route each time and sends the slash literally only after the actual model choice", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+test("native TUI continuation asks for a route each time and sends the slash literally only after the actual model choice", { skip: process.platform !== "darwin", timeout: ciTime(15000) }, async () => {
   const fixture = await setupFixture({ responseMode: "text" }), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   try {
@@ -125,7 +126,7 @@ test("native TUI continuation asks for a route each time and sends the slash lit
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
 });
 
-test("native continuation cancellation waits for canonical draft restoration before allowing another Enter", { skip: process.platform !== "darwin", timeout: 15000 }, async (t) => {
+test("native continuation cancellation waits for canonical draft restoration before allowing another Enter", { skip: process.platform !== "darwin", timeout: ciTime(15000) }, async (t) => {
   const fixture = await setupFixture({ responseMode: "text" }), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const gate = Promise.withResolvers<void>(); let received = false;

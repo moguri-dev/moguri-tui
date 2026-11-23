@@ -5,8 +5,9 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { setupDecisions } from "./fixtures/decisions-api.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("actual CLI and shared slash configure only explicit decision policy and inspect the same provider/actor/charges without a second model call", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+test("actual CLI and shared slash configure only explicit decision policy and inspect the same provider/actor/charges without a second model call", { skip: process.platform !== "darwin", timeout: ciTime(15000) }, async () => {
   const f = await setupDecisions();
   const cli = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), "decisions", ...args],
     { env: { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") } });

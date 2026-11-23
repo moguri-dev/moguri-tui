@@ -11,6 +11,7 @@ import { setupFixture, waitFor, type GeneratedProviderOptions } from "./fixture.
 import { retainedCiphertextRows, writeLegacyState } from "./fixtures/legacy-state.ts";
 import { remoteFixture } from "./fixtures/remote-service.ts";
 import { operationProjection } from "@moguri-dev/sdk/testing";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 test("Agent terminal tools require an actual project or captured Home, never an unbound scope", async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
@@ -245,7 +246,7 @@ test("stopping an actual Agent command retains its partial output without closin
   } finally { sdk.disconnect(); await fixture.close(); }
 });
 
-test("the actual pinned SSH worker runs and rereads its Agent command without a Local execution fallback", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("the actual pinned SSH worker runs and rereads its Agent command without a Local execution fallback", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const fixture = await remoteFixture({ agentTerminalRead: true, toolCall: { name: "run_command", args: { command: "printf 'GENERATED_REMOTE_AGENT\\n'; pwd", timeoutMs: 2000 } } });
   const sdk = await new MoguriSdk(fixture.service.connection).ready();
   try {

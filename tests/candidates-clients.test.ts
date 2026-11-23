@@ -5,8 +5,9 @@ import { promisify } from "node:util";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { candidateApiFixture } from "./fixtures/candidate-api.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("shared candidate commands preview/stage and separately apply exact reviewed bytes without calling a model", { timeout: 30_000 }, async () => {
+test("shared candidate commands preview/stage and separately apply exact reviewed bytes without calling a model", { timeout: ciTime(30_000) }, async () => {
   const f = await candidateApiFixture();
   try {
     const input = { stageWorkspaceId: f.workspace.id, patch: f.patch };
@@ -26,7 +27,7 @@ test("shared candidate commands preview/stage and separately apply exact reviewe
   } finally { await f.close(); }
 });
 
-test("the compiled CLI binds exact candidate review, reports real outcomes and refuses unconfirmed writes", { timeout: 30_000 }, async () => {
+test("the compiled CLI binds exact candidate review, reports real outcomes and refuses unconfirmed writes", { timeout: ciTime(30_000) }, async () => {
   const f = await candidateApiFixture(), execute = (args: string[]) => promisify(execFile)(process.execPath, [resolve("dist/cli.mjs"), ...args], {
     env: { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") },
   });

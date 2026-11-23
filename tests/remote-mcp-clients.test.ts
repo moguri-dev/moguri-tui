@@ -5,8 +5,9 @@ import { promisify } from "node:util";
 import { join, resolve } from "node:path";
 import { MoguriSdk } from "@moguri-dev/sdk";
 import { remoteFixture } from "./fixtures/remote-service.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("CLI and shared TUI/desktop commands review exact Remote grants with no model, credential forwarding or implicit approval", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("CLI and shared TUI/desktop commands review exact Remote grants with no model, credential forwarding or implicit approval", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const f = await remoteFixture({ exposeModels: false }), sdk = await new MoguriSdk(f.service.connection).ready();
   const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), "mcp", ...args, "--session", f.sessionId],
     { env: { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") } });

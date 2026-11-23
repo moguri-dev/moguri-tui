@@ -5,8 +5,9 @@ import { promisify } from "node:util";
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { remoteMemoryFixture } from "./fixtures/remote-memory-service.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
-test("compiled CLI memory commands use the explicit session's actual SSH boundary and reject conflicting Local selectors", { skip: process.platform !== "darwin", timeout: 25_000 }, async () => {
+test("compiled CLI memory commands use the explicit session's actual SSH boundary and reject conflicting Local selectors", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const f = await remoteMemoryFixture();
   const invoke = (args: string[]) => promisify(execFile)(process.execPath, [resolve("bin/moguri.mjs"), "memory", ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(f.directory, "state") } });
   try {

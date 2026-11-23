@@ -11,6 +11,7 @@ import { routedFixture } from "./fixtures/single-routing.ts";
 import { generatedKupoProfile } from "./fixtures/kupo-profiles.ts";
 import { remoteWinddownApiFixture } from "./fixtures/winddown-api.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 async function frame(terminal: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
   const deadline = Date.now() + 8000;
@@ -38,7 +39,7 @@ test("native TUI Retry uses the retained original request, not its newly typed p
   } finally { await closeTui(root, terminal, sdk, () => fixture.close()); }
 });
 
-test("native TUI reads and separately accepts exact peer checkpoint source without another model or Git approval", { skip: process.platform !== "darwin", timeout: 30000 }, async () => {
+test("native TUI reads and separately accepts exact peer checkpoint source without another model or Git approval", { skip: process.platform !== "darwin", timeout: ciTime(30000) }, async () => {
   const fixture = await remoteWinddownApiFixture();
   const prepare = async () => {
     try {

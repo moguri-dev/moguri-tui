@@ -14,6 +14,7 @@ import { TuiApp } from "../apps/tui/src/App.tsx";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { generatedDocx, generatedPdf, generatedXlsx } from "./fixtures/documents.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 test("CLI attaches real documents and exposes bounded reads/searches through the same service", async () => {
   const fixture = await setupFixture();
@@ -33,7 +34,7 @@ test("CLI attaches real documents and exposes bounded reads/searches through the
   } finally { await fixture.close(); }
 });
 
-test("actual TUI keys attach all three document types, inspect bounded content and schedule the complete unsent context", { skip: process.platform !== "darwin", timeout: 30_000 }, async () => {
+test("actual TUI keys attach all three document types, inspect bounded content and schedule the complete unsent context", { skip: process.platform !== "darwin", timeout: ciTime(30_000) }, async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 180, height: 70, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
