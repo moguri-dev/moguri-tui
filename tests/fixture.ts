@@ -64,7 +64,8 @@ export async function homeCommand(sdk: MoguriSdk, sessionId: string, command: st
   return sdk.tools.execute(sessionId, tool.name, { command, timeoutMs }, tool.schemaDigest);
 }
 
-export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 8000): Promise<NonNullable<T>> {
+// Generous by default: only a condition that is late waits longer, and shared CI runners can be twice as slow as a developer Mac.
+export async function waitFor<T>(read: () => T | null | undefined | false, timeout = 20_000): Promise<NonNullable<T>> {
   const deadline = Date.now() + timeout;
   for (;;) {
     const value = read();

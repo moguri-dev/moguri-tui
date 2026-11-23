@@ -14,7 +14,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/tui/tsconfig.json --noEmit",
-    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 --test-force-exit tests/*.test.ts",
     "test:matrix": "node --import tsx --test --test-concurrency=1 tests/matrix/*.test.ts",
     "generate:covering": "node --import tsx scripts/generate-milestone-covering-array.mjs",
     "test:e2e": "playwright test",
