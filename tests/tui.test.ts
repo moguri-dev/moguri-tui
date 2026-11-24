@@ -980,6 +980,8 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
     assert.deepEqual(copied, ["Generated first held prompt"]);
     await slash("/side");
     const side = await waitFor(() => client.getState().snapshot?.sessions.find((session) => session.kind === "side"));
+    // Opening the side chat holds navigation focus until it finishes, so typing earlier would reach the sidebar, not the composer.
+    await waitFor(() => fixture.service.controller.snapshot().commandExecutions.some((entry) => entry.name === "side" && entry.status === "completed"));
     await frameUntil("Write a prompt");
     await setup.mockInput.typeText("Generated held side question");
     setup.mockInput.pressEnter({ super: true });
@@ -1008,6 +1010,7 @@ test("the actual TUI creates Home-backed chats, shows attention and keeps metach
     await frameUntil("Write a prompt");
     await slash("/new global");
     const session = await waitFor(() => fixture.service.controller.snapshot().sessions.find((session) => session.projectId === null));
+    await waitFor(() => fixture.service.controller.snapshot().commandExecutions.some((entry) => entry.name === "new" && entry.status === "completed"));
     await frameUntil("Home (no project)");
     setup.mockInput.pressKey("m", { ctrl: true });
     await frameUntil("Generated Copilot model"); setup.mockInput.pressEnter();
