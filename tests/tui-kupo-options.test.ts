@@ -7,6 +7,7 @@ import { TuiApp } from "../apps/tui/src/App.tsx";
 import { KUPO_MODEL_ID, MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 test("actual TUI keeps Kupo's exact window and rejects manual thinking without inference", {
   skip: process.platform !== "darwin", timeout: 20_000,
@@ -17,7 +18,7 @@ test("actual TUI keeps Kupo's exact window and rejects manual thinking without i
   const terminal = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(terminal.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do {
       await new Promise((resolve) => setTimeout(resolve, 15));
       await terminal.flush();

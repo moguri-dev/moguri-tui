@@ -14,7 +14,7 @@ import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { ciTime } from "./fixtures/time-scale.ts";
 
 async function frame(terminal: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + ciTime(8000);
   do {
     await new Promise((resolve) => setTimeout(resolve, 15)); await terminal.flush();
     if (terminal.captureCharFrame().includes(text)) return;

@@ -18,7 +18,7 @@ test("compiled CLI and shared TUI commands explicitly open, inspect and stop the
     const exited = new Promise<number | null>((resolve, reject) => { input.once("error", reject); input.once("exit", resolve); });
     let stdout = "", stderr = ""; input.stdout.on("data", (data) => { stdout += data; }); input.stderr.on("data", (data) => { stderr += data; });
     input.stdin.end("GENERATED_REMOTE_CLI_STDIN\n"); assert.equal(await exited, 0, stderr); assert.equal(JSON.parse(stdout).acknowledged, true);
-    for (let index = 0; index < 100; index++) { if ((await sdk.terminal.read(opened.id)).data.includes("GENERATED_REMOTE_CLI_STDIN")) break; await new Promise((resolve) => setTimeout(resolve, 15)); }
+    for (let index = 0; index < ciTime(100); index++) { if ((await sdk.terminal.read(opened.id)).data.includes("GENERATED_REMOTE_CLI_STDIN")) break; await new Promise((resolve) => setTimeout(resolve, 15)); }
     const read = JSON.parse((await cli(["read", opened.id])).stdout);
     assert.equal(read.terminal.env, "Remote"); assert.equal(read.terminal.binding.root, f.workspace); assert.match(read.data, /GENERATED_REMOTE_CLI_STDIN/);
     const listed = await sdk.slash(f.sessionId, "/terminals list", "tui");

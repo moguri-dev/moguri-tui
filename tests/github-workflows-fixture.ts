@@ -14,10 +14,11 @@ import type { GithubScope } from "@moguri-dev/sdk/testing";
 import { defaultBoard, MoguriError } from "@moguri-dev/sdk/testing";
 import { generatedNodeSupervision } from "./fixture.ts";
 import { appendLegacyProjectSession } from "./fixtures/legacy-state.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 export async function connectGithubSdk(sdk: MoguriSdk): Promise<void> {
   await sdk.connect();
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + ciTime(5000);
   while (sdk.getState().status !== "connected") {
     if (Date.now() >= deadline) throw new Error("Generated SDK did not authenticate its loopback event stream.");
     await delay(10);

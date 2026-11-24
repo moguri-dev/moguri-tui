@@ -7,9 +7,10 @@ import { TuiApp } from "../apps/tui/src/App.tsx";
 import { isRecord, MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 async function ready(setup: Awaited<ReturnType<typeof createTestRenderer>>) {
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + ciTime(8000);
   do {
     await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush();
     if (setup.captureCharFrame().includes("Write a prompt")) return;

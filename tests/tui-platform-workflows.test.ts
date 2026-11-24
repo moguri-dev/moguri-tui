@@ -17,7 +17,7 @@ test("actual TUI keys share knowledge promotion, disabled hooks and exact review
   for (const [name, value] of [["core.hooksPath", "/dev/null"], ["tag.gpgSign", "false"], ["commit.gpgSign", "false"]]) git(["config", name!, value!]);
   const setup = await createTestRenderer({ width: 170, height: 85, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`Native workflow UI did not show ${text}:\n${setup.captureCharFrame()}`);
   };

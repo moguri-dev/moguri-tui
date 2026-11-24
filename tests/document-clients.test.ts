@@ -38,7 +38,7 @@ test("actual TUI keys attach all three document types, inspect bounded content a
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 180, height: 70, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`Generated document TUI did not show ${text}:\n${setup.captureCharFrame()}`);
   };

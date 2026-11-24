@@ -8,6 +8,7 @@ import { setupFixture } from "./fixture.ts";
 import { initializeGeneratedRepository } from "./fixtures/git-project.ts";
 import { MoguriSdk } from "@moguri-dev/sdk";
 import { profileFixture } from "./fixtures/profiles.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 test("the CLI exposes shared working-window choices and holds exact long text as a scoped file without inference", async () => {
   const fixture = await setupFixture(), sdk = await new MoguriSdk(fixture.service.connection).ready();
@@ -242,7 +243,7 @@ test("the CLI answers only the exact canonical pending question with actual user
   const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
   try {
     await fixture.configure(); await fixture.send("generated structured question");
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     while (!fixture.service.controller.snapshot().questions.length && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 15));
     const question = JSON.parse((await execute(["question", "list", "--session", fixture.sessionId])).stdout)[0];
     assert.ok(question); assert.equal(question.answer, null);

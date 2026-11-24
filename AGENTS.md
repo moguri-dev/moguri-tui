@@ -32,7 +32,7 @@
 - Test concurrency, cancellation failure and restart recovery where relevant, not only happy paths; use generated fixtures without personal or customer data. Tests never use a real microphone or personal credentials.
 - Put durable documentation under `docs/` and update the relevant document in the same change. Keep `README.md` a short landing page. Write plain, concise English without em dashes.
 - Setup: `npm ci`. Build: `npm run build`. Type checks: `npm run typecheck`. Full local checks: `npm test` after `npm run build` (some tests run the `dist` bundles). Packed-package check: `npm run verify:package`. Audit: `npm audit --audit-level=moderate`.
-- Wrap per-test timeouts in `ciTime()` from `tests/fixtures/time-scale.ts`. CI sets `MOGURI_TEST_TIME_SCALE` to stretch harness deadlines on slower runners; never scale product latency budgets or add blanket retries.
+- Wrap per-test timeouts and local polling deadlines (`Date.now() + ms`, attempt counts) in `ciTime()` from `tests/fixtures/time-scale.ts`. CI sets `MOGURI_TEST_TIME_SCALE` to stretch harness deadlines on slower runners; never scale product latency budgets or add blanket retries.
 - Focused checks use `node --import tsx --test tests/<name>.test.ts`; combine related selectors in one invocation. `npm test` includes the native TUI interaction test (`tests/tui-exit-process.test.ts`) and the TUI milestone combination tests.
 - `npm start -- --project /absolute/path` starts the built TUI, `npm run dev:tui` runs it from sources and `npm run cli -- --help` runs the built CLI.
 - `npm run build` must keep emitting `dist/THIRD_PARTY_NOTICES.md`; MIT covers only Moguri's own code (`docs/third-party.md`).

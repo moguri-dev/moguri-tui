@@ -40,7 +40,7 @@ test("actual TUI thinking, effort and exact context shortcuts share saved model 
   await fixture.configure(); await client.refresh();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI model shortcut did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -59,7 +59,7 @@ test("TUI /archive asks how to handle subsessions and remembers the selected cas
   const child = await client.sessions.spawn(fixture.sessionId, "agent", "Generated archive child");
   const setup = await createTestRenderer({ width: 140, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI session archive did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -89,7 +89,7 @@ test("TUI /archive always warns before stopping a running subsession, even with 
   await waitFor(() => running().turnId && fixture.requests.length === 1, 10_000);
   const setup = await createTestRenderer({ width: 140, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI running archive did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -108,7 +108,7 @@ test("actual TUI model dropdown selects default automatic Kupo and runs its sole
   const fixture = await setupFixture({ responseMode: "text", maxOutputTokens: 128 }), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 150, height: 50, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`Automatic Kupo TUI did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -130,7 +130,7 @@ test("actual TUI keys review reserved budget data and separately create an accep
   const index = await readFile(join(f.project, ".git/index")), head = f.git(["rev-parse", "HEAD"]);
   const setup = await createTestRenderer({ width: 180, height: 90, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI wind-down did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -155,7 +155,7 @@ test("actual TUI keys review public compound cost and exact host tests, inspect 
   const f = await compoundApiFixture(); await f.configure();
   const setup = await createTestRenderer({ width: 180, height: 90, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 10000;
+    const deadline = Date.now() + ciTime(10000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI public compound did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -190,7 +190,7 @@ test("actual TUI keys review public compound cost and exact host tests, inspect 
 test("native TUI keys review retained Sandbox outputs and confirm separate source publication without a model call", { skip: process.platform !== "darwin", timeout: ciTime(25_000) }, async () => {
   const fixture = await nativePublicationFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`Native publication review did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -227,7 +227,7 @@ test("actual native TUI qualifies the guest, prepares reviewed source, schedules
   await sdk.settings.update({ ...settings.values, sandbox: fixture.reviewedConfiguration }, settings.revision);
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 15_000;
+    const deadline = Date.now() + ciTime(15_000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`Actual native TUI did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -281,7 +281,7 @@ test("native bracketed paste preserves exact long text in a scoped file after a 
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 45, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`Generated paste composer did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -308,7 +308,7 @@ test("native TUI keys inspect exact retained role contracts without dispatching,
   const f = await roleContractFixture(), created = await f.run(); await f.settled(created.id);
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI role contract did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -323,7 +323,7 @@ test("native TUI keys inspect exact retained role contracts without dispatching,
 test("native TUI keys read provider-declared metadata through the shared SDK without calling a model or treating it as approval", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const f = await modelEvidenceFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI provider evidence did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -339,7 +339,7 @@ test("native TUI keys read provider-declared metadata through the shared SDK wit
 test("native TUI keys inspect final-role provenance and keep its origin through separate staging and actual-user application", { skip: process.platform !== "darwin", timeout: ciTime(30_000) }, async () => {
   const f = await roleProposalFixture(), setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI final-role proposal did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -366,7 +366,7 @@ test("native TUI keys inspect independent recorded roles and edit metadata witho
   const f = await roleSequenceFixture(); f.start(0); f.result(0); f.start(1); f.result(1); f.complete();
   const original = f.current().inputDigest, setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI retained role did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -385,7 +385,7 @@ test("native TUI keys review one owned generated proposal and edit only retained
   const f = await candidateGenerationFixture(), client = f.sdk;
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI model generation did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -408,7 +408,7 @@ test("the native TUI inspects planned model holds separately from actual call hi
   const f = await budgetPlanFixture(), plan = f.create();
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI planned accounting did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -426,7 +426,7 @@ test("the native TUI stages and separately applies exact reviewed candidate byte
   const f = await candidateApiFixture(), client = f.sdk;
   const setup = await createTestRenderer({ width: 160, height: 65, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI candidate did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -462,7 +462,7 @@ test("the actual TUI explicitly indexes and searches its pinned SSH repository w
   const f = await remoteMemoryFixture(), client = await new MoguriClient(f.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 55, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI Remote memory did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -487,7 +487,7 @@ test("the actual TUI reviews the captured SSH account and explicitly refreshes p
   const f = await remoteGithubFixture(), client = await new MoguriClient(f.service.connection).ready();
   const setup = await createTestRenderer({ width: 140, height: 55, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI Remote repository metadata did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -511,7 +511,7 @@ test("the actual TUI explicitly opens and inspects a captured Remote user consol
   await fixture.probe(); await client.sessions.env(fixture.sessionId, "Remote");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI Remote console did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -537,7 +537,7 @@ test("the actual TUI reviews, explicitly grants and revokes Remote MCP authority
   await fixture.probe(); await client.sessions.env(fixture.sessionId, "Remote");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI Remote MCP did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -567,7 +567,7 @@ test("the actual TUI keeps a pending Remote plan editor and stops only its owned
   const fixture = await remotePlanFixture(), gate = holdRemoteFrame(t, fixture.controller.remote, "approval");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI pending Remote plan did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -594,7 +594,7 @@ test("the actual TUI edits and retains a reviewed Remote plan without a Local op
   const fixture = await remotePlanFixture();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI Remote plan did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -620,7 +620,7 @@ test("the actual TUI explicitly generates, reviews, applies and restores one met
   const fixture = await compactionFixture();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI compaction did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -655,7 +655,7 @@ test("the actual TUI queries dated aggregate and retained per-call telemetry wit
   await fixture.configure(); await fixture.send("Generated TUI telemetry source."); await fixture.terminal();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI telemetry did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -683,7 +683,7 @@ test("the actual TUI reviews and explicitly refreshes repository metadata withou
   git(["remote", "add", "origin", "https://github.com/generated/example.git"]);
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI repository metadata did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -709,7 +709,7 @@ test("the actual TUI reads SSH files, changes and plan text without a local open
   await fixture.probe(); await fixture.select();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI Remote workspace did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -736,7 +736,7 @@ test("the actual TUI selects opt-in Single, clears fixed tuning and shows owned 
   await fixture.sdk.sessions.modelOptions(fixture.sessionId, { contextWindow: 8192 });
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI Single did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -760,7 +760,7 @@ test("the actual TUI shows solver advice but waits for a different explicit user
   await client.sessions.configure(fixture.sessionId, { ...fixture.session().controls, modelId: fixture.modelId, autonomy: "Guided" });
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI Guided advice did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -782,7 +782,7 @@ test("the actual TUI creates and renames an isolated profile, flushes old drafts
   const fixture = await profileFixture(), first = await fixture.sdk.sessions.create(null, "Generated terminal Default");
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI profiles did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -826,7 +826,7 @@ test("the actual OpenTUI client selects Copilot, streams, stops and receives a s
   const setup = await createTestRenderer({ width: 120, height: 40, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
   const frameUntil = async (predicate: (frame: string) => boolean) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     let frame = "";
     do {
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -871,7 +871,7 @@ test("the actual TUI creates local issues and masks Linear credentials without s
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 20)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -903,7 +903,7 @@ test("the actual TUI views, edits and restores the SDK system prompt with an exp
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
   const frameUntil = async (predicate: (frame: string) => boolean) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do {
       await new Promise((resolve) => setTimeout(resolve, 20)); await setup.flush();
       if (predicate(setup.captureCharFrame())) return;
@@ -951,7 +951,7 @@ test("the actual TUI holds Cmd/Ctrl+Enter prompts and shares read-only, rename, 
   const copied: string[] = [];
   const native = { copy: async (text: string) => { copied.push(text); }, browser: async () => { throw new Error("No external browser in this generated test."); }, file: async () => { throw new Error("No external app in this generated test."); } };
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -998,7 +998,7 @@ test("the actual TUI creates Home-backed chats, shows attention and keeps metach
   const setup = await createTestRenderer({ width: 120, height: 46, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().replace(/│/g, "").replace(/\s+/g, " ").includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -1044,7 +1044,7 @@ test("the actual TUI captures explicit typed files and inspects them without pre
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI context did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -1066,7 +1066,7 @@ test("the actual TUI creates and opens an explicit managed root through shared s
   const fixture = await setupFixture(), git = initializeGeneratedRepository(fixture.project), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI workspace did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -1088,7 +1088,7 @@ test("the actual TUI edits a retained document through shared commands and brows
   const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI retained document did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -1114,7 +1114,7 @@ test("the actual TUI answers a canonical question through its choices without in
   await fixture.configure();
   const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI question did not show ${text}:\n${setup.captureCharFrame()}`);
   };
@@ -1137,7 +1137,7 @@ test("the actual TUI sets warned estimated caps and opens authoritative cumulati
   const client = await new MoguriClient(fixture.service.connection).ready();
   const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI budget did not show ${text}:\n${setup.captureCharFrame()}`);
   };

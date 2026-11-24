@@ -7,13 +7,14 @@ import { TuiApp } from "../apps/tui/src/App.tsx";
 import { MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 test("native TUI idle Hold reviews a schedule and Automations sends only the original prompt", { skip: process.platform !== "darwin" }, async () => {
   const fixture = await setupFixture({ responseMode: "text", maxOutputTokens: 128 }), sdk = await new MoguriSdk(fixture.service.connection).ready();
   await fixture.configure(); await sdk.refresh();
   const terminal = await createTestRenderer({ width: 120, height: 45, kittyKeyboard: true, useMouse: true, exitOnCtrlC: false }), root = createRoot(terminal.renderer);
   const until = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do { await new Promise((resolve) => setTimeout(resolve, 15)); await terminal.flush(); if (terminal.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
     throw new Error(`TUI did not render ${text}:\n${terminal.captureCharFrame()}`);
   };
