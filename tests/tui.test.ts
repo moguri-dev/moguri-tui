@@ -1077,6 +1077,8 @@ test("the actual TUI creates and opens an explicit managed root through shared s
     await frameUntil("changeSetId"); setup.mockInput.pressEscape(); await frameUntil("Write a prompt");
     await setup.mockInput.typeText(`/workspace new ${workspace.id}`); setup.mockInput.pressEnter();
     await waitFor(() => fixture.service.controller.snapshot().sessions.some((session) => session.workspaceId === workspace.id));
+    // Opening the session holds navigation focus until it finishes, so typing earlier would reach the sidebar, not the composer.
+    await waitFor(() => fixture.service.controller.snapshot().commandExecutions.filter((entry) => entry.name === "workspace" && entry.status === "completed").length === 2);
     await frameUntil("Write a prompt");
     await writeFile(`${workspace.path}/fixture.txt`, "Generated TUI worktree content.");
     await setup.mockInput.typeText("/file fixture.txt"); setup.mockInput.pressEnter();
