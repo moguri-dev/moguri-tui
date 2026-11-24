@@ -24,7 +24,7 @@ it globally:
 
 ```sh
 npm config set @moguri-dev:registry https://npm.pkg.github.com
-npm install -g @moguri-dev/tui@0.32.0-alpha.1
+npm install -g @moguri-dev/tui@0.32.0-alpha.4
 ```
 
 Put the token in your user `~/.npmrc` as
@@ -43,7 +43,11 @@ moguri worker --stdio                            # on an SSH host: the SDK's rem
 
 In the TUI, `/connect` signs in, `/models` selects a model and `/help` lists
 commands. The TUI, the CLI and the desktop app share one local service and the
-same sessions. `moguri desktop` works only from a Moguri desktop source
+same sessions. In a new profile, `/profile import SOURCE_ID` (or
+`moguri profile import SOURCE_ID --profile NEW_ID`) reviews another profile's
+model keys, endpoints, skill sources and repositories; repeating it with the
+review digest and the chosen items copies only those. Sign-ins are never
+copied. While the session disk is on, the status line shows its live usage. `moguri desktop` works only from a Moguri desktop source
 checkout; otherwise open the installed app.
 
 ## Documentation

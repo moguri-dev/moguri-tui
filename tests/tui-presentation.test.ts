@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { Renderable, SyntaxStyle, TextAttributes } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot, flushSync } from "@opentui/react";
-import { TuiApp, TuiMessage } from "../apps/tui/src/App.tsx";
-import { appearanceColors, MoguriSdk, type PublicMessage } from "@moguri-dev/sdk";
+import { sessionDiskLine, TuiApp, TuiMessage } from "../apps/tui/src/App.tsx";
+import { appearanceColors, MoguriSdk, type PublicMessage, type VirtualDiskStatus } from "@moguri-dev/sdk";
 import { tuiTabs } from "../apps/tui/src/commands.ts";
 import { admitGeneratedSkill, reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
@@ -347,4 +347,18 @@ test("formatted prose and plain code follow shared theme changes without stale n
     assert.equal(fixture.requests.length, calls);
     assert.equal(fixture.session().draft.text, "");
   } finally { await closeTui(root, setup, sdk, () => fixture.close()); }
+});
+
+test("the status line shows the live session disk only while it is on, and warns when full", () => {
+  const GiB = 1024 ** 3, disk = { id: "generated-disk", revision: 1, status: "ready", sizeGiB: 50, image: "/generated/disk.sparseimage", mountpoint: "/generated/volume",
+    diagnostic: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", pressure: null } as unknown as NonNullable<VirtualDiskStatus["disk"]>;
+  const status = (changes: Partial<NonNullable<VirtualDiskStatus["disk"]>>, freeBytes = 40 * GiB): VirtualDiskStatus =>
+    ({ supported: true, disk: { ...disk, ...changes }, usage: { freeBytes, totalBytes: 50 * GiB, reserveBytes: 2.5 * GiB }, worktrees: 1 });
+  assert.equal(sessionDiskLine(null), null);
+  assert.equal(sessionDiskLine({ supported: true, disk: null, usage: null, worktrees: 0 }), null);
+  assert.equal(sessionDiskLine(status({ status: "off" })), null);
+  assert.deepEqual(sessionDiskLine(status({})), { text: "Session disk [##------] 20% 10.0 GB of 50.0 GB, 40.0 GB free", warning: false });
+  const full = sessionDiskLine(status({ pressure: { paused: true, freeBytes: GiB, totalBytes: 50 * GiB, reserveBytes: 2.5 * GiB, checkedAt: "2026-01-01T00:00:00Z" } }, GiB))!;
+  assert.match(full.text, /Full: work on the disk is paused$/); assert.equal(full.warning, true);
+  assert.deepEqual(sessionDiskLine(status({ status: "unmounted" })), { text: "Session disk not mounted (/runtime disk)", warning: true });
 });
