@@ -7,7 +7,7 @@ import { dirname, join, resolve as resolvePath } from "node:path";
 import { createRequire } from "node:module";
 import { connectMoguri, loadNotificationSoundFile, saveArtifactExport, stopMoguriService, restartMoguriService, ensureConnection, stateDirectory, waitForStorageRelocation } from "@moguri-dev/sdk/node";
 import { serveGatewayMcp } from "@moguri-dev/sdk/mcp";
-import { audioFromBase64, compareSessionOrder, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, sessionChildBindings, type ControlDefaults, type SessionChildrenReview } from "@moguri-dev/sdk";
+import { audioFromBase64, compareSessionOrder, profileImportChoices, defaultSettings, parse, DraftEditor, SettingsSchema, ProjectSettingsSchema, SessionChangesSchema, ModelOptionsSchema, ConfigurationSpecSchema, ControlDefaultsSchema, ProfileChangesSchema, ArtifactDraftSchema, ArtifactChangesSchema, ArtifactKindSchema, CandidatePatchSchema, CandidateGenerationInputSchema, ProjectArtifactChoiceSchema, isRecord, SYSTEM_PROMPT_WARNING, IssueInputSchema, BoardConfigSchema, sessionChildBindings, type ControlDefaults, type SessionChildrenReview } from "@moguri-dev/sdk";
 import { BUDGET_WARNING, BudgetLimitSchema, SessionBudgetSchema, ModelRoleSchema, BudgetQuerySchema, TelemetryQuerySchema } from "@moguri-dev/sdk";
 import { compoundCommand } from "./compound.ts";
 import { winddownCommand } from "./winddown.ts";
@@ -114,6 +114,8 @@ moguri profile list|create NAME [--color '#RRGGBB']
 moguri profile update ID CHANGES.json --revision N
 moguri profile retry ID --revision N --confirm-review
 moguri profile stop ID             Explicit owned setup cancellation
+moguri profile import SOURCE_ID     Review another profile's keys, endpoints, skills and repositories (no secrets)
+moguri profile import SOURCE_ID key:PROVIDER|endpoint:ID|preferences|skills:ID|repo:PROJECT_ID... --digest REVIEW_SHA --confirm-review
 moguri profile defaults CONTROLS.json --revision N  Shared global preferences
 moguri session create [--project ID] [--workspace-mode worktree|checkout]  Git tasks default to worktrees
 moguri session create --controls FILE  Explicit startup control overrides
@@ -554,7 +556,11 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "retry" && args[0] && values["confirm-review"]) { await sdk.profiles.retry(args[0], expectedRevision(), true); output(await sdk.profiles.wait(args[0])); }
       else if (action === "stop" && args[0]) output(await sdk.profiles.stop(args[0]));
       else if (action === "defaults" && args[0]) output(await sdk.profiles.defaults(parse(ControlDefaultsSchema, JSON.parse(await readFile(args[0], "utf8"))), expectedRevision()));
-      else throw new Error("Use profile list/create/update/retry/stop/defaults. Updates need an observed revision; retry requires explicit --confirm-review after resource inspection. Use --profile ID to select scope.");
+      else if (action === "import" && args[0] && !values.digest) output(await sdk.profiles.imports.preview(args[0]));
+      else if (action === "import" && args[0] && args.length > 1 && values.digest && values["confirm-review"]) {
+        output({ ...await sdk.profiles.imports.run(args[0], values.digest, profileImportChoices(args.slice(1))), warning: "Copied into this profile only. API keys got their own slots here; sign-ins were not copied and the source profile was not changed." });
+      }
+      else throw new Error("Use profile list/create/update/retry/stop/defaults/import. Imports apply only a reviewed --digest with --confirm-review. Updates need an observed revision; retry requires explicit --confirm-review after resource inspection. Use --profile ID to select scope.");
     } else if (group === "context") {
       if (!values.session) throw new Error("Choose --session ID for this exact attachment scope.");
       if (action === "documents") { output(await sdk.attachments.listDocuments(values.session, parse(DocumentListOptionsSchema, JSON.parse(values.filters ?? "{}")))); return; }

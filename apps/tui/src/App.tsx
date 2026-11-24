@@ -7,7 +7,7 @@ import { stripVTControlCharacters } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { useMoguri, useSessionActivity, useTaskProgress } from "@moguri-dev/sdk/react";
 import { appearanceColors, attachmentStatus, compareSessionPriority, outcomeLabel, progressBar, runningSessionNames, runningSessions, sessionModeLabel, sessionStatusLabel, sessionChildBindings, sessionRepositoryProposal, sessionSubtree, sessionTitle, sessionPullRequest, sessionPullRequestUrl, terminalCommandExecution, themePalettes, type Appearance, type ThemeMode } from "@moguri-dev/sdk";
-import { agentHarnessProduct, describeActivityCall, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "@moguri-dev/sdk";
+import { agentHarnessProduct, describeActivityCall, formatDiskBytes, hostedProvider, approvalProject, commandFamily, RememberApprovalSchema, type VirtualDiskStatus, type GithubItem, type GithubRepository, type GithubResponse, type GithubScope, type SessionChildrenAction } from "@moguri-dev/sdk";
 import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pendingInputStatus, parse, pasteLineCount, parseAttachmentTrigger, attachmentTriggers, SettingsSchema, ProjectSettingsSchema, SYSTEM_PROMPT_WARNING, BUDGET_WARNING, ProfileDraftSchema, defaultBoard, IssueInputSchema, BoardConfigSchema, ArtifactDraftSchema, ArtifactChangesSchema, isRecord, type ContinueWorkReview, type PlanEditorRequest, type ArtifactEditorRequest, type ArtifactExport, type MoguriSdk, type Command, type Session, type PublicMessage, type SlashResult, type Profile, type ProfileCatalog } from "@moguri-dev/sdk";
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "@moguri-dev/sdk";
@@ -203,7 +203,8 @@ export interface TuiNativeActions { browser: (url: string) => Promise<void>; fil
 export function TuiApp({ client: initialClient, onQuit, initialSessionId, native }: { client: MoguriClient; onQuit?: () => void; initialSessionId?: string; native?: TuiNativeActions }) {
   const [client, setClient] = useState(initialClient);
   const clients = useRef(new Set([initialClient]));
-  const { snapshot, status, error, events } = useMoguri(client);
+  const { snapshot, status, error, events, disk } = useMoguri(client);
+  const diskLine = sessionDiskLine(disk);
   const renderer = useRenderer();
   const { width, height } = useTerminalDimensions();
   const [terminalMode, setTerminalMode] = useState<ThemeMode>(renderer.themeMode ?? "dark");
@@ -597,7 +598,11 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
       switchingProfile.current = true; setProfilePending(true);
       try {
         if (current) await client.profiles.update(current.id, values, current.revision);
-        else { const created = await client.profiles.create(values.name, values.color); await client.profiles.wait(created.id!); }
+        else {
+          const created = await client.profiles.create(values.name, values.color); await client.profiles.wait(created.id!);
+          await openProfiles();
+          setNotice(`Profile created. Choose it explicitly; nothing was copied. To bring over model keys, repositories or skills, open it and run /profile import ${client.profileId} for a review first.`); return;
+        }
         await openProfiles(); setNotice("Profile metadata saved. Choose it explicitly; no accounts, projects or context were copied."); return;
       } finally { switchingProfile.current = false; setProfilePending(false); }
     } else if (mode === "artifact-editor") {
@@ -1700,6 +1705,7 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           {sessionStateVisible && <text height={1} wrapMode="none" truncate fg={sessionStatusLabel(session.status).tone === "failed" ? colors.error :
             ["attention", "partial", "unknown"].includes(sessionStatusLabel(session.status).tone) || session.toolRecovery?.turnId === session.turnId ? colors.attention : colors.muted}>{`${session.toolRecovery?.turnId === session.turnId ? "Read-only recovery" : session.pendingMode ? `${sessionModeLabel(session.pendingMode)} pending` : sessionModeLabel(session.mode)} | ${snapshot?.managedWorkspaces.some((workspace) => workspace.id === session.workspaceId && workspace.status === "creating") ? "Preparing worktree" : sessionStatusLabel(session.status).label}${session.queue.length ? ` | ${session.queue.length} queued` : ""}${session.kind === "side" ? " | main context per question" : ""}`}</text>}
           {planVisible && <text height={1} wrapMode="none" truncate fg={taskProgress.error ? colors.attention : colors.muted}>{safe(`Plan ${progressBar(taskProgress.progress?.checklist.percent ?? null, 8)} / ${taskProgress.error ? "unavailable, /progress" : `${taskProgress.progress?.checklist.completed}/${taskProgress.progress?.checklist.total}`} / estimate, 15s`)}</text>}
+          {diskLine && <text id="tui-status-disk" height={1} wrapMode="none" truncate fg={diskLine.warning ? colors.attention : colors.muted}>{safe(diskLine.text)}</text>}
           {estimateVisible && <text height={1} wrapMode="none" truncate fg={colors.attention}>{safe(`Model estimate ${progressBar(estimateVisible.percent, 8)}${estimateVisible.stale ? " (stale)" : ""}${taskProgress.progress?.disagreement ? " / differs from plan" : ""} /progress for details`)}</text>}
         </box>
       </box>
@@ -1713,6 +1719,18 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
         "Enter send | Shift+Enter newline | Cmd/Ctrl+Enter hold | F2 details | Tab navigation | /help commands"}</text>
     </box>
   </box></NavigationContext.Provider></ThemeContext.Provider>;
+}
+/** D76. The root-owned session disk's live status line (pushed by the service), shown only while the disk is on. */
+export function sessionDiskLine(status: VirtualDiskStatus | null): { text: string; warning: boolean } | null {
+  const disk = status?.disk;
+  if (!status?.supported || !disk || disk.status === "off") return null;
+  if (disk.status !== "ready" || !status.usage) {
+    const state = { creating: "being created", resizing: "being resized", removing: "turning off", unmounted: "not mounted", failed: "unavailable", ready: "reading usage" }[disk.status];
+    return { text: `Session disk ${state} (/runtime disk)`, warning: disk.status === "unmounted" || disk.status === "failed" };
+  }
+  const { freeBytes, totalBytes } = status.usage, used = Math.max(0, totalBytes - freeBytes), paused = Boolean(disk.pressure?.paused);
+  return { text: `Session disk ${progressBar(totalBytes ? Math.round(used / totalBytes * 100) : 0, 8)} ${formatDiskBytes(used)} of ${formatDiskBytes(totalBytes)}, ${formatDiskBytes(freeBytes)} free${paused ? ". Full: work on the disk is paused" : ""}`,
+    warning: paused };
 }
 export function TuiMessage({ message, detailed, activeTurnId, settledToolCalls, syntaxStyle, renderMarkdownNode, inspect, snapshot = NO_REGISTRY }: {
   message: PublicMessage; detailed: boolean; activeTurnId: string | null; settledToolCalls: ReadonlySet<string>;
