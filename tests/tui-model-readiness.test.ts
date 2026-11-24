@@ -8,6 +8,7 @@ import { configuredReadinessModels, MoguriSdk } from "@moguri-dev/sdk";
 import { setupFixture } from "./fixture.ts";
 import { configureGeneratedReadiness, generatedReadinessCollector, generatedReviewedReadinessCollector } from "./fixtures/model-readiness.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 test("the actual TUI Models inspector uses shared scoped readiness without selecting a model or consuming its draft", {
   skip: process.platform !== "darwin", timeout: 20_000,
@@ -23,7 +24,7 @@ test("the actual TUI Models inspector uses shared scoped readiness without selec
   const terminal = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(terminal.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do {
       await new Promise((resolve) => setTimeout(resolve, 15)); await terminal.flush();
       if (terminal.captureCharFrame().includes(text)) return;
@@ -57,7 +58,7 @@ test("the actual TUI requires a separate exact runtime confirmation before its o
   const terminal = await createTestRenderer({ width: 120, height: 42, kittyKeyboard: true, exitOnCtrlC: false });
   const root = createRoot(terminal.renderer);
   const frameUntil = async (text: string) => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ciTime(8000);
     do {
       await new Promise((resolve) => setTimeout(resolve, 15)); await terminal.flush();
       if (terminal.captureCharFrame().includes(text)) return;

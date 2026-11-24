@@ -1,9 +1,10 @@
 import { flushSync, type createRoot } from "@opentui/react";
 import type { createTestRenderer } from "@opentui/core/testing";
 import type { MoguriSdk } from "@moguri-dev/sdk";
+import { ciTime } from "./time-scale.ts";
 
 export async function waitTuiFrame(terminal: Awaited<ReturnType<typeof createTestRenderer>>, text: string) {
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + ciTime(8000);
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 15));
     await terminal.flush();

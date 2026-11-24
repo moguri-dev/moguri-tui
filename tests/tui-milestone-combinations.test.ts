@@ -14,6 +14,7 @@ import { closeTui } from "./fixtures/tui-client.ts";
 import { configureMilestoneRouting, milestoneCellId, milestoneCalls, milestoneClientCells, milestoneResponses } from "./fixtures/milestone-combinations.ts";
 import { nativeConfiguration } from "./fixtures/native-target.ts";
 import { nativeMilestoneFixture } from "./fixtures/native-milestone-api.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 const native = await nativeConfiguration(true);
 for (const cell of milestoneClientCells()) {
@@ -37,7 +38,7 @@ test(`actual TUI ${env}/${selection} applies exact controls and a warned combine
     const ui = terminal = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false });
     const rendered = root = createRoot(ui.renderer);
     const frame = async (text: string) => {
-      const deadline = Date.now() + 8000;
+      const deadline = Date.now() + ciTime(8000);
       do {
         await ui.flush();
         if (ui.captureCharFrame().includes(text)) return;

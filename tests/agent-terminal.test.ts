@@ -66,7 +66,7 @@ test("the actual model executes in its Agent terminal and rereads that exact out
   try {
     const user = await sdk.terminal.open(fixture.sessionId);
     let userOutput = "";
-    for (let attempt = 0; attempt < 80 && !userOutput.includes("GENERATED_PRIVATE_USER_CONSOLE"); attempt++) {
+    for (let attempt = 0; attempt < ciTime(80) && !userOutput.includes("GENERATED_PRIVATE_USER_CONSOLE"); attempt++) {
       userOutput = (await sdk.terminal.read(user.id!)).data;
       if (!userOutput.includes("GENERATED_PRIVATE_USER_CONSOLE")) await new Promise((resolve) => setTimeout(resolve, 15));
     }

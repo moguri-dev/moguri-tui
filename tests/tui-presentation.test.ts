@@ -11,10 +11,11 @@ import { appearanceColors, MoguriSdk, type PublicMessage } from "@moguri-dev/sdk
 import { tuiTabs } from "../apps/tui/src/commands.ts";
 import { admitGeneratedSkill, reviewNativeTools, setupFixture, waitFor } from "./fixture.ts";
 import { closeTui } from "./fixtures/tui-client.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 type Terminal = Awaited<ReturnType<typeof createTestRenderer>>;
 async function frameUntil(setup: Terminal, text: string, check?: () => boolean) {
-  const deadline = Date.now() + 8000;
+  const deadline = Date.now() + ciTime(8000);
   do {
     await new Promise((resolve) => setTimeout(resolve, 15));
     await setup.flush();
