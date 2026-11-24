@@ -12,6 +12,7 @@ import { MoguriSdk } from "@moguri-dev/sdk";
 import { closeTui } from "./fixtures/tui-client.ts";
 import { cloneRepositoryFixture } from "./fixtures/clone-repository.ts";
 import { setupFixture, waitFor } from "./fixture.ts";
+import { ciTime } from "./fixtures/time-scale.ts";
 
 test("the built CLI previews/imports an exact list and reviews/changes the resulting real repository remote", async () => {
   const source = await cloneRepositoryFixture(), f = await setupFixture(), sdk = await new MoguriSdk(f.service.connection).ready();
@@ -37,6 +38,11 @@ test("the built CLI previews/imports an exact list and reviews/changes the resul
 test("native TUI intake reviews a URL list and starts only the exact confirmed shared import, without invoking a model", { skip: process.platform !== "darwin" }, async () => {
   const source = await cloneRepositoryFixture(), f = await setupFixture(), sdk = await new MoguriSdk(f.service.connection).ready();
   const terminal = await createTestRenderer({ width: 140, height: 45, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(terminal.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + ciTime(8000);
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await terminal.flush(); if (terminal.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI repository intake did not show ${text}:\n${terminal.captureCharFrame()}`);
+  };
   try {
     flushSync(() => root.render(createElement(TuiApp, { client: sdk })));
     await waitFor(() => sdk.getState().status === "connected"); await terminal.flush();
@@ -47,7 +53,8 @@ test("native TUI intake reviews a URL list and starts only the exact confirmed s
     assert.equal(result.result?.kind, "text");
     if (result.result?.kind !== "text") throw new Error("Generated TUI did not retain the actual complete preview.");
     const { preview } = JSON.parse(result.result.text); assert.equal(source.requests(), 0);
-    await terminal.flush();
+    // The TUI opens a text result in its output view, which takes the keyboard until Escape returns to the composer.
+    await frameUntil('"projects.import.preview"'); terminal.mockInput.pressEscape(); await frameUntil("Write a prompt");
     await terminal.mockInput.typeText(`/repositories import ${preview.digest} confirm-reviewed ${JSON.stringify(input)}`); terminal.mockInput.pressEnter();
     const batch = await waitFor(() => f.service.controller.snapshot().repositoryImports[0]);
     assert.equal((await sdk.projects.imports.wait(batch.id)).batch.status, "completed");
