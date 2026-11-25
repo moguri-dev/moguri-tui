@@ -1,6 +1,6 @@
 {
   "name": "@moguri-dev/tui",
-  "version": "0.32.0-alpha.5",
+  "version": "0.32.0-alpha.6",
   "description": "The Moguri terminal UI and the moguri command-line interface.",
   "license": "MIT",
   "type": "module",
@@ -45,7 +45,7 @@
     "verify:package": "node scripts/verify-package.mjs"
   },
   "dependencies": {
-    "@moguri-dev/sdk": "0.32.0-alpha.4",
+    "@moguri-dev/sdk": "0.32.0-alpha.6",
     "@opentui/core": "0.6.6",
     "@opentui/react": "0.6.6",
     "react": "19.3.1",
