@@ -324,7 +324,21 @@ export function removeRoundupsPersonasFixtureMarkers(db: DatabaseSync, events: r
   if (events.some((event) => event.event_type === "persona.recorded" || event.event_type === "persona.run_recorded")) {
     throw new Error("Generate genuine pre-119 history; actual personas and persona runs cannot be relabelled.");
   }
+  removeHostedCloudAcpFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id IN ('dependency_roundups_schema','personas_schema')");
+}
+const protocol124Providers = ["gemini", "vertex", "bedrock", "azure", "xai", "mistral", "groq", "deepseek"];
+export function removeHostedCloudAcpFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  const harness = (event: StoredEvent) => event.event_type === "agent.session_bound" ? event.payload.binding.harness : event.event_type === "agent.step_started" || event.event_type === "agent.message" ?
+    event.payload.harness : event.event_type === "agent.usage" ? event.payload.usage.harness : event.event_type === "tool.requested" ? event.payload.approval.call.harness :
+      event.event_type === "tool.completed" ? event.payload.call.harness : undefined;
+  if (events.some((event) => event.event_type === "settings.updated" && (event.payload.settings.hostedProviderOptions !== undefined || event.payload.settings.antigravityAgent !== undefined ||
+    event.payload.settings.geminiAgent !== undefined || (event.payload.settings.hostedProviders ?? []).some((id) => protocol124Providers.includes(id))) ||
+    event.event_type === "model.authorization_changed" && protocol124Providers.includes(event.payload.providerId) ||
+    harness(event) === "antigravity-agent" || harness(event) === "gemini-agent")) {
+    throw new Error("Generate genuine pre-124 history; actual cloud provider accounts, connection options and ACP agent sessions cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='hosted_cloud_acp_schema'");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||
