@@ -12,7 +12,7 @@ import { continueWorkInput, parseShellCommand, sessionShortId, DraftEditor, pend
 import { tuiTabs, tuiCommands, tuiCommandSuggestions, type TuiTab } from "./commands.ts";
 import type { CommandClientAttachment, CommandExecution, CommandViewContext, CommandViewOutcome } from "@moguri-dev/sdk";
 import { autonomyLabel, envLabel, configuredReadinessModels, kupoModes, retryFailure, scheduleLocalChoices, scheduleLocalTime, type KupoModeAvailability, type ModelReadinessResponse, type ModelRuntimePreview, type ScheduledPrompt, type ScheduledTiming, type Automation, type AutomationRun, describeAutomationSchedule } from "@moguri-dev/sdk";
-import { MyWorkFiltersSchema, type MyWorkEntry, type MyWorkFilters, type MyWorkResponse, type Snapshot } from "@moguri-dev/sdk";
+import { MyWorkFiltersSchema, type MyWorkEntry, type MyWorkFilters, type MyWorkResponse, type QuestionDraft, type Snapshot, type UserQuestion } from "@moguri-dev/sdk";
 type MoguriClient = MoguriSdk;
 
 function terminalColors(appearance: Appearance, mode: ThemeMode) {
@@ -801,7 +801,7 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         if (choice === "send") { await submit(text, false); return; }
         setScheduleInitial(choice); setMode("schedule"); return;
       }
-      if (pendingQuestion && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
+      if (pendingQuestion && !pendingQuestion.batch && !held && !text.startsWith("/")) { await editor.flush(); await client.questions.answerDraft(pendingQuestion.id, pendingQuestion.revision, otherQuestion === pendingQuestion.id); return; }
       if (!held && session.projectId && !text.startsWith("/") && continueWorkInput(text)) {
         setContinueReview(await editor.reviewContinueWork()); setMode("continue-work"); return;
       }
@@ -1275,6 +1275,8 @@ export function TuiApp({ client: initialClient, onQuit, initialSessionId, native
         mode === "schedule" && session && editor ? <TuiScheduleDialog sdk={client} editor={editor} initial={scheduleInitial}
           lock={(pending) => { schedulePending.current = pending; }} close={() => setMode("compose")} /> :
         mode === "automations" ? <TuiScheduledPrompts sdk={client} prompts={snapshot?.scheduledPrompts ?? []} automations={snapshot?.automations ?? []} runs={snapshot?.automationRuns ?? []} run={perform} /> :
+        mode === "question" && pendingQuestion?.batch ? <TuiQuestionBatch key={pendingQuestion.batch.id} sdk={client} run={perform} close={() => setMode("compose")}
+          questions={snapshot!.questions.filter((question) => question.batch?.id === pendingQuestion.batch!.id).sort((a, b) => a.batch!.index - b.batch!.index)} /> :
         mode === "question" ? <box flexDirection="column" flexGrow={1} paddingTop={1}>
           <text fg={colors.accent} height={2}>Actual user question / no tool permission grant</text>
           {pendingQuestion ? <><scrollbox height={compact ? 4 : 10}><text fg={colors.foreground}>{safe(questionDetails)}</text></scrollbox>
@@ -1678,10 +1680,12 @@ Credentials stay in Moguri's profile-scoped OS keychain.`}</text></scrollbox> :
           <text fg={colors.attention} height={2} flexShrink={0}>{session.pendingApproval.call.name === "run_script" ? session.controls.env === "Sandbox" ? "Reviewed bytes / SendBox guest, not Local. Advice is not permission. " : "Exact reviewed bytes, unsandboxed Local. Agent advice is not permission. " : session.pendingApproval.call.name === "run_command" ? session.controls.env === "Remote" ? "SSH host, not SendBox. " : session.controls.env === "Sandbox" ? "Approved SendBox boundary. " : "Unsandboxed Local. " : session.pendingApproval.call.name === "fetch_page" ? "Approved Sandbox network hosts. " : "Project access. "}{compact ? "\nCtrl+Y approve | Ctrl+D deny | Ctrl+V args" : "\n/approve once | Ctrl+D deny | Ctrl+V args | Ctrl+Y approve"}</text>
         </box>}
         {pendingQuestion && mode !== "question" && <box flexDirection="column" border borderColor={colors.attention} paddingX={1} paddingY={compact ? 0 : 1} height={compact ? 6 : recommendation ? 11 : 9} flexShrink={0}>
-          <text fg={colors.attention} height={1} wrapMode="none" truncate flexShrink={0}><strong>Your actual answer is needed / F6 choices</strong></text>
+          <text fg={colors.attention} height={1} wrapMode="none" truncate flexShrink={0}><strong>{pendingQuestion.batch ? `Your answers to ${pendingQuestion.batch.size} questions are needed / F6 answers` : "Your actual answer is needed / F6 choices"}</strong></text>
           <text fg={colors.foreground} height={2} truncate flexShrink={0}>{safe(pendingQuestion.question).slice(0, 320)}</text>
           {recommendation && !compact && <text fg={colors.muted} height={2} flexShrink={0}>Model advises: {safe(recommendation.choice)}. F6 shows its reason; no answer was recorded.</text>}
-          <text fg={colors.muted} height={compact ? 1 : 2} wrapMode={compact ? "none" : "word"} truncate flexShrink={0}>{compact ? "Enter answers | Cmd/Ctrl+Enter holds" : "Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted."}</text>
+          <text fg={colors.muted} height={compact ? 1 : 2} wrapMode={compact ? "none" : "word"} truncate flexShrink={0}>{pendingQuestion.batch ? compact ? "F6 answers and sends them together" :
+            "F6 answers them one at a time, then reviews and sends every answer together. The composer still queues. No tool permission is granted." :
+            compact ? "Enter answers | Cmd/Ctrl+Enter holds" : "Enter answers; Shift+Enter inserts a newline. Cmd/Ctrl+Enter still queues. No tool permission is granted."}</text>
         </box>}
         {mode === "compose" && repositoryPrompt && <box id="tui-repository-proposal" height={1} flexShrink={0}
           onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); setMode("repository-import"); }}>
@@ -1870,6 +1874,78 @@ function TuiScheduledPrompts({ sdk, prompts, automations, runs, run }: { sdk: Mo
           else await sdk.automations.enable(automation!.id, automation!.revision);
         } finally { pending.current = false; setBusy(false); } });
       }} />}
+  </box>;
+}
+const draftLabel = (question: UserQuestion) => question.status !== "open" ? question.answer?.skipped ? "Skipped" : question.answer?.text ?? "Not answered" :
+  !question.draft ? null : "skipped" in question.draft ? "Skipped" : question.draft.text;
+/** Related questions answered one at a time, then reviewed and sent together; unsent choices are saved for every client. */
+function TuiQuestionBatch({ sdk, questions, run, close }: { sdk: MoguriSdk; questions: UserQuestion[]; run: (operation: () => Promise<void>) => Promise<void>; close: () => void }) {
+  const colors = React.useContext(ThemeContext), review = questions.length;
+  const [step, setStep] = useState(() => { const index = questions.findIndex((question) => question.status === "open" && !question.draft); return index < 0 ? review : index; });
+  const [typing, setTyping] = useState(false), [busy, setBusy] = useState(false), pending = useRef(false);
+  const open = questions.filter((question) => question.status === "open"), ready = open.every((question) => question.draft);
+  const current = step < review ? questions[step]! : null;
+  const act = (operation: () => Promise<void>) => {
+    if (pending.current) return;
+    pending.current = true; setBusy(true);
+    void run(async () => { try { await operation(); } finally { pending.current = false; setBusy(false); } });
+  };
+  // After answering, move to the next unanswered question (wrapping to earlier ones), then to the review.
+  const advance = (answered: string) => {
+    const waiting = (index: number) => questions[index]!.status === "open" && questions[index]!.id !== answered && !questions[index]!.draft;
+    const after = questions.findIndex((_, index) => index > step && waiting(index)), before = questions.findIndex((_, index) => index < step && waiting(index));
+    setStep(after >= 0 ? after : before >= 0 ? before : review);
+  };
+  const choose = (question: UserQuestion, draft: QuestionDraft) => act(async () => {
+    await sdk.questions.saveDraft(question.id, draft, question.draftRevision ?? 0); setTyping(false); advance(question.id);
+  });
+  if (current && typing) return <box flexDirection="column" flexGrow={1} paddingTop={1}>
+    <text fg={colors.accent} height={2}>{`Question ${step + 1} of ${review} / Other answer`}</text>
+    <text fg={colors.foreground}>{safe(current.question)}</text>
+    <box border borderColor={colors.accent} paddingX={1} flexShrink={0}><ThemedInput focused={!busy} placeholder="Type your answer. Enter saves it; an empty Enter goes back."
+      value={current.draft && "text" in current.draft && current.draft.other ? current.draft.text : ""}
+      onSubmit={(text) => { if (text.trim()) choose(current, { text, other: true }); else setTyping(false); }} /></box>
+    <text fg={colors.muted} height={2}>Never enter credentials. Answers are not tool or Git permissions.</text></box>;
+  const options = current ? [
+    ...current.status !== "open" ? [] : [...current.choices.flatMap((choice, index) => ["other", "other, please specify"].includes(choice.trim().toLowerCase()) ? [] : [{
+      name: `${current.draft && "text" in current.draft && !current.draft.other && current.draft.text === choice ? "* " : "  "}${safe(choice)}`,
+      description: "Answer as the actual user. Does not authorize tools.", value: `choice:${index}` }]),
+    { name: `${current.draft && "text" in current.draft && current.draft.other ? `* Other: ${safe(current.draft.text).slice(0, 60)}` : "  Other, please specify"}`, description: "Type a different answer.", value: "other" },
+    { name: `${current.draft && "skipped" in current.draft ? "* " : "  "}Skip this question`, description: "The agent continues with its best judgment. A skip grants nothing.", value: "skip" }],
+    ...step > 0 ? [{ name: "  Previous question", description: `Question ${step} of ${review}`, value: "previous" }] : [],
+    { name: step === review - 1 ? "  Review answers" : "  Next question", description: step === review - 1 ? "Check every answer before sending." : `Question ${step + 2} of ${review}`, value: "next" },
+  ] : [
+    ...questions.map((question, index) => ({ name: `${index + 1}. ${safe(question.question).slice(0, 90)}`, description: safe(draftLabel(question) ?? "Not answered yet").slice(0, 120), value: `edit:${index}` })),
+    { name: "Send all answers", description: ready ? "Sends every answer together. Answers are not permissions." : "Answer or skip every question first.", value: "send" },
+  ];
+  return <box flexDirection="column" flexGrow={1} paddingTop={1}>
+    <text fg={colors.accent} height={2}>{current ? `Question ${step + 1} of ${review} / actual user answers / no tool permission grant` : "Check your answers"}</text>
+    {current && <scrollbox height={6}><text fg={colors.foreground}>{safe(`${current.question}${current.recommendation ? `\n\nModel recommends: ${current.recommendation.choice}\n${current.recommendation.reason}\nFrom ${current.recommendation.modelId}. Untrusted advice; you still decide.` : ""}${current.status !== "open" ? `\n\nAlready answered${current.answer?.actor === "decision-provider" ? " by the decision provider" : ""}: ${draftLabel(current)}` : ""}`)}</text></scrollbox>}
+    <ThemedSelect key={step} focused={!busy} flexGrow={1} options={options} onSelect={(_, option) => {
+      if (!option || busy) return;
+      const value = String(option.value);
+      if (value === "previous") { setStep(step - 1); return; }
+      if (value === "next") { setStep(step + 1); return; }
+      if (value.startsWith("edit:")) { setStep(Number(value.slice(5))); return; }
+      if (value === "send") {
+        if (!ready) return;
+        act(async () => {
+          await sdk.questions.answerBatch(questions[0]!.batch!.id, open.map((question) => {
+            const draft = question.draft!;
+            return "skipped" in draft ? { questionId: question.id, expectedRevision: question.revision, skip: true as const } :
+              { questionId: question.id, expectedRevision: question.revision, text: draft.text, ...(draft.other ? { other: true as const } : {}) };
+          }));
+          close();
+        });
+        return;
+      }
+      if (!current) return;
+      if (value === "other") { setTyping(true); return; }
+      if (value === "skip") { choose(current, { skipped: true }); return; }
+      const choice = current.choices[Number(value.slice(7))];
+      if (choice !== undefined) choose(current, { text: choice });
+    }} />
+    <text fg={colors.muted} height={2}>Choices are saved as you go, so the desktop app sees them too. Esc returns without sending.</text>
   </box>;
 }
 function TuiPendingInput({ editor }: { editor: DraftEditor }) {

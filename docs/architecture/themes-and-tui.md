@@ -28,6 +28,11 @@ autonomy/budget rows remain readable. Pending approvals/questions reserve
 space for their real human controls, with a one-row editable composer and one
 inline slash suggestion; expanded arguments/choices still use the existing
 focused views. Secondary plan/estimate detail stays available through `/progress`.
+When the model asks related questions together (D83), F6 shows them one at a
+time with their choices, Other, Skip and Previous/Next, then a "Check your
+answers" review whose Send all answers sends every answer at once. Each choice
+is saved as an unsent draft through the SDK, so the desktop app shows the same
+answers; the composer keeps queueing ordinary input and never answers a batch.
 Chat and command-result scroll surfaces have distinct native identities so a
 read result cannot inherit the chat's sticky bottom position or stale pixels.
 Completed tool output folds only in the view. F2 or `/details` exposes retained

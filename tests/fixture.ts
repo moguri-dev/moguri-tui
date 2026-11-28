@@ -213,6 +213,12 @@ export async function fixtureProvider(options: GeneratedProviderOptions = {}) {
         finish();
       } else if (prompt.includes("generated structured question") && toolMessages.length === 0) {
         finish({ name: "ask_user", args: { question: "Choose a generated fixture approach?", choices: options.questionChoices ?? ["Generated first choice", "Generated second choice"], allowFreeform: !prompt.includes("choices only"), ...(options.questionRecommendation ? { recommendation: options.questionRecommendation } : {}) } });
+      } else if (prompt.includes("generated batched questions") && toolMessages.length === 0) {
+        finish({ name: "ask_user", args: { questions: [
+          { question: "Choose a generated summary scope?", choices: ["Generated page summary", "Generated search summary"], allowFreeform: false },
+          { question: "Choose a generated model?", choices: ["Generated small model", "Generated large model"], allowFreeform: true },
+          { question: "Where should the generated change land?", choices: [], allowFreeform: true },
+        ] } });
       } else if (prompt.includes("generated delayed")) {
         const timer = setTimeout(() => finish(), 600);
         response.on("close", () => clearTimeout(timer));

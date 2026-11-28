@@ -210,6 +210,7 @@ moguri question list|read ID
 moguri question answer ID ANSWER_FILE --revision N
 moguri question answer-other ID ANSWER_FILE --revision N
 moguri question answer-draft ID --revision N
+moguri question answer-batch BATCH_ID ANSWERS_JSON_FILE  Answer every open question of a batch at once
 moguri budget status SESSION_ID
 moguri budget dashboard|calls|plans [--project ID --folder ID --session ID --provider ID --model ID --role solver]
 moguri budget dashboard --filters '{"range":{"kind":"days","days":30},"bucket":"week"}'
@@ -594,7 +595,13 @@ Dictation uses a user-downloaded local NVIDIA model, never hosted ASR.
       else if (action === "answer" && args[0] && args[1]) output(await sdk.questions.answer(args[0], await readFile(args[1], "utf8"), expectedRevision()));
       else if (action === "answer-other" && args[0] && args[1]) output(await sdk.questions.answerOther(args[0], await readFile(args[1], "utf8"), expectedRevision()));
       else if (action === "answer-draft" && args[0]) output(await sdk.questions.answerDraft(args[0], expectedRevision()));
-      else throw new Error("Use question list/read, answer or answer-other ID ANSWER_FILE --revision N, or answer-draft ID --revision N. Answers do not authorize tools or change policy.");
+      else if (action === "answer-batch" && args[0] && args[1]) {
+        // The file holds [{ "questionId", "expectedRevision", "text", "other"? } or { "questionId", "expectedRevision", "skip": true }]; the service validates every entry.
+        const answers: unknown = JSON.parse(await readFile(args[1], "utf8"));
+        if (!Array.isArray(answers)) throw new Error("ANSWERS_JSON_FILE must hold a JSON array with one answer or skip per open question of the batch. Nothing was sent.");
+        output(await sdk.questions.answerBatch(args[0], answers));
+      }
+      else throw new Error("Use question list/read, answer or answer-other ID ANSWER_FILE --revision N, answer-draft ID --revision N, or answer-batch BATCH_ID ANSWERS_JSON_FILE. Answers do not authorize tools or change policy.");
     } else if (group === "repository") {
       if (!values.session) throw new Error("Choose an explicit --session ID for the actual Local or Remote host repository binding.");
       if (action === "preview") output(await sdk.repositories.preview(values.session));
