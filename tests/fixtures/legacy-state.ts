@@ -338,7 +338,14 @@ export function removeHostedCloudAcpFixtureMarker(db: DatabaseSync, events: read
     harness(event) === "antigravity-agent" || harness(event) === "gemini-agent")) {
     throw new Error("Generate genuine pre-124 history; actual cloud provider accounts, connection options and ACP agent sessions cannot be relabelled.");
   }
+  removeQuestionBatchesFixtureMarker(db, events);
   db.exec("DELETE FROM retention_metadata WHERE id='hosted_cloud_acp_schema'");
+}
+export function removeQuestionBatchesFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
+  if (events.some((event) => event.event_type === "question.draft_saved" || event.event_type === "question.asked" && event.payload.question.batch !== undefined)) {
+    throw new Error("Generate genuine pre-125 history; actual batched questions and saved answer drafts cannot be relabelled.");
+  }
+  db.exec("DELETE FROM retention_metadata WHERE id='question_batches_schema'");
 }
 export function removeExternalVoiceModelFixtureMarker(db: DatabaseSync, events: readonly StoredEvent[]): void {
   if (events.some((event) => event.event_type === "job.started" && event.payload.job.kind === "voice.inspect" ||

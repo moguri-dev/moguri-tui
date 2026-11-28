@@ -1137,6 +1137,38 @@ test("the actual TUI answers a canonical question through its choices without in
   } finally { await closeTui(root, setup, client, () => fixture.close()); }
 });
 
+test("the actual TUI answers related questions one at a time, reviews them and sends every answer together", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
+  const fixture = await setupFixture(), client = await new MoguriClient(fixture.service.connection).ready();
+  await fixture.configure();
+  const setup = await createTestRenderer({ width: 120, height: 44, kittyKeyboard: true, exitOnCtrlC: false }), root = createRoot(setup.renderer);
+  const frameUntil = async (text: string) => {
+    const deadline = Date.now() + ciTime(8000);
+    do { await new Promise((resolve) => setTimeout(resolve, 15)); await setup.flush(); if (setup.captureCharFrame().includes(text)) return; } while (Date.now() < deadline);
+    throw new Error(`TUI question batch did not show ${text}:\n${setup.captureCharFrame()}`);
+  };
+  const questions = () => fixture.service.controller.snapshot().questions;
+  try {
+    flushSync(() => root.render(createElement(TuiApp, { client }))); await frameUntil("Write a prompt");
+    await setup.mockInput.typeText("generated batched questions"); setup.mockInput.pressEnter({ ctrl: true, shift: true });
+    await waitFor(() => questions().filter((question) => question.status === "open").length === 3);
+    await frameUntil("Your answers to 3 questions are needed");
+    setup.mockInput.pressKey("F6"); await frameUntil("Question 1 of 3");
+    setup.mockInput.pressEnter(); await frameUntil("Question 2 of 3");
+    await waitFor(() => questions()[0]?.draft && "text" in questions()[0]!.draft! ? questions()[0]!.draft : undefined);
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter(); await frameUntil("Other answer");
+    await setup.mockInput.typeText("Generated custom model"); setup.mockInput.pressEnter(); await frameUntil("Question 3 of 3");
+    setup.mockInput.pressArrow("down"); setup.mockInput.pressEnter(); await frameUntil("Check your answers");
+    assert.deepEqual(questions().map((question) => question.draft), [{ text: "Generated page summary" }, { text: "Generated custom model", other: true }, { skipped: true }]);
+    assert.equal(fixture.requests.length, 1);
+    for (let index = 0; index < 3; index++) setup.mockInput.pressArrow("down");
+    setup.mockInput.pressEnter();
+    await waitFor(() => questions().every((question) => question.status === "answered"));
+    await fixture.terminal(); await frameUntil("Write a prompt");
+    assert.deepEqual(questions().map((question) => [question.answer?.text, question.answer?.actor]), [["Generated page summary", "user"], ["Generated custom model", "user"], ["Skipped", "user"]]);
+    assert.equal(fixture.requests.length, 2); assert.deepEqual(client.settings.get()!.values.permissions.tools, []);
+  } finally { await closeTui(root, setup, client, () => fixture.close()); }
+});
+
 test("the actual TUI sets warned estimated caps and opens authoritative cumulative accounting with F7", { skip: process.platform !== "darwin", timeout: ciTime(20_000) }, async () => {
   const fixture = await setupFixture({ maxOutputTokens: 128 }); await fixture.configure();
   const client = await new MoguriClient(fixture.service.connection).ready();
