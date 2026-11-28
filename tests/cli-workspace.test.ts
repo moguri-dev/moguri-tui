@@ -254,6 +254,25 @@ test("the CLI retains typed documents, exports exact revisions and requires revi
     assert.equal(fixture.requests.length, 0);
   } finally { await fixture.close(); }
 });
+test("the CLI answers every open question of a batch together and refuses a partial batch", { skip: process.platform !== "darwin" }, async () => {
+  const fixture = await setupFixture();
+  const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
+  try {
+    await fixture.configure(); await fixture.send("generated batched questions");
+    const deadline = Date.now() + ciTime(8000);
+    while (fixture.service.controller.snapshot().questions.length < 3 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 15));
+    const questions: Array<{ id: string; revision: number; choices: string[]; batch: { id: string } }> = JSON.parse((await execute(["question", "list", "--session", fixture.sessionId])).stdout);
+    const path = join(fixture.directory, "generated-batch-answers.json"), batchId = questions[0]!.batch.id;
+    await writeFile(path, JSON.stringify([{ questionId: questions[0]!.id, expectedRevision: 0, text: questions[0]!.choices[0] }]));
+    await assert.rejects(() => execute(["question", "answer-batch", batchId, path]), /every open question/);
+    await writeFile(path, JSON.stringify([{ questionId: questions[0]!.id, expectedRevision: 0, text: questions[0]!.choices[0] },
+      { questionId: questions[1]!.id, expectedRevision: 0, text: "Generated CLI model", other: true }, { questionId: questions[2]!.id, expectedRevision: 0, skip: true }]));
+    await execute(["question", "answer-batch", batchId, path]); await fixture.terminal();
+    assert.deepEqual(fixture.service.controller.snapshot().questions.map((question) => [question.answer?.text, question.answer?.actor]),
+      [[questions[0]!.choices[0], "user"], ["Generated CLI model", "user"], ["Skipped", "user"]]);
+    assert.equal(fixture.requests.length, 2);
+  } finally { await fixture.close(); }
+});
 test("the CLI answers only the exact canonical pending question with actual user provenance", { skip: process.platform !== "darwin" }, async () => {
   const fixture = await setupFixture();
   const execute = (args: string[]) => promisify(execFile)(process.execPath, ["--import", "tsx", resolve("apps/cli/src/main.ts"), ...args], { env: { ...process.env, MOGURI_STATE_DIR: join(fixture.directory, "state") } });
