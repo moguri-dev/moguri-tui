@@ -24,7 +24,7 @@ it globally:
 
 ```sh
 npm config set @moguri-dev:registry https://npm.pkg.github.com
-npm install -g @moguri-dev/tui@0.32.0-alpha.9
+npm install -g @moguri-dev/tui@0.32.0-alpha.10
 ```
 
 Put the token in your user `~/.npmrc` as
